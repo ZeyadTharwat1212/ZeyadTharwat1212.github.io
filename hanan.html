@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>امتحانات الرياضيات</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&display=swap">
+<style>
+/* One big action per screen: large type, large targets, high contrast. */
+:root{
+  --bg:#f2f5f9; --card:#ffffff; --ink:#122033; --muted:#4f5d70; --line:#cfd8e3;
+  --go:#14804a; --go-ink:#ffffff; --go-dark:#0f6a3c; --pick:#1d4fbf; --pick-ink:#ffffff;
+  --doubt:#ffe066; --doubt-ink:#2e2400; --bad:#b42318; --bad-soft:#fdecea;
+  --font:"Cairo","Segoe UI",Tahoma,Arial,sans-serif;
+  --doc:"Noto Naskh Arabic","Simplified Arabic","Times New Roman",serif;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1622; --card:#182233; --ink:#eef3fa; --muted:#a8b4c6; --line:#2d3a50;
+  --go:#2fb36f; --go-ink:#06130b; --go-dark:#27985d; --pick:#6f9bff; --pick-ink:#071229;
+  --doubt:#7a6411; --doubt-ink:#fff6cf; --bad:#ff8a80; --bad-soft:#3b1714; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:20px;line-height:1.6;
+  padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+main{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+header.top h1{margin:0;font-size:28px;line-height:1.3}
+header.top .who{color:var(--muted);font-size:17px;margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px}
+.center{text-align:center}
+.lead{font-size:22px;margin:0 0 6px}
+.small{font-size:17px;color:var(--muted);margin:6px 0 0}
+.huge{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:100%;min-height:200px;border:0;border-radius:20px;
+  background:var(--pick);color:var(--pick-ink);font:inherit;font-size:28px;font-weight:700;cursor:pointer;padding:24px}
+.huge svg{width:64px;height:64px}
+.huge:active{transform:scale(.99)}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:72px;border-radius:16px;border:2px solid var(--line);
+  background:var(--card);color:var(--ink);font:inherit;font-size:22px;font-weight:700;cursor:pointer;padding:12px 18px}
+.btn.go{background:var(--go);border-color:var(--go);color:var(--go-ink);min-height:96px;font-size:26px}
+.btn.go:hover{background:var(--go-dark)}
+.btn svg{width:34px;height:34px}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:4px solid var(--pick);outline-offset:3px}
+.row{display:flex;flex-direction:column;gap:12px}
+input.pw,.field input{width:100%;font:inherit;font-size:24px;padding:14px 16px;border:2px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);text-align:center}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:14px;padding:14px 16px;font-weight:700}
+.bar{height:22px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar span{display:block;height:100%;width:0;background:var(--go);border-radius:99px;transition:width .4s}
+.step{font-size:26px;font-weight:700;margin:0}
+.thumbs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.thumbs img{height:90px;border-radius:8px;border:1px solid var(--line);background:#fff}
+.sheet{background:#fff;color:#111;border:1px solid var(--line);border-radius:14px;padding:22px 20px;font-family:var(--doc);font-size:19px;line-height:1.9;
+  max-height:70vh;overflow:auto}
+.sheet:focus{outline:3px solid var(--pick)}
+.sheet p{margin:0 0 6px;text-align:justify}
+.sheet p.al-C,.sheet p.h{text-align:center}.sheet p.h{font-weight:700;font-size:21px}
+.sheet p.al-R{text-align:right}.sheet p.al-L{text-align:left}
+.sheet mark{background:#ffe066;color:#2e2400;border-radius:3px;padding:0 2px}
+.sheet.exam{font-family:"Times New Roman",Georgia,serif;font-size:18px;line-height:1.7}
+.sheet .q{font-weight:700;font-size:20px;margin:14px 0 6px}
+.sheet .item{margin:8px 0 2px}
+.sheet .opt{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 10px;padding-left:16px;margin-bottom:6px}
+@media (max-width:520px){.sheet .opt{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sheet table{border-collapse:collapse;margin:6px 0 10px auto}
+.sheet td{border:1px solid #111;padding:4px 14px;text-align:center;min-width:70px}
+.sheet .gap{height:54px}
+.sheet figure{margin:4px 0 10px auto;width:fit-content;max-width:70%}
+.sheet figure img{display:block;max-width:100%}
+.frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.85em;line-height:1.1;margin:0 2px}
+.frac span:first-child{border-bottom:1px solid currentColor;padding:0 2px}
+.note{background:var(--doubt);color:var(--doubt-ink);border-radius:14px;padding:12px 16px;font-size:18px}
+details.more{font-size:17px}
+details.more summary{cursor:pointer;color:var(--muted);padding:6px 0}
+.field{display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:15px;color:var(--muted)}
+.field input{font-size:18px;text-align:left;font-family:"Times New Roman",serif;padding:10px 12px}
+.links a{color:var(--pick)}
+.out{word-break:break-all;font-size:15px;background:var(--bg);border-radius:10px;padding:10px;direction:ltr;text-align:left}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.sheet.exam p{text-align:left}
+
+</style>
+</head>
+<body>
+<main>
+<header class="top"><h1>امتحانات الرياضيات</h1><p class="who">مس حنان</p></header>
+
+<section id="nokey" class="card center" hidden>
+  <p class="lead" id="nokeyMsg">افتح الرابط الذي وصلك من زياد.</p>
+</section>
+
+<section id="lock" class="card center" hidden>
+  <form id="lockForm" class="row">
+    <p class="lead">اكتب كلمة السر</p>
+    <input class="pw" id="pw" type="password" autocomplete="current-password" inputmode="text" aria-label="كلمة السر">
+    <p class="err" id="pwErr" hidden>كلمة السر غير صحيحة. جرّب مرة أخرى.</p>
+    <button class="btn go" id="pwBtn" type="submit">دخول</button>
+    <p class="small">ستُطلب مرة واحدة فقط على هذا الجهاز.</p>
+  </form>
+</section>
+
+<section id="start" hidden>
+  <button class="huge" id="pickBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg><span>صوّري الامتحان</span></button>
+  <input type="file" id="file" multiple accept="image/*,application/pdf" hidden>
+  <p class="small center">يمكنك اختيار كل صفحات الامتحان مرة واحدة بالترتيب.</p>
+  <details class="more">
+    <summary>بيانات رأس الامتحان (تتغير مرة واحدة فقط)</summary>
+    <div class="card" dir="ltr" style="padding:16px">
+      <label class="field">Line 1<input id="hLine1" value="Assiut Governorate"></label>
+      <label class="field">Line 2<input id="hLine2" value="Directorate of Education"></label>
+      <label class="field">Line 3<input id="hLine3" value="Administration of Distinguished &amp; Governmental Language Schools"></label>
+      <label class="field">Subject<input id="hSubject" value="Mathematics"></label>
+      <label class="field">Grade<input id="hGrade" value="Primary 4"></label>
+      <label class="field">Time<input id="hTime" value="One hour and half"></label>
+      <label class="field">Exam title<input id="hTitle" value="First term exam 2025/2026"></label>
+    </div>
+  </details>
+</section>
+
+<section id="work" class="card center" hidden>
+  <div class="row">
+    <p class="step" id="stepText">جارٍ القراءة…</p>
+    <div class="bar"><span id="barFill"></span></div>
+    <p class="small" id="waitText" hidden></p>
+    <p class="small">اترك الصفحة مفتوحة. كل صفحة تأخذ حوالي دقيقة.</p>
+    <div class="thumbs" id="thumbs"></div>
+  </div>
+</section>
+
+<section id="done" hidden>
+  <div class="row">
+    <button class="btn go" id="wordBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg><span>تحميل ملف Word</span></button>
+    <p class="small center" id="savedNote" hidden>تم حفظ الملف في «التنزيلات».</p>
+    <p class="note" id="doubtNote" hidden></p>
+    <div class="sheet" id="sheet" contenteditable="true" spellcheck="false"></div>
+    <button class="btn" id="againBtn" type="button">ورقة جديدة</button>
+  </div>
+</section>
+
+<section id="fail" class="card center" hidden>
+  <div class="row">
+    <p class="err" id="failMsg"></p>
+    <button class="btn go" id="retryBtn" type="button">حاول مرة أخرى</button>
+    <button class="btn" id="homeBtn" type="button">اختيار صور أخرى</button>
+  </div>
+</section>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script>window.APP={mode:"exam"};</script>
+<script>
+/* Shared engine: unlock key, prepare images, call Gemini (free tier), helpers. No Claude at runtime. */
+var Engine = (function () {
+  'use strict';
+  var API = 'https://generativelanguage.googleapis.com/v1beta';
+  var LS_KEY = 'kateb.apikey', LS_MODEL = 'kateb.model';
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  /* ---------- password lock: key encrypted with AES-GCM, key from PBKDF2(password) ---------- */
+  function b64u(bytes) { var s = ''; bytes = new Uint8Array(bytes); for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64u(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+  async function derive(password, salt) {
+    var base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 310000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function lock(apiKey, password) {
+    var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, await derive(password, salt), new TextEncoder().encode(apiKey));
+    var all = new Uint8Array(28 + ct.byteLength); all.set(salt, 0); all.set(iv, 16); all.set(new Uint8Array(ct), 28);
+    return b64u(all);
+  }
+  async function unlock(blob, password) {
+    var all = unb64u(blob), salt = all.slice(0, 16), iv = all.slice(16, 28), ct = all.slice(28);
+    var pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, await derive(password, salt), ct);
+    return new TextDecoder().decode(pt);
+  }
+  function blobFromHash() { var m = (location.hash || '').match(/k=([A-Za-z0-9_-]+)/); return m ? m[1] : null; }
+  function savedKey() { return lsGet(LS_KEY); }
+  function saveKey(k) { lsSet(LS_KEY, k); }
+  function forget() { lsDel(LS_KEY); lsDel(LS_MODEL); }
+
+  /* ---------- Gemini ---------- */
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  async function listModels(key) {
+    var r = await fetch(API + '/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
+    if (!r.ok) { var e = new Error('models ' + r.status); e.status = r.status; e.body = await r.text().catch(function () { return ''; }); throw e; }
+    var j = await r.json();
+    return (j.models || []).filter(function (m) { return (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0; }).map(function (m) { return m.name.replace(/^models\//, ''); });
+  }
+  /* best first: newest version; pro before flash; full before lite; stable before preview/exp */
+  function rank(models) {
+    var bad = /(tts|image|imagen|embed|live|audio|aqa|robotics|computer|native|veo|learnlm|nano|lite|gemma|thinking-exp)/i;
+    var c = models.filter(function (n) { return /^gemini-/.test(n) && !bad.test(n); });
+    function ver(n) { var m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; }
+    function score(n) { return ver(n) * 100 + (/pro/.test(n) ? 20 : /flash/.test(n) ? 10 : 0) - (/(preview|exp)/.test(n) ? 5 : 0) - (/-\d{3,}$/.test(n) ? 1 : 0); }
+    c.sort(function (a, b) { return score(b) - score(a); });
+    var flashFirst = c.filter(function (n) { return /flash/.test(n); }), pros = c.filter(function (n) { return /pro/.test(n); });
+    /* try the best pro first (best reading), then the best flash models as the reliable free fallback */
+    var order = [];
+    if (pros[0]) order.push(pros[0]);
+    flashFirst.slice(0, 3).forEach(function (n) { if (order.indexOf(n) < 0) order.push(n); });
+    c.forEach(function (n) { if (order.indexOf(n) < 0 && order.length < 6) order.push(n); });
+    if (!order.length) order = ['gemini-2.5-flash'];
+    return order;
+  }
+  function blobToB64(blob) { return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { res(String(fr.result).split(',')[1]); }; fr.onerror = rej; fr.readAsDataURL(blob); }); }
+
+  /* one call with model fallback + waiting on rate limits. onWait(seconds) lets the page show "please wait". */
+  async function generate(key, prompt, blobs, opt) {
+    opt = opt || {};
+    var parts = [{ text: prompt }];
+    for (var i = 0; i < (blobs || []).length; i++) parts.push({ inline_data: { mime_type: blobs[i].type || 'image/jpeg', data: await blobToB64(blobs[i]) } });
+    var body = JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: { temperature: opt.temperature == null ? 0.1 : opt.temperature, maxOutputTokens: opt.maxTokens || 16384 } });
+    var models = opt.models || JSON.parse(lsGet(LS_MODEL) || 'null');
+    if (!models) { try { models = rank(await listModels(key)); } catch (e) { if (e && (e.status === 400 || e.status === 403)) throw { code: 'bad_key' }; throw { code: e && e.status ? 'server' : 'network' }; } }
+    var lastErr = null;
+    for (var mi = 0; mi < models.length; mi++) {
+      var model = models[mi];
+      for (var attempt = 0; attempt < 4; attempt++) {
+        var r;
+        try { r = await fetch(API + '/models/' + model + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: body }); }
+        catch (e) { lastErr = { code: 'network' }; await sleep(3000); continue; }
+        if (r.ok) {
+          var j = await r.json(), c = (j.candidates || [])[0];
+          var text = c && c.content && c.content.parts ? c.content.parts.filter(function (p) { return !p.thought && p.text; }).map(function (p) { return p.text; }).join('') : '';
+          if (!text) { lastErr = { code: (c && c.finishReason) || 'empty' }; break; }
+          /* remember a working order so later calls start with this model */
+          if (!opt.models) lsSet(LS_MODEL, JSON.stringify([model].concat(models.filter(function (m) { return m !== model; }))));
+          return { text: text, model: model, truncated: c.finishReason === 'MAX_TOKENS' };
+        }
+        var t = await r.text().catch(function () { return ''; });
+        if (r.status === 400 && /API key not valid|API_KEY_INVALID/i.test(t)) throw { code: 'bad_key' };
+        if (r.status === 403 && /PERMISSION_DENIED|API_KEY/i.test(t) && !/model/i.test(t)) throw { code: 'bad_key' };
+        if (r.status === 429) {
+          var daily = /PerDay|per day|daily/i.test(t);
+          if (daily) { lastErr = { code: 'quota_day' }; break; }        // try next model
+          var m = t.match(/"retryDelay":\s*"(\d+)/), wait = m ? Math.min(65, +m[1] + 2) : 25;
+          if (opt.onWait) opt.onWait(wait);
+          await sleep(wait * 1000); lastErr = { code: 'rate' }; continue;
+        }
+        if (r.status >= 500) { await sleep(4000 * (attempt + 1)); lastErr = { code: 'server' }; continue; }
+        lastErr = { code: 'model_' + r.status }; break;                 // 404/403 for this model: next model
+      }
+    }
+    throw lastErr || { code: 'unknown' };
+  }
+
+  /* ---------- images ---------- */
+  function canvasOf(src) { var c = document.createElement('canvas'); c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0); return c; }
+  async function fileToCanvases(f) {
+    if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+      var pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise, out = [];
+      for (var n = 1; n <= pdf.numPages; n++) {
+        var pg = await pdf.getPage(n), v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(4, 3000 / Math.max(v1.width, v1.height)) });
+        var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+        await pg.render({ canvasContext: x, viewport: vp }).promise; out.push(c);
+      }
+      return out;
+    }
+    if (/\.(heic|heif)$/i.test(f.name)) throw { code: 'heic' };
+    var bmp;
+    try { bmp = await createImageBitmap(f, { imageOrientation: 'from-image' }); }
+    catch (e) { bmp = await new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej({ code: 'badimg' }); }; im.src = URL.createObjectURL(f); }); }
+    return [canvasOf(bmp)];
+  }
+  function scaled(c, maxSide) {
+    var k = Math.min(1, maxSide / Math.max(c.width, c.height)); if (k === 1) return c;
+    var n = document.createElement('canvas'); n.width = Math.round(c.width * k); n.height = Math.round(c.height * k);
+    n.getContext('2d').drawImage(c, 0, 0, n.width, n.height); return n;
+  }
+  function rotated(base, deg) {
+    if (!deg) return base; var c = document.createElement('canvas'), s = deg % 180 !== 0;
+    c.width = s ? base.height : base.width; c.height = s ? base.width : base.height;
+    var x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(deg * Math.PI / 180); x.drawImage(base, -base.width / 2, -base.height / 2); return c;
+  }
+  function jpeg(c, q) { return new Promise(function (res) { c.toBlob(res, 'image/jpeg', q || 0.9); }); }
+  /* whole page + overlapping strips so small handwriting stays sharp */
+  async function pageImages(c, maxBands) {
+    var list = [await jpeg(scaled(c, 3072), 0.9)], bands = c.height < c.width * 0.9 ? 2 : (maxBands || 3);
+    var ov = 0.07, h = c.height / bands;
+    for (var i = 0; i < bands; i++) {
+      var y0 = Math.max(0, Math.round(i * h - ov * c.height)), y1 = Math.min(c.height, Math.round((i + 1) * h + ov * c.height));
+      var b = document.createElement('canvas'); b.width = c.width; b.height = y1 - y0;
+      b.getContext('2d').drawImage(c, 0, y0, c.width, y1 - y0, 0, 0, c.width, y1 - y0);
+      list.push(await jpeg(scaled(b, 3072), 0.9));
+    }
+    return { blobs: list, bands: bands };
+  }
+  async function detectRotation(key, c, onWait) {
+    try {
+      var r = await generate(key, 'By how many degrees must this photo of a document page be rotated CLOCKWISE so the writing reads upright? Reply with only one number: 0, 90, 180 or 270.', [await jpeg(scaled(c, 1200), 0.85)], { maxTokens: 512, onWait: onWait });
+      var m = r.text.match(/\b(0|90|180|270)\b/); return m ? +m[1] : 0;
+    } catch (e) { if (e && (e.code === 'bad_key')) throw e; return 0; }
+  }
+  function clean(t) { return String(t || '').replace(/^\s*```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim(); }
+
+  function download(blob, name) {
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+
+  var ERR = {
+    bad_key: 'مفتاح الذكاء الاصطناعي لا يعمل. كلّم زياد.',
+    quota_day: 'انتهى عدد الصفحات المسموح به اليوم. جرّب مرة أخرى بكرة.',
+    rate: 'الخدمة مشغولة. اضغط «حاول مرة أخرى» بعد دقيقة.',
+    network: 'لا يوجد إنترنت. تأكد من الاتصال واضغط «حاول مرة أخرى».',
+    server: 'الخدمة متوقفة مؤقتاً. حاول بعد قليل.',
+    heic: 'نوع الصورة غير مدعوم. أرسل الصورة لنفسك على واتساب ثم اخترها من جديد.',
+    badimg: 'تعذر فتح الصورة. جرّب صورة أخرى.',
+    SAFETY: 'تعذرت قراءة هذه الصفحة. جرّب صورة أخرى.',
+    RECITATION: 'تعذرت قراءة هذه الصفحة. جرّب صورة أخرى.'
+  };
+  function errText(e) { return (e && ERR[e.code]) || 'حصلت مشكلة. اضغط «حاول مرة أخرى».'; }
+
+  return { lock: lock, unlock: unlock, blobFromHash: blobFromHash, savedKey: savedKey, saveKey: saveKey, forget: forget,
+    listModels: listModels, rank: rank, generate: generate, fileToCanvases: fileToCanvases, scaled: scaled, rotated: rotated,
+    pageImages: pageImages, detectRotation: detectRotation, clean: clean, download: download, errText: errText, lsGet: lsGet, lsSet: lsSet };
+})();
+
+</script>
+<script>
+/* Math exam Word builder (Word 2007/2010 compatible) in Ms. Hanan's layout.
+   blocks: {k:'q'|'item'|'p'|'opt'|'table'|'gap'|'fig', ...}
+   runs:   {text, b, u, hl, frac:[num, den]} */
+var ExamBuilder = (function () {
+  var NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+    'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" ' +
+    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+  var BODY_FONT = 'Times New Roman';
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ''); }
+  var AR = /[؀-ۿ]/;
+
+  function rpr(o) {
+    o = o || {};
+    var f = o.font || BODY_FONT;
+    return '<w:rPr><w:rFonts w:ascii="' + f + '" w:hAnsi="' + f + '" w:cs="' + (o.cs || 'Times New Roman') + '"/>' +
+      (o.b ? '<w:b/><w:bCs/>' : '') + (o.i ? '<w:i/><w:iCs/>' : '') +
+      (o.sz ? '<w:sz w:val="' + o.sz + '"/><w:szCs w:val="' + o.sz + '"/>' : '') +
+      (o.hl ? '<w:highlight w:val="yellow"/>' : '') + (o.u ? '<w:u w:val="single"/>' : '') +
+      (o.rtl ? '<w:rtl/>' : '') + '</w:rPr>';
+  }
+  function textRuns(text, o) {
+    var out = '';
+    String(text).split('\t').forEach(function (part, i) {
+      if (i) out += '<w:r>' + rpr(o) + '<w:tab/></w:r>';
+      if (part) out += '<w:r>' + rpr(Object.assign({}, o, { rtl: AR.test(part) })) + '<w:t xml:space="preserve">' + esc(part) + '</w:t></w:r>';
+    });
+    return out;
+  }
+  function mrun(t, o) {
+    return '<m:r>' + (o && o.hl ? '<w:rPr><w:highlight w:val="yellow"/></w:rPr>' : '') + '<m:t xml:space="preserve">' + esc(t) + '</m:t></m:r>';
+  }
+  function runsXml(runs, base) {
+    return (runs || []).map(function (r) {
+      var o = Object.assign({}, base || {}, { b: r.b || (base && base.b), u: r.u || (base && base.u), hl: r.hl });
+      if (r.frac) return '<m:oMath><m:f><m:num>' + mrun(r.frac[0], o) + '</m:num><m:den>' + mrun(r.frac[1], o) + '</m:den></m:f></m:oMath>';
+      return textRuns(r.text, o);
+    }).join('');
+  }
+  function para(inner, ppr) { return '<w:p><w:pPr>' + (ppr || '') + '</w:pPr>' + inner + '</w:p>'; }
+  function spacing(before, after, line) { return '<w:spacing w:before="' + (before || 0) + '" w:after="' + (after || 0) + '" w:line="' + (line || 276) + '" w:lineRule="auto"/>'; }
+
+  var NOB = '<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>';
+
+  function headerTable(h) {
+    var L = [h.line1, h.line2, h.line3], R = ['Subject: ' + (h.subject || ''), 'Grade: ' + (h.grade || ''), 'Time: ' + (h.time || '')];
+    var rows = '';
+    for (var i = 0; i < 3; i++) {
+      var szL = i === 2 && (L[i] || '').length > 48 ? 16 : 20;
+      rows += '<w:tr>' +
+        '<w:tc><w:tcPr><w:tcW w:w="6200" w:type="dxa"/></w:tcPr>' + para(textRuns(L[i] || '', { font: 'Arial', b: true, sz: szL }), spacing(20, 20, 240)) + '</w:tc>' +
+        '<w:tc><w:tcPr><w:tcW w:w="3438" w:type="dxa"/></w:tcPr>' + para(textRuns(R[i], { font: 'Arial', b: true, sz: 20 }), spacing(20, 20, 240)) + '</w:tc></w:tr>';
+    }
+    return '<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="8" w:space="0" w:color="000000"/>' +
+      '<w:left w:val="nil"/><w:bottom w:val="single" w:sz="8" w:space="0" w:color="000000"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>' +
+      '<w:tblLayout w:type="fixed"/><w:tblLook w:val="0000"/></w:tblPr><w:tblGrid><w:gridCol w:w="6200"/><w:gridCol w:w="3438"/></w:tblGrid>' + rows + '</w:tbl>';
+  }
+
+  function optXml(cells) {
+    var n = cells.length, per = n > 4 ? n : 4;
+    var tabs = '<w:tabs>';
+    for (var i = 1; i < per; i++) tabs += '<w:tab w:val="left" w:pos="' + Math.round(9400 * i / per) + '"/>';
+    tabs += '</w:tabs>';
+    var inner = cells.map(function (c, i) { return (i ? '<w:r>' + rpr() + '<w:tab/></w:r>' : '') + runsXml(c); }).join('');
+    return para(inner, '<w:keepLines/>' + tabs + spacing(40, 120) + '<w:ind w:left="284"/>');
+  }
+
+  function tableXml(rows) {
+    var cols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 1);
+    var W = Math.min(6000, 1600 * cols), cw = Math.floor(W / cols), grid = '';
+    for (var i = 0; i < cols; i++) grid += '<w:gridCol w:w="' + cw + '"/>';
+    var trs = rows.map(function (r) {
+      return '<w:tr>' + r.map(function (cell, j) {
+        var span = (j === r.length - 1) ? cols - r.length + 1 : 1;
+        return '<w:tc><w:tcPr><w:tcW w:w="' + (cw * span) + '" w:type="dxa"/>' + (span > 1 ? '<w:gridSpan w:val="' + span + '"/>' : '') + '</w:tcPr>' +
+          para(runsXml(cell), spacing(60, 60, 240) + '<w:jc w:val="center"/>') + '</w:tc>';
+      }).join('') + '</w:tr>';
+    }).join('');
+    var b = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (e) { return '<w:' + e + ' w:val="single" w:sz="6" w:space="0" w:color="000000"/>'; }).join('') + '</w:tblBorders>';
+    return '<w:tbl><w:tblPr><w:tblW w:w="' + (cw * cols) + '" w:type="dxa"/><w:jc w:val="right"/>' + b + '<w:tblLayout w:type="fixed"/><w:tblLook w:val="0000"/></w:tblPr><w:tblGrid>' + grid + '</w:tblGrid>' + trs + '</w:tbl>' +
+      para('', spacing(0, 60));
+  }
+
+  function figXml(f, id, rid) {
+    var maxW = 7.5 * 360000, maxH = 6 * 360000, px = 9525 * 1.4;
+    var k = Math.min(1, maxW / (f.w * px), maxH / (f.h * px));
+    var cx = Math.round(f.w * px * k), cy = Math.round(f.h * px * k);
+    var d = '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:docPr id="' + id + '" name="Figure ' + id + '"/>' +
+      '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+      '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + id + '" name="figure' + id + '.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="' + rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+      '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+    return para(d, spacing(0, 80) + '<w:jc w:val="right"/>');
+  }
+
+  function b64ToBytes(b64) {
+    if (typeof atob === 'function') { var s = atob(b64), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+    return Buffer.from(b64, 'base64');
+  }
+
+  function build(JSZip, blocks, header, opts) {
+    opts = opts || {};
+    var zip = new JSZip(), media = [], body = '';
+    if (header) {
+      body += headerTable(header);
+      if (header.title) body += para(textRuns(header.title, { font: 'Arial Black', b: true, u: true, sz: 34 }), spacing(160, 120, 240) + '<w:jc w:val="center"/>');
+    }
+    var qn = 0;
+    blocks.forEach(function (bl) {
+      if (bl.k === 'q') {
+        body += para(runsXml(bl.runs, { b: true, u: !!opts.underlineQ, sz: 30 }), '<w:keepNext/>' + spacing(200, 100));
+      } else if (bl.k === 'item') {
+        body += para(runsXml(bl.runs, { sz: 28 }), '<w:keepNext/>' + spacing(100, 40) + '<w:ind w:left="0"/>');
+      } else if (bl.k === 'opt') {
+        body += optXml(bl.cells.map(function (c) { return c.map(function (r) { return Object.assign({}, r); }); }));
+      } else if (bl.k === 'table') {
+        body += tableXml(bl.rows);
+      } else if (bl.k === 'gap') {
+        for (var g = 0; g < (bl.n || 3); g++) body += para('', spacing(0, 0));
+      } else if (bl.k === 'fig' && bl.data) {
+        var id = media.length + 1, rid = 'rIdImg' + id;
+        media.push({ name: 'image' + id + '.png', data: b64ToBytes(bl.data.split(',')[1]), rid: rid });
+        body += figXml(bl, id, rid);
+      } else if (bl.k === 'p') {
+        var jc = bl.align === 'C' ? 'center' : bl.align === 'R' ? 'right' : '';
+        var rtl = AR.test((bl.runs || []).map(function (r) { return r.text || ''; }).join(''));
+        body += para(runsXml(bl.runs, { b: bl.heading, sz: bl.heading ? 30 : 28 }), (rtl ? '<w:bidi/>' : '') + spacing(60, 60) + (jc ? '<w:jc w:val="' + jc + '"/>' : ''));
+      }
+    });
+    var sect = '<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="11906" w:h="16838"/>' +
+      '<w:pgMar w:top="851" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>';
+    var doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + NS + '><w:body>' + body + sect + '</w:body></w:document>';
+    var styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles ' + NS + '><w:docDefaults><w:rPrDefault><w:rPr>' +
+      '<w:rFonts w:ascii="Times New Roman" w:eastAsia="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="28"/><w:szCs w:val="28"/>' +
+      '<w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-EG"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+      '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
+      '<w:style w:type="paragraph" w:styleId="Footer"><w:name w:val="footer"/><w:basedOn w:val="Normal"/></w:style></w:styles>';
+    var settings = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings ' + NS + '><w:zoom w:percent="100"/><w:defaultTabStop w:val="720"/>' +
+      '<w:characterSpacingControl w:val="doNotCompress"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat><m:mathPr><m:mathFont m:val="Cambria Math"/></m:mathPr></w:settings>';
+    var footer = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p><w:pPr><w:pStyle w:val="Footer"/>' +
+      '<w:pBdr><w:top w:val="single" w:sz="4" w:space="1" w:color="D9D9D9"/></w:pBdr></w:pPr>' +
+      '<w:fldSimple w:instr=" PAGE "><w:r><w:rPr><w:b/><w:sz w:val="22"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple>' +
+      '<w:r><w:rPr><w:b/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve"> | </w:t></w:r><w:r><w:rPr><w:color w:val="7F7F7F"/><w:spacing w:val="60"/><w:sz w:val="22"/></w:rPr><w:t>Page</w:t></w:r></w:p></w:ftr>';
+    var ct = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+      '<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>' +
+      '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>';
+    var rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>';
+    var docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      '<Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>' +
+      '<Relationship Id="rIdFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>' +
+      media.map(function (m) { return '<Relationship Id="' + m.rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + m.name + '"/>'; }).join('') +
+      '</Relationships>';
+    var now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    var core = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+      '<dc:title>' + esc((header && header.title) || 'Exam') + '</dc:title><dc:creator>Mathematics</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">' + now + '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' + now + '</dcterms:modified></cp:coreProperties>';
+    zip.file('[Content_Types].xml', ct); zip.file('_rels/.rels', rels); zip.file('docProps/core.xml', core);
+    zip.file('word/document.xml', doc); zip.file('word/styles.xml', styles); zip.file('word/settings.xml', settings);
+    zip.file('word/footer1.xml', footer); zip.file('word/_rels/document.xml.rels', docRels);
+    media.forEach(function (m) { zip.file('word/media/' + m.name, m.data); });
+    return zip;
+  }
+
+  /* inline: **b** __u__ ⟦doubt⟧ {a/b} */
+  function parseInline(line) {
+    var runs = [], b = false, u = false, hl = false, buf = '';
+    var re = /(_{3,}|\*\*|__|⟦|⟧|\{([^{}\/]{1,20})\/([^{}\/]{1,20})\})/g, last = 0, m;
+    function push() { if (buf) runs.push({ text: buf, b: b, u: u, hl: hl }); buf = ''; }
+    while ((m = re.exec(line))) {
+      buf += line.slice(last, m.index); push();
+      if (/^_{3,}$/.test(m[1])) { buf = m[1]; push(); } else if (m[1] === '**') b = !b; else if (m[1] === '__') u = !u; else if (m[1] === '⟦') hl = true; else if (m[1] === '⟧') hl = false;
+      else runs.push({ frac: [m[2].trim(), m[3].trim()], b: b, u: u, hl: hl, text: m[2].trim() + '/' + m[3].trim() });
+      last = re.lastIndex;
+    }
+    buf += line.slice(last); push();
+    return runs;
+  }
+
+  /* model output → {meta, blocks}. Figures keep their box for the page to crop. */
+  function parseExam(text) {
+    var meta = {}, blocks = [];
+    String(text || '').replace(/\r/g, '').split('\n').forEach(function (raw) {
+      var line = raw.trim(); if (!line) return;
+      var mm;
+      if ((mm = line.match(/^GRADE:\s*(.+)$/i))) { meta.grade = mm[1].trim(); return; }
+      if ((mm = line.match(/^TITLE:\s*(.+)$/i))) { meta.title = mm[1].trim(); return; }
+      if ((mm = line.match(/^\[Q\]\s*(.*)$/))) { blocks.push({ k: 'q', runs: parseInline(mm[1]) }); return; }
+      if ((mm = line.match(/^\[I\]\s*(.*)$/))) { blocks.push({ k: 'item', runs: parseInline(mm[1]) }); return; }
+      if ((mm = line.match(/^\[OPT\]\s*(.*)$/))) { blocks.push({ k: 'opt', cells: mm[1].split('|').map(function (c) { return parseInline(c.trim()); }) }); return; }
+      if ((mm = line.match(/^\[TABLE\]\s*(.*)$/))) { blocks.push({ k: 'table', rows: mm[1].split('||').map(function (r) { return r.split('|').map(function (c) { return parseInline(c.trim()); }); }) }); return; }
+      if (/^\[GAP\]/.test(line)) { blocks.push({ k: 'gap', n: 3 }); return; }
+      if ((mm = line.match(/^\[FIG[^\]]*\]\s*(.*)$/))) {
+        var sv = (mm[1].match(/<svg[\s\S]*<\/svg>/i) || [])[0] || '';
+        blocks.push({ k: 'fig', svg: sv, desc: sv ? 'figure' : mm[1] }); return;
+      }
+      var al = 'J', heading = false;
+      if ((mm = line.match(/^\[(C|R|L|H)\]\s*/))) { al = mm[1]; line = line.slice(mm[0].length); if (al === 'H') { al = 'C'; heading = true; } }
+      blocks.push({ k: 'p', align: al, heading: heading, runs: parseInline(line) });
+    });
+    return { meta: meta, blocks: blocks };
+  }
+
+  return { build: build, parseExam: parseExam, parseInline: parseInline };
+})();
+
+
+</script>
+<script>
+/* Screens: lock → start → work → done (or fail). One big action per screen. */
+(function () {
+  'use strict';
+  var APP = window.APP || { mode: 'legal' }, EXAM = APP.mode === 'exam';
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = null, pages = [], results = [], running = false;
+
+  function show(id) { ['lock', 'nokey', 'start', 'work', 'done', 'fail'].forEach(function (s) { $(s).hidden = s !== id; }); window.scrollTo(0, 0); }
+
+  /* ---------- unlock ---------- */
+  (function boot() {
+    if (!window.crypto || !crypto.subtle) { $('nokeyMsg').textContent = 'افتح الرابط من متصفح كروم أو سفاري الحديث.'; show('nokey'); return; }
+    KEY = Engine.savedKey();
+    if (KEY) { show('start'); return; }
+    if (Engine.blobFromHash()) { show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
+    show('nokey');
+  })();
+  $('lockForm').addEventListener('submit', async function (e) {
+    e.preventDefault(); $('pwErr').hidden = true; $('pwBtn').disabled = true; $('pwBtn').textContent = 'جارٍ الفتح…';
+    try { KEY = await Engine.unlock(Engine.blobFromHash(), $('pw').value.trim()); Engine.saveKey(KEY); show('start'); }
+    catch (err) { $('pwErr').hidden = false; $('pw').select(); }
+    finally { $('pwBtn').disabled = false; $('pwBtn').textContent = 'دخول'; }
+  });
+
+  /* ---------- pick ---------- */
+  $('pickBtn').addEventListener('click', function () { $('file').click(); });
+  $('file').addEventListener('change', function () { var f = Array.prototype.slice.call(this.files || []); this.value = ''; if (f.length) start(f); });
+  $('againBtn').addEventListener('click', function () { show('start'); });
+  $('retryBtn').addEventListener('click', function () { if (pages.length) run(); else show('start'); });
+  $('homeBtn').addEventListener('click', function () { show('start'); });
+
+  function setProgress(done, total, text) {
+    $('stepText').textContent = text; $('barFill').style.width = Math.round(100 * done / Math.max(1, total)) + '%';
+  }
+  async function start(files) {
+    files.sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { numeric: true }); });
+    show('work'); setProgress(0, 1, 'جارٍ فتح الصور…'); $('waitText').hidden = true; $('thumbs').innerHTML = '';
+    pages = [];
+    try {
+      for (var i = 0; i < files.length; i++) { var cs = await Engine.fileToCanvases(files[i]); cs.forEach(function (c) { pages.push({ base: c }); }); }
+    } catch (e) { fail(e); return; }
+    pages.forEach(function (p) { var im = document.createElement('img'); im.alt = ''; im.src = Engine.scaled(p.base, 200).toDataURL('image/jpeg', 0.7); $('thumbs').appendChild(im); });
+    run();
+  }
+  function fail(e) { running = false; $('failMsg').textContent = Engine.errText(e); show('fail'); }
+
+  function onWait(sec) { $('waitText').hidden = false; $('waitText').textContent = 'الخدمة مزدحمة، سننتظر ' + sec + ' ثانية ونكمل تلقائياً…'; }
+
+  async function run() {
+    if (running) return; running = true; show('work'); results = [];
+    var n = pages.length;
+    try {
+      for (var i = 0; i < n; i++) {
+        var label = n > 1 ? ('صفحة ' + (i + 1) + ' من ' + n) : 'الورقة';
+        var p = pages[i];
+        setProgress(i * 3, n * 3, 'جارٍ تجهيز ' + label + '…');
+        var deg = await Engine.detectRotation(KEY, p.base, onWait); p.canvas = Engine.rotated(p.base, deg);
+        var imgs = await Engine.pageImages(p.canvas, 3);
+        setProgress(i * 3 + 1, n * 3, 'جارٍ قراءة ' + label + '…'); $('waitText').hidden = true;
+        var r1 = await Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait });
+        var text = Engine.clean(r1.text);
+        setProgress(i * 3 + 2, n * 3, 'جارٍ مراجعة ' + label + ' مع الأصل…'); $('waitText').hidden = true;
+        try {
+          var r2 = await Engine.generate(KEY, PROMPTS.check(imgs.bands, text), imgs.blobs, { onWait: onWait });
+          var t2 = Engine.clean(r2.text); if (t2.length > text.length * 0.6 && !r2.truncated) text = t2;
+        } catch (e) { if (e && e.code === 'bad_key') throw e; }
+        results.push(await toResult(text));
+      }
+      setProgress(1, 1, 'تم');
+      finish();
+    } catch (e) { fail(e); }
+    running = false;
+  }
+
+  /* ---------- results → preview ---------- */
+  function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function runsHtml(runs) {
+    return (runs || []).map(function (r) {
+      var h = r.frac ? '<span class="frac" contenteditable="false" data-n="' + escH(r.frac[0]) + '" data-d="' + escH(r.frac[1]) + '"><span>' + escH(r.frac[0]) + '</span><span>' + escH(r.frac[1]) + '</span></span>' : escH(r.text);
+      if (r.u) h = '<u>' + h + '</u>'; if (r.b) h = '<b>' + h + '</b>'; if (r.hl) h = '<mark>' + h + '</mark>'; return h;
+    }).join('');
+  }
+  async function toResult(text) {
+    if (!EXAM) return { html: DocxBuilder.parseMarkup(text).map(function (p) {
+      var t = p.runs.map(function (r) { return r.text; }).join(''), dir = /[A-Za-z]/.test(t) && !DocxBuilder.isRtlText(t) ? 'ltr' : 'rtl';
+      return '<p class="' + (p.heading ? 'h' : 'al-' + p.align) + '" dir="' + dir + '">' + runsHtml(p.runs) + '</p>'; }).join('') };
+    var parsed = ExamBuilder.parseExam(text);
+    if (parsed.meta.grade && $('hGrade') && !results.length) { $('hGrade').value = parsed.meta.grade.replace(/^grade\s*/i, ''); Engine.lsSet('exam.hGrade', $('hGrade').value); }
+    var html = '';
+    for (var i = 0; i < parsed.blocks.length; i++) {
+      var b = parsed.blocks[i];
+      if (b.k === 'q') html += '<p data-k="q" class="q">' + runsHtml(b.runs) + '</p>';
+      else if (b.k === 'item') html += '<p data-k="item" class="item">' + runsHtml(b.runs) + '</p>';
+      else if (b.k === 'opt') html += '<div data-k="opt" class="opt">' + b.cells.map(function (c) { return '<span data-cell>' + runsHtml(c) + '</span>'; }).join('') + '</div>';
+      else if (b.k === 'table') { var cols = Math.max.apply(null, b.rows.map(function (x) { return x.length; }));
+        html += '<table data-k="table"><tbody>' + b.rows.map(function (r) { return '<tr>' + r.map(function (c, j) { var s = j === r.length - 1 ? cols - r.length + 1 : 1; return '<td' + (s > 1 ? ' colspan="' + s + '"' : '') + '>' + runsHtml(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>'; }
+      else if (b.k === 'gap') html += '<div data-k="gap" class="gap" contenteditable="false"></div>';
+      else if (b.k === 'fig') { var f = b.svg ? await svgToPng(b.svg) : null;
+        html += f ? '<figure data-k="fig" contenteditable="false" data-w="' + f.w + '" data-h="' + f.h + '" style="width:' + Math.min(f.w * 1.3, 420) + 'px"><img alt="" src="' + f.data + '"></figure>'
+                  : '<p data-k="p" class="al-R"><mark>[ ارسمي الشكل هنا ]</mark></p>'; }
+      else html += '<p data-k="p" class="' + (b.heading ? 'h' : 'al-' + (b.align || 'J')) + '">' + runsHtml(b.runs) + '</p>';
+    }
+    return { html: html };
+  }
+  function finish() {
+    var sheet = $('sheet');
+    sheet.className = 'sheet' + (EXAM ? ' exam' : ''); sheet.dir = EXAM ? 'ltr' : 'rtl';
+    sheet.innerHTML = results.map(function (r) { return r.html; }).join('');
+    var n = sheet.querySelectorAll('mark').length;
+    $('doubtNote').hidden = !n;
+    $('doubtNote').textContent = n ? 'الكلام الأصفر (' + n + ') غير واضح في الورقة. راجعه مع الورقة، ولو فيه غلط اضغط عليه وصحّحه.' : '';
+    show('done');
+  }
+
+  /* ---------- download ---------- */
+  $('wordBtn').addEventListener('click', async function () {
+    var btn = this; btn.disabled = true;
+    try {
+      var sheet = $('sheet'), blob, name;
+      var d = new Date(), stamp = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (!EXAM) {
+        blob = await DocxBuilder.build(JSZip, sheetToParas(sheet), { pageNumbers: true, title: 'مستند' }).generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        name = 'مستند ' + stamp + '.docx';
+      } else {
+        var h = {}; ['hLine1', 'hLine2', 'hLine3', 'hSubject', 'hGrade', 'hTime', 'hTitle'].forEach(function (id) { h[id] = $(id).value; });
+        var hdr = { line1: h.hLine1, line2: h.hLine2, line3: h.hLine3, subject: h.hSubject, grade: h.hGrade, time: h.hTime, title: h.hTitle };
+        blob = await ExamBuilder.build(JSZip, domBlocks(sheet), hdr, {}).generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        name = ((h.hGrade || '') + ' ' + (h.hTitle || 'Exam')).replace(/[\\\/:*?"<>|]/g, '-').trim() + '.docx';
+      }
+      Engine.download(blob, name);
+      $('savedNote').hidden = false;
+    } catch (e) { $('savedNote').hidden = false; $('savedNote').textContent = 'تعذر حفظ الملف. حاول مرة أخرى.'; }
+    finally { btn.disabled = false; }
+  });
+
+  /* legal: edited sheet → paragraphs */
+  function walkRuns(node) {
+    var runs = [];
+    (function walk(n, f) {
+      n.childNodes.forEach(function (c) {
+        if (c.nodeType === 3) { if (c.nodeValue) runs.push({ text: c.nodeValue.replace(/\n/g, ' '), b: f.b, u: f.u, hl: f.hl }); return; }
+        if (c.nodeType !== 1 || c.tagName === 'BR') return;
+        if (c.classList.contains('frac')) { runs.push({ frac: [c.dataset.n, c.dataset.d], text: c.dataset.n + '/' + c.dataset.d, b: f.b, u: f.u, hl: f.hl }); return; }
+        var g = { b: f.b || c.tagName === 'B' || c.tagName === 'STRONG', u: f.u || c.tagName === 'U', hl: f.hl || c.tagName === 'MARK' };
+        walk(c, g);
+      });
+    })(node, { b: false, u: false, hl: false });
+    return runs;
+  }
+  function sheetToParas(root) {
+    var out = [];
+    Array.prototype.forEach.call(root.querySelectorAll('p,div'), function (b) {
+      if (b.querySelector('p,div')) return;
+      var runs = walkRuns(b); if (!runs.map(function (r) { return r.text; }).join('').trim()) return;
+      var c = b.className || '', al = 'J', h = false; if (/\bh\b/.test(c)) { al = 'C'; h = true; } else { var m = c.match(/al-([CRLJ])/); if (m) al = m[1]; }
+      out.push({ align: al, heading: h, runs: runs });
+    });
+    return out;
+  }
+  /* exam: edited sheet → blocks */
+  function domBlocks(root) {
+    var out = [];
+    Array.prototype.forEach.call(root.children, function (el) {
+      var k = el.dataset.k || 'p';
+      if (k === 'gap') { out.push({ k: 'gap', n: 3 }); return; }
+      if (k === 'fig') { var im = el.querySelector('img'); if (im) out.push({ k: 'fig', data: im.src, w: +el.dataset.w || 300, h: +el.dataset.h || 200 }); return; }
+      if (k === 'opt') { var cells = Array.prototype.map.call(el.querySelectorAll('[data-cell]'), walkRuns).filter(function (c) { return c.length; }); if (cells.length) out.push({ k: 'opt', cells: cells }); return; }
+      if (k === 'table') { out.push({ k: 'table', rows: Array.prototype.map.call(el.querySelectorAll('tr'), function (tr) { return Array.prototype.map.call(tr.children, walkRuns); }) }); return; }
+      var runs = walkRuns(el); if (!runs.map(function (r) { return r.text; }).join('').trim()) return;
+      if (k === 'q' || k === 'item') { out.push({ k: k, runs: runs }); return; }
+      var c = el.className || '', al = 'J', h = false; if (/\bh\b/.test(c)) { al = 'C'; h = true; } else { var m = c.match(/al-([CRLJ])/); if (m) al = m[1]; }
+      out.push({ k: 'p', align: al, heading: h, runs: runs });
+    });
+    return out;
+  }
+  /* exam: clean SVG redraw → crisp PNG */
+  function svgToPng(svg) {
+    return new Promise(function (res) {
+      try {
+        svg = String(svg).replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+="[^"]*"/gi, '').replace(/(href|xlink:href)="(?!#)[^"]*"/gi, '');
+        if (!/^<svg[\s>]/i.test(svg.trim())) return res(null);
+        if (!/xmlns=/.test(svg)) svg = svg.replace(/<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+        var vb = svg.match(/viewBox="\s*([-\d.]+)[\s,]+([-\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/i);
+        var w = vb ? +vb[3] : 240, h = vb ? +vb[4] : 160; if (!(w > 0 && h > 0)) return res(null);
+        svg = svg.replace(/<svg([^>]*)>/i, function (m, at) { return '<svg' + at.replace(/\s(width|height)="[^"]*"/gi, '') + ' width="' + w + '" height="' + h + '">'; });
+        var img = new Image();
+        img.onload = function () { var k = 3, c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+          var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+          try { res({ data: c.toDataURL('image/png'), w: w, h: h }); } catch (e) { res(null); } };
+        img.onerror = function () { res(null); };
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      } catch (e) { res(null); }
+    });
+  }
+  window.__test = { finish: finish, toResult: toResult, setResults: function (r) { results = r; }, show: show };
+
+  /* ---------- exam header fields (remembered on this device) ---------- */
+  if (EXAM) ['hLine1', 'hLine2', 'hLine3', 'hSubject', 'hGrade', 'hTime', 'hTitle'].forEach(function (id) {
+    var v = Engine.lsGet('exam.' + id); if (v !== null) $(id).value = v;
+    $(id).addEventListener('input', function () { Engine.lsSet('exam.' + id, $(id).value); });
+  });
+
+  /* ---------- prompts ---------- */
+  var LEGAL_FORMAT =
+    "OUTPUT FORMAT (plain text, no code fences, no commentary):\n" +
+    "- One paragraph per line, in reading order. Join lines that are one paragraph in the source into a single line.\n" +
+    "- Start a line with [H] for a centered bold title, [C] for centered text, [L] for a block on the left side (e.g. a signature block in an Arabic paper), [R] for a short line on the right. Normal paragraphs get no tag.\n" +
+    "- **text** = bold, __text__ = underlined, as in the source. Use a TAB between two items on one line far apart (e.g. a name and the word بصفته).\n" +
+    "- Wrap any word or number you are not fully sure of in ⟦ ⟧ like ⟦كلمة⟧; truly unreadable → ⟦؟⟧. Never silently guess names, numbers, dates or case numbers: mark them.\n" +
+    "- Leave out: words crossed out or scribbled over (if they hid a name or field, write ........ in their place), stamps, seals, signatures, page numbers, handwritten court notes in the margins.\n" +
+    "- Keep the source's spelling, punctuation and digit style (١٢٣ stays ١٢٣, 123 stays 123). Write each date or number with its digits in the order a typist would type them so it looks identical to the paper.\n" +
+    "- Do not add, remove, summarize, translate or correct the wording.";
+  var EXAM_FORMAT =
+    "OUTPUT FORMAT (plain text lines, no code fences, no commentary):\n" +
+    "GRADE: <grade>   (first line, only if the paper names the grade, e.g. GRADE: Primary 4)\n" +
+    "[Q] Question (1) Choose the correct answer   (one line per section heading; number sections (1), (2), (3)… in order; standard wording: 'Choose the correct answer', 'Complete each of the following', 'Answer the following questions', or the section's own wording)\n" +
+    "[I] **1)** <question text>   (each numbered question; restart at 1 in each section; blanks as __________)\n" +
+    "[OPT] a) … | b) … | c) … | d) …   (the answer choices of the question above, on one line)\n" +
+    "[TABLE] cell | cell || cell | cell   (tables and bar models; || separates rows; a shorter row's last cell spans the rest)\n" +
+    "[FIG] <svg …>…</svg>   (any drawing, shape, diagram, number line, clock, grid or graph: REDRAW it as clean SVG on ONE line right after its question. viewBox about 120-320 wide, black strokes stroke-width=\"2\", fill=\"none\", true straight geometry, right-angle marks as small squares, heights dashed, keep proportions and orientation, every label as <text font-family=\"Times New Roman\" font-size=\"16\"> exactly as written and inside the viewBox. No scripts, images or links.)\n" +
+    "[GAP]   (after each question in sections where students write a worked answer)\n" +
+    "MATH: fractions as {3/4}; mixed numbers 2 {1/3}; powers with ² ³; symbols × ÷ − = %; keep units.\n" +
+    "Wrap anything not fully sure in ⟦ ⟧ like ⟦28.8⟧. Never guess a number silently.\n" +
+    "Fix English spelling, capitals and small grammar slips in the wording, but NEVER change a number, unit, answer choice or the mathematics.\n" +
+    "Leave out crossed-out work, ticks, scores, page numbers and anything not part of the exam.";
+  function stripsNote(bands) {
+    return "Image 1 is the whole page. Images 2 to " + (bands + 1) + " are the same page cut into overlapping horizontal strips, top to bottom, at higher resolution: read the words from the strips and use image 1 for layout. Text in an overlap appears twice — write it once.\n\n";
+  }
+  var PROMPTS = EXAM ? {
+    read: function (b) { return "You transcribe handwritten mathematics exam drafts written by a primary-school teacher into a clean exam.\n\n" + stripsNote(b) + "Transcribe every question and every answer choice on the page, in order.\n\n" + EXAM_FORMAT; },
+    check: function (b, d) { return "Proofread this transcription of the attached handwritten mathematics exam page against the images. " + stripsNote(b) + "Check every number, symbol, unit, fraction, answer choice and question, that nothing is missing or doubled, and that each [FIG] SVG matches its drawing. Remove ⟦ ⟧ from things you can now confirm; keep it on anything still uncertain. Keep exactly the same format.\n\n" + EXAM_FORMAT + "\n\nDRAFT:\n" + d + "\n\nReply with the full corrected transcription only."; }
+  } : {
+    read: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts.\n\n" + stripsNote(b) + "Transcribe the ENTIRE page word for word, exactly as written. For each unclear word use the sentence's meaning, legal Arabic phrasing and how the same letters look elsewhere on the page; if still unsure, mark it.\n\n" + LEGAL_FORMAT; },
+    check: function (b, d) { return "You are proofreading a transcription of the attached page against the page itself. " + stripsNote(b) + "Go through the draft line by line and word by word against the images. Fix every misread word, missing or extra word, wrong number, date, name, digit order, bold/underline, and any skipped or doubled paragraph. Remove ⟦ ⟧ from words you can now confirm; keep or add ⟦ ⟧ on anything still uncertain. Keep the same format.\n\n" + LEGAL_FORMAT + "\n\nDRAFT TRANSCRIPTION:\n" + d + "\n\nReply with the full corrected transcription only."; }
+  };
+})();
+
+</script>
+</body>
+</html>

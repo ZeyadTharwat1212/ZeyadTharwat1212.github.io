@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>تجهيز الروابط</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap">
+<style>
+/* One big action per screen: large type, large targets, high contrast. */
+:root{
+  --bg:#f2f5f9; --card:#ffffff; --ink:#122033; --muted:#4f5d70; --line:#cfd8e3;
+  --go:#14804a; --go-ink:#ffffff; --go-dark:#0f6a3c; --pick:#1d4fbf; --pick-ink:#ffffff;
+  --doubt:#ffe066; --doubt-ink:#2e2400; --bad:#b42318; --bad-soft:#fdecea;
+  --font:"Cairo","Segoe UI",Tahoma,Arial,sans-serif;
+  --doc:"Noto Naskh Arabic","Simplified Arabic","Times New Roman",serif;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1622; --card:#182233; --ink:#eef3fa; --muted:#a8b4c6; --line:#2d3a50;
+  --go:#2fb36f; --go-ink:#06130b; --go-dark:#27985d; --pick:#6f9bff; --pick-ink:#071229;
+  --doubt:#7a6411; --doubt-ink:#fff6cf; --bad:#ff8a80; --bad-soft:#3b1714; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:20px;line-height:1.6;
+  padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+main{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+header.top h1{margin:0;font-size:28px;line-height:1.3}
+header.top .who{color:var(--muted);font-size:17px;margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px}
+.center{text-align:center}
+.lead{font-size:22px;margin:0 0 6px}
+.small{font-size:17px;color:var(--muted);margin:6px 0 0}
+.huge{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:100%;min-height:200px;border:0;border-radius:20px;
+  background:var(--pick);color:var(--pick-ink);font:inherit;font-size:28px;font-weight:700;cursor:pointer;padding:24px}
+.huge svg{width:64px;height:64px}
+.huge:active{transform:scale(.99)}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:72px;border-radius:16px;border:2px solid var(--line);
+  background:var(--card);color:var(--ink);font:inherit;font-size:22px;font-weight:700;cursor:pointer;padding:12px 18px}
+.btn.go{background:var(--go);border-color:var(--go);color:var(--go-ink);min-height:96px;font-size:26px}
+.btn.go:hover{background:var(--go-dark)}
+.btn svg{width:34px;height:34px}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:4px solid var(--pick);outline-offset:3px}
+.row{display:flex;flex-direction:column;gap:12px}
+input.pw,.field input{width:100%;font:inherit;font-size:24px;padding:14px 16px;border:2px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);text-align:center}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:14px;padding:14px 16px;font-weight:700}
+.bar{height:22px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar span{display:block;height:100%;width:0;background:var(--go);border-radius:99px;transition:width .4s}
+.step{font-size:26px;font-weight:700;margin:0}
+.thumbs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.thumbs img{height:90px;border-radius:8px;border:1px solid var(--line);background:#fff}
+.sheet{background:#fff;color:#111;border:1px solid var(--line);border-radius:14px;padding:22px 20px;font-family:var(--doc);font-size:19px;line-height:1.9;
+  max-height:70vh;overflow:auto}
+.sheet:focus{outline:3px solid var(--pick)}
+.sheet p{margin:0 0 6px;text-align:justify}
+.sheet p.al-C,.sheet p.h{text-align:center}.sheet p.h{font-weight:700;font-size:21px}
+.sheet p.al-R{text-align:right}.sheet p.al-L{text-align:left}
+.sheet mark{background:#ffe066;color:#2e2400;border-radius:3px;padding:0 2px}
+.sheet.exam{font-family:"Times New Roman",Georgia,serif;font-size:18px;line-height:1.7}
+.sheet .q{font-weight:700;font-size:20px;margin:14px 0 6px}
+.sheet .item{margin:8px 0 2px}
+.sheet .opt{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 10px;padding-left:16px;margin-bottom:6px}
+@media (max-width:520px){.sheet .opt{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sheet table{border-collapse:collapse;margin:6px 0 10px auto}
+.sheet td{border:1px solid #111;padding:4px 14px;text-align:center;min-width:70px}
+.sheet .gap{height:54px}
+.sheet figure{margin:4px 0 10px auto;width:fit-content;max-width:70%}
+.sheet figure img{display:block;max-width:100%}
+.frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.85em;line-height:1.1;margin:0 2px}
+.frac span:first-child{border-bottom:1px solid currentColor;padding:0 2px}
+.note{background:var(--doubt);color:var(--doubt-ink);border-radius:14px;padding:12px 16px;font-size:18px}
+details.more{font-size:17px}
+details.more summary{cursor:pointer;color:var(--muted);padding:6px 0}
+.field{display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:15px;color:var(--muted)}
+.field input{font-size:18px;text-align:left;font-family:"Times New Roman",serif;padding:10px 12px}
+.links a{color:var(--pick)}
+.out{word-break:break-all;font-size:15px;background:var(--bg);border-radius:10px;padding:10px;direction:ltr;text-align:left}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.sheet.exam p{text-align:left}
+
+</style>
+</head>
+<body>
+<main>
+<header class="top"><h1>تجهيز الروابط</h1><p class="who">لزياد فقط</p></header>
+
+<section class="card">
+  <form id="f" class="row">
+    <label class="field" style="font-size:18px">مفتاح Gemini (من aistudio.google.com/apikey)
+      <input id="key" type="password" autocomplete="off" spellcheck="false" style="text-align:left">
+    </label>
+    <label class="field" style="font-size:18px">كلمة السر التي ستعطيها لأهلك (٦ حروف أو أرقام على الأقل)
+      <input id="pw1" type="text" autocomplete="off" style="text-align:center">
+    </label>
+    <label class="field" style="font-size:18px">اكتب كلمة السر مرة أخرى
+      <input id="pw2" type="text" autocomplete="off" style="text-align:center">
+    </label>
+    <p class="err" id="err" hidden></p>
+    <button class="btn go" id="go" type="submit">اختبار المفتاح وعمل الروابط</button>
+  </form>
+</section>
+
+<section class="card" id="out" hidden>
+  <div class="row">
+    <p class="lead" id="okText"></p>
+    <p><b>رابط والدك (أوراق المحامين):</b></p>
+    <div class="out" id="l1"></div>
+    <div class="row" style="flex-direction:row;gap:8px">
+      <button class="btn" type="button" data-copy="l1">نسخ</button>
+      <a class="btn" id="w1" target="_blank" rel="noopener">إرسال واتساب</a>
+    </div>
+    <p><b>رابط والدتك (امتحانات الرياضيات):</b></p>
+    <div class="out" id="l2"></div>
+    <div class="row" style="flex-direction:row;gap:8px">
+      <button class="btn" type="button" data-copy="l2">نسخ</button>
+      <a class="btn" id="w2" target="_blank" rel="noopener">إرسال واتساب</a>
+    </div>
+    <p class="small">ابعت كلمة السر لهم في رسالة منفصلة. أول مرة فقط سيكتبونها، وبعد كده الرابط يفتح مباشرة على نفس الجهاز.</p>
+    <p class="small">لو حد غريب أخد الرابط وكلمة السر، اعمل مفتاح جديد من Google واحذف القديم، ثم اعمل روابط جديدة من هنا.</p>
+  </div>
+</section>
+</main>
+<script>
+/* Shared engine: unlock key, prepare images, call Gemini (free tier), helpers. No Claude at runtime. */
+var Engine = (function () {
+  'use strict';
+  var API = 'https://generativelanguage.googleapis.com/v1beta';
+  var LS_KEY = 'kateb.apikey', LS_MODEL = 'kateb.model';
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  /* ---------- password lock: key encrypted with AES-GCM, key from PBKDF2(password) ---------- */
+  function b64u(bytes) { var s = ''; bytes = new Uint8Array(bytes); for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64u(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+  async function derive(password, salt) {
+    var base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 310000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function lock(apiKey, password) {
+    var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, await derive(password, salt), new TextEncoder().encode(apiKey));
+    var all = new Uint8Array(28 + ct.byteLength); all.set(salt, 0); all.set(iv, 16); all.set(new Uint8Array(ct), 28);
+    return b64u(all);
+  }
+  async function unlock(blob, password) {
+    var all = unb64u(blob), salt = all.slice(0, 16), iv = all.slice(16, 28), ct = all.slice(28);
+    var pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, await derive(password, salt), ct);
+    return new TextDecoder().decode(pt);
+  }
+  function blobFromHash() { var m = (location.hash || '').match(/k=([A-Za-z0-9_-]+)/); return m ? m[1] : null; }
+  function savedKey() { return lsGet(LS_KEY); }
+  function saveKey(k) { lsSet(LS_KEY, k); }
+  function forget() { lsDel(LS_KEY); lsDel(LS_MODEL); }
+
+  /* ---------- Gemini ---------- */
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  async function listModels(key) {
+    var r = await fetch(API + '/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
+    if (!r.ok) { var e = new Error('models ' + r.status); e.status = r.status; e.body = await r.text().catch(function () { return ''; }); throw e; }
+    var j = await r.json();
+    return (j.models || []).filter(function (m) { return (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0; }).map(function (m) { return m.name.replace(/^models\//, ''); });
+  }
+  /* best first: newest version; pro before flash; full before lite; stable before preview/exp */
+  function rank(models) {
+    var bad = /(tts|image|imagen|embed|live|audio|aqa|robotics|computer|native|veo|learnlm|nano|lite|gemma|thinking-exp)/i;
+    var c = models.filter(function (n) { return /^gemini-/.test(n) && !bad.test(n); });
+    function ver(n) { var m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; }
+    function score(n) { return ver(n) * 100 + (/pro/.test(n) ? 20 : /flash/.test(n) ? 10 : 0) - (/(preview|exp)/.test(n) ? 5 : 0) - (/-\d{3,}$/.test(n) ? 1 : 0); }
+    c.sort(function (a, b) { return score(b) - score(a); });
+    var flashFirst = c.filter(function (n) { return /flash/.test(n); }), pros = c.filter(function (n) { return /pro/.test(n); });
+    /* try the best pro first (best reading), then the best flash models as the reliable free fallback */
+    var order = [];
+    if (pros[0]) order.push(pros[0]);
+    flashFirst.slice(0, 3).forEach(function (n) { if (order.indexOf(n) < 0) order.push(n); });
+    c.forEach(function (n) { if (order.indexOf(n) < 0 && order.length < 6) order.push(n); });
+    if (!order.length) order = ['gemini-2.5-flash'];
+    return order;
+  }
+  function blobToB64(blob) { return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { res(String(fr.result).split(',')[1]); }; fr.onerror = rej; fr.readAsDataURL(blob); }); }
+
+  /* one call with model fallback + waiting on rate limits. onWait(seconds) lets the page show "please wait". */
+  async function generate(key, prompt, blobs, opt) {
+    opt = opt || {};
+    var parts = [{ text: prompt }];
+    for (var i = 0; i < (blobs || []).length; i++) parts.push({ inline_data: { mime_type: blobs[i].type || 'image/jpeg', data: await blobToB64(blobs[i]) } });
+    var body = JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: { temperature: opt.temperature == null ? 0.1 : opt.temperature, maxOutputTokens: opt.maxTokens || 16384 } });
+    var models = opt.models || JSON.parse(lsGet(LS_MODEL) || 'null');
+    if (!models) { try { models = rank(await listModels(key)); } catch (e) { if (e && (e.status === 400 || e.status === 403)) throw { code: 'bad_key' }; throw { code: e && e.status ? 'server' : 'network' }; } }
+    var lastErr = null;
+    for (var mi = 0; mi < models.length; mi++) {
+      var model = models[mi];
+      for (var attempt = 0; attempt < 4; attempt++) {
+        var r;
+        try { r = await fetch(API + '/models/' + model + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: body }); }
+        catch (e) { lastErr = { code: 'network' }; await sleep(3000); continue; }
+        if (r.ok) {
+          var j = await r.json(), c = (j.candidates || [])[0];
+          var text = c && c.content && c.content.parts ? c.content.parts.filter(function (p) { return !p.thought && p.text; }).map(function (p) { return p.text; }).join('') : '';
+          if (!text) { lastErr = { code: (c && c.finishReason) || 'empty' }; break; }
+          /* remember a working order so later calls start with this model */
+          if (!opt.models) lsSet(LS_MODEL, JSON.stringify([model].concat(models.filter(function (m) { return m !== model; }))));
+          return { text: text, model: model, truncated: c.finishReason === 'MAX_TOKENS' };
+        }
+        var t = await r.text().catch(function () { return ''; });
+        if (r.status === 400 && /API key not valid|API_KEY_INVALID/i.test(t)) throw { code: 'bad_key' };
+        if (r.status === 403 && /PERMISSION_DENIED|API_KEY/i.test(t) && !/model/i.test(t)) throw { code: 'bad_key' };
+        if (r.status === 429) {
+          var daily = /PerDay|per day|daily/i.test(t);
+          if (daily) { lastErr = { code: 'quota_day' }; break; }        // try next model
+          var m = t.match(/"retryDelay":\s*"(\d+)/), wait = m ? Math.min(65, +m[1] + 2) : 25;
+          if (opt.onWait) opt.onWait(wait);
+          await sleep(wait * 1000); lastErr = { code: 'rate' }; continue;
+        }
+        if (r.status >= 500) { await sleep(4000 * (attempt + 1)); lastErr = { code: 'server' }; continue; }
+        lastErr = { code: 'model_' + r.status }; break;                 // 404/403 for this model: next model
+      }
+    }
+    throw lastErr || { code: 'unknown' };
+  }
+
+  /* ---------- images ---------- */
+  function canvasOf(src) { var c = document.createElement('canvas'); c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0); return c; }
+  async function fileToCanvases(f) {
+    if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+      var pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise, out = [];
+      for (var n = 1; n <= pdf.numPages; n++) {
+        var pg = await pdf.getPage(n), v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(4, 3000 / Math.max(v1.width, v1.height)) });
+        var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+        await pg.render({ canvasContext: x, viewport: vp }).promise; out.push(c);
+      }
+      return out;
+    }
+    if (/\.(heic|heif)$/i.test(f.name)) throw { code: 'heic' };
+    var bmp;
+    try { bmp = await createImageBitmap(f, { imageOrientation: 'from-image' }); }
+    catch (e) { bmp = await new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej({ code: 'badimg' }); }; im.src = URL.createObjectURL(f); }); }
+    return [canvasOf(bmp)];
+  }
+  function scaled(c, maxSide) {
+    var k = Math.min(1, maxSide / Math.max(c.width, c.height)); if (k === 1) return c;
+    var n = document.createElement('canvas'); n.width = Math.round(c.width * k); n.height = Math.round(c.height * k);
+    n.getContext('2d').drawImage(c, 0, 0, n.width, n.height); return n;
+  }
+  function rotated(base, deg) {
+    if (!deg) return base; var c = document.createElement('canvas'), s = deg % 180 !== 0;
+    c.width = s ? base.height : base.width; c.height = s ? base.width : base.height;
+    var x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(deg * Math.PI / 180); x.drawImage(base, -base.width / 2, -base.height / 2); return c;
+  }
+  function jpeg(c, q) { return new Promise(function (res) { c.toBlob(res, 'image/jpeg', q || 0.9); }); }
+  /* whole page + overlapping strips so small handwriting stays sharp */
+  async function pageImages(c, maxBands) {
+    var list = [await jpeg(scaled(c, 3072), 0.9)], bands = c.height < c.width * 0.9 ? 2 : (maxBands || 3);
+    var ov = 0.07, h = c.height / bands;
+    for (var i = 0; i < bands; i++) {
+      var y0 = Math.max(0, Math.round(i * h - ov * c.height)), y1 = Math.min(c.height, Math.round((i + 1) * h + ov * c.height));
+      var b = document.createElement('canvas'); b.width = c.width; b.height = y1 - y0;
+      b.getContext('2d').drawImage(c, 0, y0, c.width, y1 - y0, 0, 0, c.width, y1 - y0);
+      list.push(await jpeg(scaled(b, 3072), 0.9));
+    }
+    return { blobs: list, bands: bands };
+  }
+  async function detectRotation(key, c, onWait) {
+    try {
+      var r = await generate(key, 'By how many degrees must this photo of a document page be rotated CLOCKWISE so the writing reads upright? Reply with only one number: 0, 90, 180 or 270.', [await jpeg(scaled(c, 1200), 0.85)], { maxTokens: 512, onWait: onWait });
+      var m = r.text.match(/\b(0|90|180|270)\b/); return m ? +m[1] : 0;
+    } catch (e) { if (e && (e.code === 'bad_key')) throw e; return 0; }
+  }
+  function clean(t) { return String(t || '').replace(/^\s*```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim(); }
+
+  function download(blob, name) {
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+
+  var ERR = {
+    bad_key: 'مفتاح الذكاء الاصطناعي لا يعمل. كلّم زياد.',
+    quota_day: 'انتهى عدد الصفحات المسموح به اليوم. جرّب مرة أخرى بكرة.',
+    rate: 'الخدمة مشغولة. اضغط «حاول مرة أخرى» بعد دقيقة.',
+    network: 'لا يوجد إنترنت. تأكد من الاتصال واضغط «حاول مرة أخرى».',
+    server: 'الخدمة متوقفة مؤقتاً. حاول بعد قليل.',
+    heic: 'نوع الصورة غير مدعوم. أرسل الصورة لنفسك على واتساب ثم اخترها من جديد.',
+    badimg: 'تعذر فتح الصورة. جرّب صورة أخرى.',
+    SAFETY: 'تعذرت قراءة هذه الصفحة. جرّب صورة أخرى.',
+    RECITATION: 'تعذرت قراءة هذه الصفحة. جرّب صورة أخرى.'
+  };
+  function errText(e) { return (e && ERR[e.code]) || 'حصلت مشكلة. اضغط «حاول مرة أخرى».'; }
+
+  return { lock: lock, unlock: unlock, blobFromHash: blobFromHash, savedKey: savedKey, saveKey: saveKey, forget: forget,
+    listModels: listModels, rank: rank, generate: generate, fileToCanvases: fileToCanvases, scaled: scaled, rotated: rotated,
+    pageImages: pageImages, detectRotation: detectRotation, clean: clean, download: download, errText: errText, lsGet: lsGet, lsSet: lsSet };
+})();
+
+</script>
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var base = location.href.replace(/setup(\.html)?\/?(#.*)?$/, '');
+  $('f').addEventListener('submit', async function(e){
+    e.preventDefault(); $('err').hidden = true; $('out').hidden = true;
+    var key = $('key').value.trim(), p1 = $('pw1').value.trim(), p2 = $('pw2').value.trim();
+    function bad(t){ $('err').textContent = t; $('err').hidden = false; }
+    if (!key) return bad('الصق مفتاح Gemini أولاً.');
+    if (p1.length < 6) return bad('كلمة السر لازم تكون ٦ حروف أو أرقام على الأقل.');
+    if (p1 !== p2) return bad('كلمتا السر غير متطابقتين.');
+    $('go').disabled = true; $('go').textContent = 'جارٍ الاختبار…';
+    try {
+      var models = Engine.rank(await Engine.listModels(key));
+      var r = await Engine.generate(key, 'Reply with the single word OK.', [], { models: models, maxTokens: 64 });
+      var blob = await Engine.lock(key, p1);
+      var l1 = base + 'kateb.html#k=' + blob, l2 = base + 'hanan.html#k=' + blob;
+      $('l1').textContent = l1; $('l2').textContent = l2;
+      $('w1').href = 'https://wa.me/?text=' + encodeURIComponent('ده رابط برنامج كتابة الأوراق، افتحه واكتب كلمة السر اللي هبعتهالك:\n' + l1);
+      $('w2').href = 'https://wa.me/?text=' + encodeURIComponent('ده رابط برنامج الامتحانات، افتحيه واكتبي كلمة السر اللي هبعتهالك:\n' + l2);
+      $('okText').textContent = 'المفتاح يعمل ✓ (أفضل نموذج متاح: ' + r.model + '). الروابط جاهزة:';
+      $('out').hidden = false;
+    } catch (err) {
+      bad(err && err.code === 'bad_key' ? 'المفتاح غير صحيح. انسخه من جديد من Google AI Studio.' :
+          err && err.code === 'quota_day' ? 'المفتاح صحيح لكن الحد اليومي انتهى. جرّب بكرة.' :
+          'تعذر الاختبار (' + ((err && (err.code || err.status)) || 'خطأ') + '). تأكد من الإنترنت وجرّب مرة أخرى.');
+    } finally { $('go').disabled = false; $('go').textContent = 'اختبار المفتاح وعمل الروابط'; }
+  });
+  document.querySelectorAll('[data-copy]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var t = $(b.dataset.copy).textContent;
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function(){ b.textContent = 'تم النسخ ✓'; }, function(){
+        var r = document.createRange(); r.selectNodeContents($(b.dataset.copy)); var s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'اضغط Ctrl+C'; });
+    });
+  });
+})();
+</script>
+</body>
+</html>
