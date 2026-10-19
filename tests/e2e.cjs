@@ -39,21 +39,22 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
   await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
-    const kind = /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    const kind = /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
     calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
-    const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
   });
   await context.route(/generativelanguage\.googleapis\.com/, async r => {
     const url = r.request().url();
     if (/\/models\?/.test(url)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }] }) });
-    const prompt = JSON.parse(r.request().postData()).contents[0].parts[0].text;
-    let kind = /CLOCKWISE/.test(prompt) ? 'rot' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
-    calls.push(kind);
-    const text = { rot: '0', read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, numbers: answers.N || '' }[kind];
+    const parts = JSON.parse(r.request().postData()).contents[0].parts, prompt = parts[0].text;
+    const audio = parts.find(p => p.inline_data && /^audio\//.test(p.inline_data.mime_type));
+    let kind = audio ? 'transcribe' : /CLOCKWISE/.test(prompt) ? 'rot' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    calls.push(kind); if (audio) { calls.audio = calls.audio || []; calls.audio.push({ mime: audio.inline_data.mime_type, bytes: audio.inline_data.data.length, prompt }); }
+    const text = { rot: '0', transcribe: answers.T || 'لا يوجد كلام', read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, numbers: answers.N || '' }[kind];
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason: 'STOP' }] }) });
   });
 }
@@ -73,7 +74,7 @@ async function exportVia(page, btn) {
 const exportWord = page => exportVia(page, '#wordBtn'), exportPdf = page => exportVia(page, '#pdfBtn');
 
 async function runMode(browser, base, file, answers, check, key, drive) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, serviceWorkers: 'block' });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, serviceWorkers: 'block', permissions: ['microphone'] });
   const calls = [];
   await fakeWorld(context, answers, calls);
   await context.addInitScript(k => { try { localStorage.setItem('kateb.apikey', k); } catch (e) {} window.__printed = 0; window.print = () => { window.__printed++; }; }, key || 'test-key');
@@ -93,7 +94,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
 
 (async () => {
   const server = await serve(), base = 'http://127.0.0.1:' + server.address().port;
-  const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
+  const browser = await chromium.launch(Object.assign({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] }, process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {}));
   let failed = 0;
   const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY='undo|learning' runs a few steps
   async function step(name, fn) { if (ONLY && !ONLY.test(name)) return; try { await fn(); console.log('ok   ' + name); } catch (e) { failed++; console.log('FAIL ' + name + '\n     ' + (e && e.stack || e)); } }
@@ -639,6 +640,154 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     const [dl] = await Promise.all([page.waitForEvent('download'), exportWord(page)]);
     const doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
     assert.ok(doc.includes('مدنى كلى') && !doc.includes('<w:highlight'), 'the accepted fix is plain text in Word');
+  }));
+
+  /* ---------- KATEB20: smart scanner, share, voice dictation, audio files ---------- */
+  async function tiltedPhoto(browser) {
+    const p = await browser.newPage({ viewport: { width: 800, height: 600 } });
+    await p.setContent('<canvas id=c width=800 height=600></canvas>');
+    await p.evaluate(() => { const x = document.getElementById('c').getContext('2d'); x.fillStyle = '#5a3c22'; x.fillRect(0, 0, 800, 600);
+      const q = [[150, 90], [640, 60], [690, 520], [110, 540]]; x.fillStyle = '#f2efe6'; x.beginPath(); x.moveTo(150, 90); q.slice(1).forEach(pt => x.lineTo(pt[0], pt[1])); x.closePath(); x.fill();
+      x.fillStyle = '#111'; x.font = '26px serif'; for (let i = 0; i < 8; i++) x.fillText('بناء علي طلب السيد محمد أحمد', 200, 150 + i * 45); });
+    const png = await (await p.$('#c')).screenshot(); await p.close(); return png;
+  }
+  function wavFile(seconds) {
+    const rate = 16000, n = rate * seconds, buf = Buffer.alloc(44 + n * 2);
+    buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVE', 8); buf.write('fmt ', 12); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22); buf.writeUInt32LE(rate, 24); buf.writeUInt32LE(rate * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(n * 2, 40);
+    for (let i = 0; i < n; i++) buf.writeInt16LE(Math.round(Math.sin(i / rate * 2 * Math.PI * 220) * 8000), 44 + i * 2);
+    return buf;
+  }
+  const TRANSCRIPT = 'إعادة إعلان في الدعوى\nأنه في يوم الاثنين الموافق 19/10/2026\nبناء علي طلب السيد / مينا سامي\nأنا المحضر سالف الذكر قد انتقلت إلى حيث إقامة ⟦المعلن⟧ إليه وأعلنته بالآتي\nولأجل العلم';
+  const FORMATTED = '[H] إعادة إعلان في الدعوى\nأنه في يوم الاثنين الموافق 19/10/2026\nبناء علي طلب السيد / **مينا سامي**\nأنا المحضر سالف الذكر قد انتقلت إلى حيث إقامة ⟦المعلن⟧ إليه\n[C] وأعلنته بالآتي\nولأجل العلم ،،،';
+
+  await step('scanner: a tilted paper on a desk is found, straightened and cleaned; the viewer shows original / enhanced; the corner editor can drop the crop', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
+    await page.setInputFiles('#file', { name: 'desk.png', mimeType: 'image/png', buffer: await tiltedPhoto(browser) });
+    await page.waitForSelector('#tray:not([hidden])');
+    const sh = await page.evaluate(() => { const s = window.__test.shots()[0]; return { quad: s.quad, w: s.clean.width, h: s.clean.height, ow: s.orig.width, oh: s.orig.height }; });
+    assert.ok(sh.quad && sh.quad.length === 4, 'four corners found');
+    assert.ok(Math.abs(sh.quad[0][0] - 150) < 12 && Math.abs(sh.quad[0][1] - 90) < 12 && Math.abs(sh.quad[2][0] - 690) < 12, 'corners near the paper: ' + JSON.stringify(sh.quad));
+    assert.ok(sh.w < sh.ow && sh.h < sh.oh && sh.w / sh.h > 1.1 && sh.w / sh.h < 1.4, 'the page is cropped to the paper (580 wide bottom edge, 460 high): ' + sh.w + 'x' + sh.h);
+    assert.strictEqual(await page.locator('.shot .cut').count(), 1, 'the tray marks the cut');
+    await page.click('#shots img'); await page.waitForSelector('#zoom:not([hidden])');
+    assert.ok(await page.locator('#scanBar').isVisible());
+    const cleanSrc = await page.getAttribute('#zoomImg', 'src');
+    await page.click('#sideOrig'); assert.notStrictEqual(await page.getAttribute('#zoomImg', 'src'), cleanSrc, 'original shown');
+    await page.click('#sideClean'); assert.strictEqual(await page.getAttribute('#zoomImg', 'src'), cleanSrc);
+    await page.click('#cropBtn'); await page.waitForSelector('#cropBox:not([hidden])');
+    await page.click('#cropFull'); await page.click('#cropUse'); await page.waitForSelector('#cropBox', { state: 'hidden' });
+    const sh2 = await page.evaluate(() => { const s = window.__test.shots()[0]; return { quad: s.quad, w: s.clean.width }; });
+    assert.strictEqual(sh2.quad, null, 'whole picture, no crop'); assert.strictEqual(sh2.w, sh.ow);
+    assert.strictEqual(await page.locator('.shot .cut').count(), 0);
+    await page.click('#useBtn'); await page.waitForSelector('#zoom', { state: 'hidden' });
+    await page.click('#goBtn'); await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+  }));
+
+  await step('share: the Word file itself goes to the system share sheet (Web Share with files); hidden where files cannot be shared', async () => {
+    const context = await browser.newContext({ viewport: { width: 420, height: 860 }, serviceWorkers: 'block' });
+    const calls = []; await fakeWorld(context, { A: SIHHA_READ, B: SIHHA_READ }, calls);
+    await context.addInitScript(() => {
+      try { localStorage.setItem('kateb.apikey', 'sk-ant-test'); } catch (e) {}
+      window.__shared = null;
+      navigator.canShare = d => !!(d && d.files && d.files.length);
+      navigator.share = async d => { const f = d.files[0]; window.__shared = { name: f.name, type: f.type, size: f.size, title: d.title }; };
+    });
+    const page = await context.newPage(); page.on('dialog', d => d.accept());
+    const errors = []; page.on('pageerror', e => errors.push(String(e)));
+    await page.goto(base + '/kateb.html'); await page.waitForSelector('#start:not([hidden])');
+    await page.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: photo });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn'); await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+    assert.ok(await page.locator('#shareBtn').isVisible(), 'share card shown when files can be shared');
+    await page.click('#shareBtn'); await page.waitForSelector('#kindDlg:not([hidden])'); await page.click('#kindOk');
+    await page.waitForFunction(() => window.__shared);
+    const sh = await page.evaluate(() => window.__shared);
+    assert.ok(/\.docx$/.test(sh.name) && sh.type.includes('wordprocessingml') && sh.size > 2000, JSON.stringify(sh));
+    assert.match(await page.textContent('#savedNote'), /اختر واتساب/);
+    assert.deepStrictEqual(errors, []);
+    await context.close();
+    /* desktop without file sharing: no dead button */
+    const c2 = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
+    await fakeWorld(c2, { A: SIHHA_READ, B: SIHHA_READ }, []); await c2.addInitScript(() => { try { localStorage.setItem('kateb.apikey', 'sk-ant-test'); } catch (e) {} delete navigator.share; delete navigator.canShare; });
+    const p2 = await c2.newPage(); p2.on('dialog', d => d.accept()); await p2.goto(base + '/kateb.html'); await p2.waitForSelector('#start:not([hidden])');
+    await p2.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: photo }); await p2.waitForSelector('#tray:not([hidden])'); await p2.click('#goBtn'); await p2.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+    assert.ok(await p2.locator('#shareBtn').isHidden(), 'no share button without file sharing');
+    await c2.close();
+  });
+
+  await step('voice dictation: record (fake microphone) with live text and spoken commands, pause/resume, stop → playback → transcribed by the audio key (WAV chunk) → laid out by Claude → review with the recording kept on the document', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: TRANSCRIPT, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => {
+      localStorage.setItem('kateb.audiokey', 'AIza-test');
+      /* a fake browser recogniser: a few phrases, interim then final */
+      const phrases = ['عنوان إعادة إعلان في الدعوى', 'أنه في يوم الاثنين الموافق تسعة عشر أكتوبر ألفين وستة وعشرين نقطة', 'فقرة جديدة', 'بناء علي طلب السيد مينا سامي'];
+      window.SpeechRecognition = window.webkitSpeechRecognition = function () {
+        const self = this; let i = 0, t = null, on = false;
+        this.start = () => { on = true; const next = () => { if (!on || i >= phrases.length) { if (on) { on = false; self.onend && self.onend(); } return; }
+          const ph = phrases[i++]; self.onresult && self.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: ph.slice(0, 6) }], { isFinal: false })] });
+          t = setTimeout(() => { self.onresult && self.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: ph }], { isFinal: true })] }); t = setTimeout(next, 150); }, 150); }; t = setTimeout(next, 100); };
+        this.stop = () => { on = false; clearTimeout(t); self.onend && self.onend(); };
+        this.abort = this.stop;
+      };
+    });
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    await page.click('#recStart');
+    await page.waitForSelector('.recstat.on', { timeout: 10000 });
+    await page.waitForFunction(() => window.__test.liveParts().length >= 4, null, { timeout: 15000 });
+    const parts = await page.evaluate(() => window.__test.liveParts());
+    assert.ok(parts[0].heading && parts[0].text === 'إعادة إعلان في الدعوى', 'عنوان → heading');
+    assert.ok(/نقطة|\.$/.test(parts[1].text) && parts[1].text.endsWith('.'), '«نقطة» at the end → full stop: ' + parts[1].text);
+    assert.ok(parts[2].paragraph, '«فقرة جديدة» → paragraph');
+    assert.ok((await page.innerHTML('#liveText')).includes('<b>إعادة إعلان في الدعوى</b>'), 'live text shows the heading');
+    await page.click('#recPause'); assert.ok(await page.locator('.recstat.paused').count());
+    await page.click('#recResume'); assert.ok(await page.locator('.recstat.on').count());
+    await page.waitForTimeout(1500);
+    await page.click('#recStop'); await page.waitForSelector('#recDone:not([hidden])', { timeout: 10000 });
+    assert.match(await page.textContent('#recState'), /انتهى التسجيل/);
+    assert.ok((await page.getAttribute('#recAudio', 'src') || '').startsWith('blob:'), 'playback of the recording');
+    await page.click('#recConvert');
+    await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
+    assert.ok(calls.audio && calls.audio.length === 1 && calls.audio[0].mime === 'audio/wav' && calls.audio[0].bytes > 1000, 'the recording went to the audio key as one WAV chunk: ' + JSON.stringify(calls.audio && calls.audio.map(a => [a.mime, a.bytes])));
+    assert.match(calls.audio[0].prompt, /Spoken punctuation commands/);
+    const fmt = calls.claude.find(c => c.kind === 'format'); assert.ok(fmt && fmt.images === 0 && /COMMON EXPRESSIONS/.test(fmt.system), 'Claude lays the transcript out, text only, with the glossary');
+    assert.match(await page.textContent('#pagesBox .sheet p.h'), /إعادة إعلان في الدعوى/);
+    assert.match(await page.textContent('#pagesBox .sheet'), /١٩‏\/‏١٠‏\/‏٢٠٢٦/, 'the spoken date as a house-style date');
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'the transcriber\'s doubt stays yellow');
+    assert.ok(await page.locator('#audioBox').isVisible(), 'the recording can be played on the review screen');
+    assert.match(await page.inputValue('#docName'), /^إعادة إعلان مينا سامي/);
+    await page.waitForFunction(() => /ok/.test(document.getElementById('saveStatus').className));
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#filesBtn'); await page.waitForSelector('.doc'); await page.click('.doc [data-act="open"]'); await page.waitForSelector('#done:not([hidden])');
+    assert.ok(await page.locator('#audioBox').isVisible(), 'the recording is stored with the document');
+    const d = await page.evaluate(() => { const d = window.__test.doc(); return { source: d.source, hasAudio: !!d.audio, transcript: d.transcript }; });
+    assert.ok(d.source === 'voice' && d.hasAudio && /المحضر سالف الذكر/.test(d.transcript), JSON.stringify(d));
+  }));
+
+  await step('audio file: upload → name and duration → convert needs the audio key (clear message), with it the file is decoded to WAV and transcribed; without Claude the transcript itself is the document', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: TRANSCRIPT, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
+    await page.click('#audioBtn'); await page.waitForSelector('#audioUp:not([hidden])');
+    assert.ok(await page.locator('#audioKeyNote').isVisible(), 'no audio key: said plainly');
+    await page.setInputFiles('#audioFile', { name: 'whatsapp.wav', mimeType: 'audio/wav', buffer: wavFile(2) });
+    await page.waitForSelector('#audioInfo:not([hidden])');
+    assert.strictEqual(await page.textContent('#audioName'), 'whatsapp.wav');
+    await page.waitForFunction(() => /المدة ٠:٠٢/.test(document.getElementById('audioMeta').textContent));
+    await page.click('#audioConvert'); await page.waitForSelector('#fail:not([hidden])');
+    assert.match(await page.textContent('#failMsg'), /مفتاح الصوت/);
+    await page.click('#homeBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#settingsBtn'); await page.waitForSelector('#settings:not([hidden])');
+    await page.fill('#audioKeyIn', 'AIza-test'); await page.click('#audioKeySave');
+    await page.waitForFunction(() => /✅/.test(document.getElementById('audioKeyState').textContent));
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#audioBtn'); await page.waitForSelector('#audioUp:not([hidden])');
+    assert.ok(await page.locator('#audioKeyNote').isHidden());
+    await page.setInputFiles('#audioFile', { name: 'whatsapp.wav', mimeType: 'audio/wav', buffer: wavFile(2) });
+    await page.waitForSelector('#audioInfo:not([hidden])'); await page.click('#audioConvert');
+    await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
+    assert.strictEqual(calls.audio.length, 1); assert.strictEqual(calls.audio[0].mime, 'audio/wav');
+    assert.match(await page.textContent('#pagesBox .sheet'), /المحضر سالف الذكر/);
+    assert.ok(await page.locator('#audioBox').isVisible());
+    assert.match(await page.textContent('#readerInfo'), /gemini/);
+    /* re-read from the stored recording */
+    calls.length = 0; calls.audio = [];
+    await page.click('#reconvertBtn'); await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
+    assert.strictEqual(calls.audio.length, 1, 'إعادة التحويل transcribes the stored recording again');
+    assert.match(await page.textContent('#versionsBtn'), /نسخ سابقة/);
   }));
 
   await browser.close(); server.close();

@@ -87,6 +87,34 @@ To rebuild the bank after adding office files or web formulas (kept outside the 
   the first always). «استرجاع النص الأول» restores the reading; «🔄 إعادة التحويل» reads the stored photos again.
 - «⬅️ رجوع» walks a screen stack (also the phone's back button); the review screen keeps its state.
 
+## Voice, audio files, sharing, smart scanning (v18)
+- **Four ways in** on the start screen: 📷 تصوير ورقة · 🖼️ رفع صورة أو ملف · 🎙️ إملاء صوتي · 🎧 رفع تسجيل صوتي. All end in the
+  same review screen, document store, Word/PDF export and share.
+- **Smart scanner** (`scan.js`: `detect`, `warp`, `smart`): the paper is found in the photo (bright, low-saturation
+  region → convex hull → four corners), straightened with a homography, then cleaned as before. The tray keeps the
+  photo as taken and the page; the viewer toggles «الصورة الأصلية / المحسّنة», «✂️ تعديل القص» drags the four
+  corners, «✅ استخدام الصورة» applies. No crop when nothing paper-like is found (scans, PDFs, full-frame pages).
+- **Share** (`doShare`): the actual `.docx` goes to the system share sheet through the Web Share API with files
+  (WhatsApp is one of its targets on phones); the button is hidden where file sharing is not available and the
+  download stays. PDF is produced by the browser's print dialog, so it is not shareable this way.
+- **Voice dictation** (`speech.js` + `convertAudio`): MediaRecorder with pause/resume, a level waveform, duration;
+  the browser's own recogniser (`ar-EG`, interim grey / final black) shows the text while speaking, with spoken
+  commands («نقطة» «فاصلة» at the end of a phrase, «سطر جديد», «فقرة جديدة», «عنوان» before a title; switchable).
+  After «إنهاء التسجيل»: playback, then «✨ تحويل التسجيل إلى Word».
+- **Audio files**: any format the browser decodes (mp3, m4a/aac, ogg/opus, webm, wav); name and duration shown,
+  playback, «✨ تحويل إلى نص».
+- **Transcription**: Claude does not hear, so audio goes to Gemini with a second key («مفتاح الصوت»: `&g=` in the
+  link from setup.html, or pasted in ⚙️ الإعدادات; a Gemini main key doubles as it). The recording is decoded in
+  the browser to 16 kHz mono WAV, normalised if quiet, cut at quiet moments into ≤8-minute chunks with 3 s overlap;
+  each chunk is transcribed (Gemini 2.5 Pro first) with a legal-context prompt that marks unsure words `⟦…⟧` and
+  never completes formulas; chunks are merged with the overlap removed. Without an audio key the live text is the
+  transcript (dictation only; uploads say what is missing).
+- **Layout**: Claude lays the transcript out as the written paper (LEGAL_FORMAT markup, punctuation, digits for
+  spoken numbers and dates) under the rule «every spoken word, nothing added»; a shortened reply is refused.
+  Then the usual house-style passes and the same review screen; the recording is stored with the document
+  («🔊 التسجيل الأصلي» on the review screen, «🔄 إعادة التحويل» transcribes it again).
+- Errors are said plainly: no microphone permission, unsupported browser, undecodable file, no audio key, silence.
+
 ## Intelligence layer (v16)
 - **Readings to choose from**: a reader that hesitates writes `⟦محمود|محمد⟧` (most likely first, at most three).
   Only the first reading is the word for every check; the review pill shows the readings as chips and why the word
