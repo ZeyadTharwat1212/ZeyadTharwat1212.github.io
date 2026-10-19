@@ -1,11 +1,11 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v15';
+var CACHE = 'kateb-v16';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=15', 'kateb/engine.js?v=15', 'kateb/verify.js?v=15', 'kateb/docx.js?v=15', 'kateb/exam.js?v=15', 'kateb/app.js?v=15',
-  'kateb/office.js?v=15', 'kateb/bank.js?v=15', 'kateb/arabic.js?v=15', 'kateb/scan.js?v=15', 'kateb/store.js?v=15', 'kateb/learn.js?v=15', 'kateb/templates/templates.json?v=15',
-  'kateb/templates/announce.docx?v=15', 'kateb/templates/gift.docx?v=15', 'kateb/templates/inherit_announce.docx?v=15', 'kateb/templates/inherit_request.docx?v=15', 'kateb/templates/iqrar.docx?v=15', 'kateb/templates/memo.docx?v=15', 'kateb/templates/price.docx?v=15', 'kateb/templates/reannounce.docx?v=15', 'kateb/templates/sahifa.docx?v=15', 'kateb/templates/sale.docx?v=15', 'kateb/templates/sihha.docx?v=15', 'kateb/templates/warning.docx?v=15',
+  'kateb/style.css?v=16', 'kateb/engine.js?v=16', 'kateb/verify.js?v=16', 'kateb/docx.js?v=16', 'kateb/exam.js?v=16', 'kateb/app.js?v=16',
+  'kateb/office.js?v=16', 'kateb/bank.js?v=16', 'kateb/arabic.js?v=16', 'kateb/scan.js?v=16', 'kateb/store.js?v=16', 'kateb/learn.js?v=16', 'kateb/fields.js?v=16', 'kateb/bank/glossary.json?v=16', 'kateb/templates/templates.json?v=16',
+  'kateb/templates/announce.docx?v=16', 'kateb/templates/gift.docx?v=16', 'kateb/templates/inherit_announce.docx?v=16', 'kateb/templates/inherit_request.docx?v=16', 'kateb/templates/iqrar.docx?v=16', 'kateb/templates/memo.docx?v=16', 'kateb/templates/price.docx?v=16', 'kateb/templates/reannounce.docx?v=16', 'kateb/templates/sahifa.docx?v=16', 'kateb/templates/sale.docx?v=16', 'kateb/templates/sihha.docx?v=16', 'kateb/templates/warning.docx?v=16',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',

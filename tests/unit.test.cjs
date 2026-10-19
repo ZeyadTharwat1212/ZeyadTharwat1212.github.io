@@ -340,3 +340,44 @@ test('engine: fast-mode usage is priced at twice the list price; the switch defa
   assert.deepStrictEqual(Engine.priceOf('claude-opus-5-5'), [4, 20, 5, 0.2]);
   assert.strictEqual(Engine.fastOn(), true); Engine.setFast(false); assert.strictEqual(Engine.fastOn(), false); Engine.setFast(true);
 });
+
+/* ---------- KATEB18: alternatives, fields, glossary ---------- */
+test('alternatives ⟦first|second⟧: only the first reading is a word; the guard keeps them; docx runs carry alts', () => {
+  assert.deepStrictEqual(Verify.tokens('السيد ⟦محمود|محمد⟧ علي'), ['السيد', 'محمود', 'علي']);
+  const g = Verify.guard('السيد ⟦محمود|محمد⟧ علي كلمة', 'السيد محمود علي', 'السيد محمد علي', true);
+  assert.strictEqual(g.text, 'السيد ⟦محمود|محمد⟧ علي ⟦كلمة⟧');
+  assert.deepStrictEqual(g.words, ['كلمه'], 'the guard says which words it added (normalised)');
+  const runs = DocxBuilder.parseMarkup('السيد ⟦محمود|محمد⟧ علي')[0].runs;
+  assert.deepStrictEqual(runs[1], { text: 'محمود', b: false, u: false, hl: true, alts: ['محمد'] });
+  const Learn = require('../kateb/learn.js'), items = [];
+  Learn.record(items, 'baba', 'word', 'محمود'); Learn.record(items, 'baba', 'word', 'محمود');
+  assert.strictEqual(Learn.applyLexicon('⟦محمود|محمد⟧', items, 'baba').text, 'محمود', 'a confirmed first reading drops the doubt and the alternatives');
+  const Bank = require('../kateb/bank.js');
+  assert.strictEqual(Bank.snap('بناء علي ⟦طلب|طلبه⟧ السيد', { lines: [{ t: 'بناء علي طلب السيد', n: 5, o: ['بناء', 'علي', 'طلب', 'السيد'] }] }).text, 'بناء علي طلب السيد');
+});
+
+test('fields: court, case number, dates, amounts, names; consistency warnings never merge', () => {
+  const Fields = require('../kateb/fields.js');
+  const t = '[H] دعوى صحة توقيع\nفي القضية رقم ١٢٣٤ لسنة ٢٠٢٦ مدني كلي أمام محكمة أسيوط الابتدائية\nبناء علي طلب السيد / مينا سامي - بالغ سن الرشد\nبموجب عقد بيع مؤرخ في ٧/١/٢٠٢٦ بمبلغ وقدره 250000 جنيه مصري لا غير\nالسيد / كريم عادل\tمخاطبا مع';
+  const f = Fields.extract(t);
+  assert.deepStrictEqual(f.court, ['محكمة أسيوط الابتدائية']);
+  assert.deepStrictEqual(f.cases.map(c => c.num + '/' + c.year), ['1234/2026']);
+  assert.deepStrictEqual(f.dates.map(d => d.d + '/' + d.m + '/' + d.y), ['7/1/2026']);
+  assert.deepStrictEqual(f.amounts.map(a => a.value), ['250000']);
+  assert.deepStrictEqual(f.names, ['مينا سامي', 'كريم عادل']);
+  const w = Fields.consistency([t, t.replace('١٢٣٤', '١٢٣٥').replace('مينا سامي', 'مينا سامى')]);
+  assert.strictEqual(w.length, 1, 'ى/ي is not two names; a one-digit case difference is a warning');
+  assert.match(w[0].text, /1234 لسنة 2026 و 1235/);
+  assert.match(Fields.consistency(['السيد / كريم عادل محمود و السيد / كريم عادل محمد'])[0].text, /اسم مكتوب بصورتين/);
+  assert.match(Fields.consistency(['مؤرخ في 7/13/2026'])[0].text, /تاريخ غير معتاد/);
+  assert.deepStrictEqual(Fields.consistency([t]), []);
+});
+
+test('glossary: the common court expressions are a bank the prompt can carry', () => {
+  const g = JSON.parse(fs.readFileSync(path.join(__dirname, '../kateb/bank/glossary.json'), 'utf8'));
+  assert.ok(g.lines.length > 300);
+  for (const p of ['وحيث إن', 'بناء عليه', 'تلتمس المحكمة', 'منطوق الحكم', 'المدعى عليه', 'صحيفة الدعوى', 'محضر جلسة', 'قضت المحكمة']) assert.ok(g.lines.some(l => l.t === p), p);
+  const Bank = require('../kateb/bank.js');
+  const txt = Bank.promptText(g, 500);
+  assert.ok(txt.includes('- وحيث إن') && txt.length < 20000);
+});

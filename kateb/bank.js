@@ -60,7 +60,7 @@ var Bank = (function () {
      ≥ minCover of its words are found in order within a span not much longer than itself */
   function hits(bank, line, minCover) {
     minCover = minCover || 0.8;
-    var w = words(line.replace(/[*_⟦⟧]/g, '')); if (w.length < 3 || !bank || !bank.lines) return [];
+    var w = words(line.replace(/⟦([^⟧]*)⟧/g, function (m, a) { return a.split('|')[0]; }).replace(/[*_⟦⟧]/g, '')); if (w.length < 3 || !bank || !bank.lines) return [];   // ⟦a|b⟧ aligns on its first reading
     var out = [];
     for (var k = 0; k < bank.lines.length; k++) {
       var bl = bank.lines[k], bw = bl.w || (bl.w = words(bl.t));
@@ -96,7 +96,7 @@ var Bank = (function () {
       var toks = line.split(/(\s+)/), wi = 0;
       var res = toks.map(function (tk) {
         if (!tk || /^\s+$/.test(tk)) return tk;
-        var core = tk.replace(/[*_⟦⟧]/g, ''); if (!norm(core)) return tk;
+        var core = tk.replace(/[*_⟦⟧]/g, '').split('|')[0]; if (!norm(core)) return tk;
         var idx = wi++;
         if (tk.indexOf('⟦') < 0) {
           /* office spelling: inside a recognised formula a word that differs only in hamza / ة / ى takes the office's form */

@@ -34,11 +34,13 @@ var Verify = (function () {
 
   /* one line → [{t: text, word: bool, doubt: bool, core}] */
   function segments(line) {
-    var out = [], doubt = false;
+    var out = [], doubt = false, alt = false;
     line.split(PIECE).forEach(function (p) {
       if (!p) return;
-      if (p === '⟦') { doubt = true; out.push({ t: p }); return; }
-      if (p === '⟧') { doubt = false; out.push({ t: p }); return; }
+      if (p === '⟦') { doubt = true; alt = false; out.push({ t: p }); return; }
+      if (p === '⟧') { doubt = false; alt = false; out.push({ t: p }); return; }
+      if (doubt && p === '|') { alt = true; out.push({ t: p }); return; }       // ⟦reading|other reading⟧
+      if (doubt && alt) { out.push({ t: p, alt: true }); return; }
       var frac = /^\{([^{}\/]+)\/([^{}\/]+)\}$/.exec(p);
       if (frac) { out.push({ t: p, word: true, doubt: doubt, core: norm(frac[1]) + '/' + norm(frac[2]) }); return; }
       if (MARKUP.test(p)) { out.push({ t: p }); return; }
@@ -98,7 +100,7 @@ var Verify = (function () {
        - in a name (after «السيد /» etc.): any word the reads disagreed on (strict mode)
      Spelling-only differences and words the judge confirmed are not marked: the judge saw the ink. */
   function guard(final, a, b, strict) {
-    var ta = tokens(a), tb = tokens(b), seen = {}, diff = {}, doubtedNum = {}, added = 0;
+    var ta = tokens(a), tb = tokens(b), seen = {}, diff = {}, doubtedNum = {}, added = 0, addedWords = [];
     var r = align(ta, tb);
     ta.concat(tb).forEach(function (w) { seen[w] = 1; });
     r.onlyA.concat(r.onlyB).forEach(function (w) { diff[w] = 1; });
@@ -119,11 +121,11 @@ var Verify = (function () {
         if (hasDigit(core)) mark = !!(diff[core] || doubtedNum[core] || !seen[core]);
         else if (!seen[core]) mark = !close(core);
         else if (strict && inName && diff[core]) mark = true;
-        if (mark) { added++; return '⟦' + s.t + '⟧'; }
+        if (mark) { added++; addedWords.push(core); return '⟦' + s.t + '⟧'; }
         return s.t;
       }).join('');
     }).join('\n');
-    return { text: text, added: added };
+    return { text: text, added: added, words: addedWords };
   }
 
   /* numbers pass: «<number> | <words before>» lines from a dedicated read of the strips.
