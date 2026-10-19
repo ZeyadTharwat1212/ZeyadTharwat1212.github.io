@@ -161,6 +161,12 @@ var Verify = (function () {
      day/month/year (4,836 vs 1). Applied after reading, so the hand's ٠-٩ never reach the file. */
   /* display form: the office's Word shows 0-9 as ٠-٩ (Numeral: Context), so the screen and the PDF do the same */
   function arabicDigits(text) { return String(text || '').replace(/[0-9]/g, function (c) { return AR_DIG[+c]; }); }
+  /* Display only: Arabic papers (and Word in an Arabic paragraph) show 10/11/2020 as ٢٠٢٠/١١/١٠ — read from the right:
+     day, month, year. Browsers keep the whole date left-to-right, so a right-to-left mark around each slash puts the
+     parts in Arabic order while every number stays itself. stripMarks() removes them again before any file is built. */
+  var RLM = '\u200F';
+  function rtlDates(text) { return String(text || '').replace(/([0-9٠-٩]{1,4})\/([0-9٠-٩]{1,4})(\/([0-9٠-٩]{1,4}))?/g, function (m, a, b, c, d) { return a + RLM + '/' + RLM + b + (d ? RLM + '/' + RLM + d : ''); }); }
+  function stripMarks(text) { return String(text || '').replace(/\u200F/g, ''); }
   function houseDigits(text) {
     return String(text || '').split('\n').map(function (line) {
       if (isFig(line)) return line;
@@ -204,6 +210,6 @@ var Verify = (function () {
   }
   function doubtRecall(ref, hypMarked) { var a = audit(ref, hypMarked); return a.wrong ? a.caught / a.wrong : 1; }
 
-  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers, houseDigits: houseDigits, arabicDigits: arabicDigits, west: west };
+  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers, houseDigits: houseDigits, arabicDigits: arabicDigits, west: west, rtlDates: rtlDates, stripMarks: stripMarks };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Verify;

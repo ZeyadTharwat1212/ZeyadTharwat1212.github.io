@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=13">
+<link rel="stylesheet" href="kateb/style.css?v=15">
 </head>
 <body>
 <main>
@@ -69,6 +69,7 @@
       <button class="btn" id="moreBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg><span>صوّر صفحة أخرى</span></button>
       <button class="btn go" id="goBtn" type="button"><span>✨ تحويل إلى نص</span></button>
     </div>
+    <p class="small center">اضغط على أي صورة لتراها بعد التحسين أو لتحميلها. <button class="linkbtn" id="clearTrayBtn" type="button">إلغاء الكل</button></p>
   </div>
   <button class="btn resume" id="resumeBtn" type="button" hidden><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></span><span>استكمال آخر مستند<small id="resumeWhen"></small></span></button>
   <div class="menu">
@@ -111,12 +112,13 @@
     <p class="small center" id="waitText" hidden></p>
     <p class="small center" id="readerNote">اترك الصفحة مفتوحة.</p>
     <div class="scanbox"><div class="thumbs" id="thumbs"></div></div>
+    <button class="btn" id="cancelBtn" type="button">✖ إلغاء القراءة</button>
   </div>
 </section>
 
 <section id="done" hidden>
   <div class="row">
-    <div class="docbar"><input id="docName" class="docname" aria-label="اسم الملف" placeholder="اسم الملف" autocomplete="off"><span class="savestat" id="saveStatus" role="status" aria-live="polite"></span></div>
+    <div class="docbar"><input id="docName" class="docname" aria-label="اسم الملف" placeholder="اسم الملف" autocomplete="off"><span class="savestat" id="saveStatus" role="status" aria-live="polite"></span><button class="btn sm" id="kindBtn" type="button" title="نوع الورقة"></button></div>
     <div class="actions">
       <button class="xcard word" id="wordBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m8.5 12 1.3 5 1.7-4 1.7 4 1.3-5"/></svg></span><span><b>📘 تحميل Word</b><small>ملف ‎.docx قابل للتعديل</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
       <button class="xcard pdf" id="pdfBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 17v-5h2a1.5 1.5 0 0 1 0 3H8"/><path d="M13 17v-5h1.5a2.5 2.5 0 0 1 0 5z"/></svg></span><span><b>📕 تحميل PDF</b><small>نص حقيقي قابل للتحديد، جاهز للطباعة</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
@@ -167,6 +169,8 @@
   <h2 class="h2">⚙️ الإعدادات</h2>
   <div class="card setrow"><b>🧠 تحسين التعرف على خط اليد</b><p class="small" id="setLearnState"></p><button class="btn" id="setLearnBtn" type="button">فتح إعدادات التعلم</button></div>
   <div class="card setrow"><label class="chk"><input type="checkbox" id="setEnhance" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label></div>
+  <div class="card setrow"><label class="switch"><input type="checkbox" id="setFast" checked><span>⚡ وضع السرعة (Claude)</span></label><p class="small">نفس موديل Opus 5.5 ونفس القراءتين والمراجعة، لكن الرد يخرج أسرع حتى ٢٫٥ مرة، والقراءة تتم بتركيز أعلى في نفس الوقت. التكلفة ضعف السعر العادي (حوالي ٠٫٥ إلى ٠٫٧ دولار للصفحة بدل ٠٫٢٥ إلى ٠٫٣٥). لو خط السرعة مشغول، يرجع للعادي تلقائيًا.</p></div>
+  <div class="card setrow"><b>💳 استهلاك Claude (على هذا الجهاز)</b><div id="usageBox"></div><button class="btn sm" id="usageResetBtn" type="button">تصفير العداد</button></div>
   <div class="card setrow"><b>💾 التخزين على هذا الجهاز</b><p class="small" id="setDocsInfo"></p><p class="small" id="storageInfo"></p><button class="btn" id="deleteLearnBtn" type="button">حذف بيانات التعلم</button><button class="btn danger" id="deleteAllBtn" type="button">حذف كل الملفات المحفوظة</button></div>
   <div class="card setrow"><b>🔒 الخصوصية</b><p class="small">الملفات والنسخ السابقة وبيانات التعلم كلها محفوظة داخل هذا المتصفح على هذا الجهاز فقط، ولا تُرفع إلى أي خادم. أثناء القراءة تُرسل صورة الورقة إلى خدمة القراءة (Claude من Anthropic أو Gemini من Google حسب المفتاح)، ومعها، إذا كان التعلم مفعّلًا، قائمة الكلمات التي تعلّمها من تصحيحاتك لتحسين القراءة. حذف بيانات التطبيق من المتصفح يحذف كل شيء.</p></div>
 </section>
@@ -201,24 +205,31 @@
 </div></div>
 <div class="zoom" id="zoom" hidden>
   <div class="zctl"><button class="iconbtn" id="zoomClose" type="button" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-    <div class="grp"><button class="iconbtn" id="zoomOut" type="button" aria-label="تصغير"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button class="iconbtn" id="zoomIn" type="button" aria-label="تكبير"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
+    <div class="grp"><button class="iconbtn" id="zoomOut" type="button" aria-label="تصغير"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button class="iconbtn" id="zoomSave" type="button" aria-label="تحميل الصورة" title="تحميل الصورة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button><button class="iconbtn" id="zoomIn" type="button" aria-label="تكبير"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
   <img id="zoomImg" alt="صورة الأصل">
 </div>
+<div class="modal" id="kindDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="kindQ">
+  <h3 id="kindQ">ما نوع هذه الورقة؟</h3>
+  <p class="small" id="kindHint"></p>
+  <div class="kinds" id="kindList"></div>
+  <div id="kindExtra"></div>
+  <div class="actions2"><button class="btn go" id="kindOk" type="button">متابعة</button><button class="btn" id="kindCancel" type="button">إلغاء</button></div>
+</div></div>
 <div id="printRoot"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=13"></script>
-<script src="kateb/scan.js?v=13"></script>
-<script src="kateb/verify.js?v=13"></script>
-<script src="kateb/arabic.js?v=13"></script>
-<script src="kateb/bank.js?v=13"></script>
-<script src="kateb/store.js?v=13"></script>
-<script src="kateb/learn.js?v=13"></script>
-<script src="kateb/docx.js?v=13"></script>
-<script src="kateb/exam.js?v=13"></script>
+<script src="kateb/engine.js?v=15"></script>
+<script src="kateb/scan.js?v=15"></script>
+<script src="kateb/verify.js?v=15"></script>
+<script src="kateb/arabic.js?v=15"></script>
+<script src="kateb/bank.js?v=15"></script>
+<script src="kateb/store.js?v=15"></script>
+<script src="kateb/learn.js?v=15"></script>
+<script src="kateb/docx.js?v=15"></script>
+<script src="kateb/exam.js?v=15"></script>
 
-<script src="kateb/app.js?v=13"></script>
+<script src="kateb/app.js?v=15"></script>
 </body>
 </html>

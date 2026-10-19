@@ -80,7 +80,7 @@
     CLAUDE = Engine.provider(KEY) === 'claude';
     var name = Engine.provider(KEY) === 'claude' ? 'Claude' : 'Gemini';
     var b = $('providerBadge'); if (b) { b.textContent = name; b.hidden = false; }
-    var w = $('readerNote'); if (w) w.textContent = 'القارئ: ' + name + (name === 'Claude' ? ' (Opus 5.5 — قراءتان + مراجعة + فحص الأرقام)' : ' (المجاني — أبطأ)') + '. اترك الصفحة مفتوحة.';
+    var w = $('readerNote'); if (w) w.textContent = 'القارئ: ' + name + (name === 'Claude' ? ' (Opus 5.5' + (Engine.fastOn() ? ' ⚡ وضع السرعة' : '') + ' — قراءتان + مراجعة + فحص الأرقام)' : ' (المجاني — أبطأ)') + '. اترك الصفحة مفتوحة.';
     var d = loadDraft();
     $('resumeBtn').hidden = !d;
     if (d) $('resumeWhen').textContent = new Date(d.t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
@@ -123,7 +123,7 @@
   }
   function renderTray() {
     var box = $('shots'); if (!box) return;
-    box.innerHTML = shots.map(function (c, i) { return '<div class="shot' + (blur[i] ? ' blur' : '') + '"><img alt="صفحة ' + (i + 1) + '" src="' + Engine.scaled(c, 260).toDataURL('image/jpeg', 0.7) + '"><span class="n">' + (i + 1) + '</span>' + (blur[i] ? '<span class="warn">غير واضحة</span>' : '') + '<button class="x" type="button" data-rm="' + i + '" aria-label="حذف الصفحة">✕</button></div>'; }).join('');
+    box.innerHTML = shots.map(function (c, i) { return '<div class="shot' + (blur[i] ? ' blur' : '') + '"><img alt="صفحة ' + (i + 1) + '" src="' + Engine.scaled(c, 260).toDataURL('image/jpeg', 0.7) + '"><span class="n">' + (i + 1) + '</span>' + (blur[i] ? '<span class="warn">غير واضحة</span>' : '') + '<button class="x" type="button" data-rm="' + i + '" aria-label="حذف الصفحة">✕</button><button class="view" type="button" data-view="' + i + '" aria-label="عرض الصفحة بعد التحسين">🔍 عرض</button></div>'; }).join('');
     var nb = blur.filter(Boolean).length;
     $('trayCount').textContent = shots.length === 1 ? 'صفحة واحدة جاهزة' : shots.length + ' صفحات جاهزة';
     $('blurNote').hidden = !nb; $('blurNote').textContent = nb ? 'الصورة غير واضحة. من فضلك التقط صورة أوضح (الصفحة ' + blur.map(function (b, i) { return b ? i + 1 : null; }).filter(Boolean).join('، ') + '). يمكنك حذفها وتصويرها مرة أخرى.' : '';
@@ -138,7 +138,12 @@
       try { var cs = await Engine.fileToCanvases(f); cs.forEach(function (c) { shots.push(cleaned(c)); blur.push(sharp(c) < BLUR); }); renderTray(); $('tray').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
       catch (e) { fail(e); }
     });
-    $('shots').addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (!b) return; shots.splice(+b.dataset.rm, 1); blur.splice(+b.dataset.rm, 1); renderTray(); });
+    $('shots').addEventListener('click', function (e) {
+      var v = e.target.closest('[data-view]') || e.target.closest('img');
+      if (v) { var i = v.dataset.view !== undefined ? +v.dataset.view : +v.parentNode.querySelector('[data-view]').dataset.view; openScan(shots[i], i); return; }
+      var b = e.target.closest('[data-rm]'); if (!b) return; shots.splice(+b.dataset.rm, 1); blur.splice(+b.dataset.rm, 1); renderTray();
+    });
+    if ($('clearTrayBtn')) $('clearTrayBtn').addEventListener('click', function () { if (!shots.length || window.confirm('حذف كل الصور من القائمة؟')) { shots = []; blur = []; renderTray(); } });
     $('goBtn').addEventListener('click', function () {
       if (!shots.length || running) return;
       if (blur.some(Boolean) && !window.confirm('فيه صورة غير واضحة وقد تُقرأ بأخطاء. هل تريد المتابعة؟')) return;
@@ -147,6 +152,7 @@
   }
   function startCanvases(cs) {
     show('work'); setProgress(0, 1, 'جارٍ تجهيز الصفحات…'); setStage(0); $('waitText').hidden = true; $('thumbs').innerHTML = '';
+    if ($('cancelBtn')) $('cancelBtn').hidden = false;
     pages = cs.map(function (c) { return { base: c }; });
     pages.forEach(function (p) { var im = document.createElement('img'); im.alt = ''; im.src = Engine.scaled(p.base, 200).toDataURL('image/jpeg', 0.7); $('thumbs').appendChild(im); });
     run();
@@ -198,8 +204,9 @@
   function rotOf(t) { var m = /^\s*ROT:\s*(0|90|180|270)/.exec(t || ''); return m ? +m[1] : 0; }
   function stripRot(t) { return String(t || '').replace(/^\s*ROT:\s*\d+\s*\n?/, ''); }
   async function readTwice(imgs, system) {
-    var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, temperature: 0.1, effort: 'medium', best: true, system: system });
-    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, temperature: 0.5, effort: 'medium', best: true, system: system })
+    var eff = CLAUDE && Engine.fastOn() ? 'high' : 'medium';      // ⚡ fast mode buys the time for a deeper read
+    var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: eff, best: true, system: system });
+    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: eff, best: true, system: system })
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return r.truncated ? null : Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     var ra = await pa, b = await pb;
     if (ra.model) usedModels[ra.model] = 1;
@@ -215,6 +222,7 @@
   var usedModels = {};
   var TYPE_LABEL = { sihha: 'دعوى صحة توقيع', reannounce: 'إعادة إعلان', announce: 'إعلان بأصل الصحيفة', warning: 'إنذار', sahifa: 'صحيفة دعوى / استئناف', inherit_announce: 'إعلان في مادة الوراثة', inherit_request: 'طلب وراثة', sale: 'عقد بيع', gift: 'عقد هبة', price: 'إقرار سعر', iqrar: 'إقرار', memo: 'مذكرة' };
   async function readPage(p, label, step) {
+    var t0 = Date.now();
     step(0, 'جارٍ تجهيز ' + label + '…');
     var side = CLAUDE ? 1568 : 3072;                       // Claude reads at 1568px; bigger only slows the upload
     p.canvas = p.base;
@@ -224,7 +232,7 @@
     var type = null, bank = null;
     if (!EXAM && CLAUDE && typeof Office !== 'undefined') {
       try {
-        var k = await Engine.generate(KEY, PROMPTS.kind(), [imgs.blobs[0]], { fast: true, effort: 'low', maxTokens: 120 });
+        var k = await Engine.generate(KEY, PROMPTS.kind(), [imgs.blobs[0]], { fast: true, signal: sig(), effort: 'low', maxTokens: 120 });
         type = Office.detect('[H] ' + Engine.clean(k.text).split('\n')[0]);
       } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
     }
@@ -243,16 +251,16 @@
     }
     var final = a, d = b ? Verify.disagreements(a, b) : null;
     /* the numbers pass runs beside the judge: every number, date and amount read once more on its own */
-    var numbersP = Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, { onWait: onWait, effort: 'high', best: true, maxTokens: 2048, system: system })
+    var numbersP = Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), effort: 'high', best: true, maxTokens: 2048, system: system })
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     try {
       if (b && !d.same) {
-        var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, system: system, effort: 'high', best: true });
+        var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, signal: sig(), system: system, effort: 'high', best: true });
         if (rj.model) usedModels[rj.model] = 1;
         var tj = Engine.clean(rj.text); if (tj.length > Math.min(a.length, b.length) * 0.6 && !rj.truncated) final = tj;
       } else if (!b || (bank && a.indexOf('⟦') >= 0)) {
         /* one proofreading pass: second read failed, or both agree but doubts remain and the formulas may settle them */
-        var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait, system: system, effort: 'high', best: true });
+        var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait, signal: sig(), system: system, effort: 'high', best: true });
         var tc = Engine.clean(rc.text); if (tc.length > a.length * 0.6 && !rc.truncated) final = tc;
       }
     } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
@@ -278,12 +286,21 @@
     var r = await toResult(text);
     r.img = Engine.scaled(p.canvas, 1600).toDataURL('image/jpeg', 0.8);
     r.agree = d ? Math.round(d.agreement * 100) : null;
-    r.text = text; r.type = type; r.snapped = snapped; r.learned = learned;
+    r.text = text; r.type = type; r.snapped = snapped; r.learned = learned; r.secs = Math.round((Date.now() - t0) / 1000);
     return r;
   }
 
+  var runAbort = null, docCost = 0;
+  function sig() { return runAbort ? runAbort.signal : undefined; }
+  Engine.onUsage(function (m, rec, cost) { docCost += cost; });
+  if ($('cancelBtn')) $('cancelBtn').addEventListener('click', function () {
+    if (!running || !runAbort) return;
+    if (!window.confirm('إلغاء القراءة والرجوع للبداية؟ الصور لن تُحفظ.')) return;
+    runAbort.abort();
+  });
   async function run() {
-    if (running) return; running = true; show('work'); results = []; usedModels = {};
+    if (running) return; running = true; show('work'); results = []; usedModels = {}; docCost = 0;
+    runAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
     try { learnItems = learnOn() ? await loadLearn() : []; } catch (e) { learnItems = []; }
     var n = pages.length, S = 3;
     try {
@@ -293,13 +310,16 @@
       }
       setProgress(1, 1, 'تم'); setStage('all');
       finish();
-    } catch (e) { fail(e); }
+    } catch (e) {
+      if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; reconvertDoc = null; pages = []; results = []; toStart(); return; }
+      fail(e);
+    }
     running = false;
   }
 
   /* ---------- results → review ---------- */
   function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-  function shown(t) { return EXAM ? t : Verify.arabicDigits(t); }      // the office's papers show ٠-٩ (Word: Numeral = Context)
+  function shown(t) { return EXAM ? t : Verify.rtlDates(Verify.arabicDigits(t)); }      // the office's papers show ٠-٩ (Word: Numeral = Context), dates read from the right
   function runsHtml(runs) {
     return (runs || []).map(function (r) {
       var h = r.frac ? '<span class="frac" contenteditable="false" data-n="' + escH(r.frac[0]) + '" data-d="' + escH(r.frac[1]) + '"><span>' + escH(r.frac[0]) + '</span><span>' + escH(r.frac[1]) + '</span></span>' : escH(shown(r.text));
@@ -348,12 +368,15 @@
     $('savedNote').hidden = true; cur = -1;
     $('restoredNote').hidden = !restored;
     var ri = $('readerInfo'), ms = Object.keys(usedModels), nl = results.reduce(function (t, r) { return t + (r.learned || 0); }, 0);
-    if (ri) { ri.hidden = !ms.length; ri.textContent = ms.length ? 'قُرئت الصفحات فعلياً بـ: ' + ms.join(' + ') + (nl ? ' — ' + nl + ' كلمة عُرفت من خط ' + profileLabel() : '') : ''; }
+    var cost = restored ? (curDoc && curDoc.cost) || 0 : docCost, secs = restored ? 0 : results.reduce(function (t, r) { return t + (r.secs || 0); }, 0);
+    if (ri) { ri.hidden = !ms.length && !cost; ri.textContent = (ms.length ? 'قُرئت الصفحات فعلياً بـ: ' + ms.join(' + ') + (CLAUDE && Engine.fastOn() ? ' ⚡' : '') : 'محفوظ على هذا الجهاز') + (secs ? ' في ' + secs + ' ثانية' : '') + (nl ? ' — ' + nl + ' كلمة عُرفت من خط ' + profileLabel() : '') + (cost ? ' — تكلفة القراءة ≈ $' + cost.toFixed(2) : ''); }
     if (!restored) {
       var ps = results.map(function (r) { return { html: r.html, img: r.img, text: r.text }; });
       if (reconvertDoc) { curDoc = reconvertDoc; reconvertDoc = null; Store.addVersion(curDoc, ps, 'reread'); curDoc.pages = ps; curDoc.learned = []; }
       else curDoc = Store.newDoc(MODE, autoName(), ps, { type: results[0] && results[0].type || null });
+      curDoc.cost = (curDoc.cost || 0) + docCost; curDoc.kindOk = false; curDoc.nameAuto = curDoc.name;
     }
+    kindLabel();
     if ($('docName')) $('docName').value = curDoc ? curDoc.name : '';
     if ($('versionsPanel')) $('versionsPanel').hidden = true;
     if ($('learnHint')) $('learnHint').hidden = learnOn() || Engine.lsGet('kateb.learnHint') === '1';
@@ -363,9 +386,14 @@
     if (!restored) saveDraft(); else setSave(curDoc ? 'ok' : '');
     setupTemplate();
   }
-  function autoName() {
-    var t = results[0] && results[0].type, base = !EXAM ? (TYPE_LABEL[t] || 'مستند') : ((Engine.lsGet('exam.hGrade') || 'امتحان') + ' ' + (Engine.lsGet('exam.hTitle') || '')).trim();
-    return base + ' — ' + new Date().toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
+  /* the office's own file naming: «صحة توقيع سمير رزق», «إعادة إعلان نجوى لطفى», «عقد بيع باسم مكرم» */
+  var FILE_LABEL = { sihha: 'صحة توقيع', reannounce: 'إعادة إعلان', announce: 'إعلان بأصل الصحيفة', warning: 'إنذار', sahifa: 'صحيفة دعوى', inherit_announce: 'إعلان وراثة', inherit_request: 'طلب وراثة', sale: 'عقد بيع', gift: 'عقد هبة', price: 'إقرار سعر', iqrar: 'إقرار', memo: 'مذكرة' };
+  function autoName(type) {
+    var when = new Date().toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
+    if (EXAM) return ((Engine.lsGet('exam.hGrade') || 'امتحان') + ' ' + (Engine.lsGet('exam.hTitle') || '')).trim() + ' — ' + when;
+    var t = type !== undefined ? type : (results[0] && results[0].type), text = results.map(function (r) { return r.text || htmlText(r.html || ''); }).join('\n');
+    var who = typeof Office !== 'undefined' ? Office.partyName(text) : '';
+    return (FILE_LABEL[t] || TYPE_LABEL[t] || 'مستند') + (who ? ' ' + who : ' — ' + when);
   }
 
   /* ---------- office templates (legal page): the file comes out in the office's own layout ---------- */
@@ -381,7 +409,7 @@
     $('lawName').value = law ? law.name : (Engine.lsGet('kateb.lawName') || '');
     $('lawTitle').value = law ? law.title : (Engine.lsGet('kateb.lawTitle') || 'المحامي');
     lawNakd = !!(law && law.nakd);
-    tplHint(); $('tplBox').hidden = false;
+    tplHint(); $('tplBox').hidden = false; kindLabel();
   }
   function tplOf(key) { for (var i = 0; i < TPLS.length; i++) if (TPLS[i].key === key) return TPLS[i]; return null; }
   function tplHint() {
@@ -441,7 +469,7 @@
   });
   $('pagesBox').addEventListener('click', function (e) {
     var m = e.target.closest && e.target.closest('mark'); if (m) { marks().forEach(function (x) { x.classList.toggle('cur', x === m); }); }
-    var o = e.target.closest && e.target.closest('.orig'); if (o) { $('zoomImg').src = o.querySelector('img').src; $('zoom').hidden = false; $('zoomClose').focus(); }
+    var o = e.target.closest && e.target.closest('.orig'); if (o) { zoomCanvas = null; zoomName = 'الأصل ' + stamp() + '.jpg'; $('zoomImg').src = o.querySelector('img').src; $('zoom').hidden = false; if ($('zoomSave')) $('zoomSave').hidden = false; $('zoomClose').focus(); }
   });
   $('pagesBox').addEventListener('input', function () { refreshDoubts(); histQueue(); queueSave(); });
   /* the keyboard's own undo (Ctrl+Z, or the phone keyboard's undo) goes through the app's history */
@@ -450,11 +478,27 @@
   });
   /* on screen the paper shows ٠-٩ like the office's Word does; the file keeps 0-9 inside (walkRuns converts) */
   if (!EXAM) $('pagesBox').addEventListener('beforeinput', function (e) {
-    if (e.inputType !== 'insertText' || !e.data || !/^[0-9۰-۹]$/.test(e.data)) return;
+    if (e.inputType !== 'insertText' || !e.data) return;
+    if (e.data === '/') {
+      var sel = window.getSelection(), nd = sel && sel.anchorNode, before = nd && nd.nodeType === 3 ? nd.nodeValue.slice(0, sel.anchorOffset) : '';
+      if (/[0-9٠-٩]$/.test(before)) { e.preventDefault(); document.execCommand('insertText', false, '\u200F/\u200F'); }
+      return;
+    }
+    if (!/^[0-9۰-۹]$/.test(e.data)) return;
     e.preventDefault();
     document.execCommand('insertText', false, Verify.arabicDigits(Verify.west(e.data)));
   });
   $('zoomClose').addEventListener('click', function () { $('zoom').hidden = true; });
+  /* a cleaned page from the tray, or the original photo of a reviewed page: full size, downloadable as JPG */
+  var zoomCanvas = null, zoomName = '';
+  function openScan(c, i) {
+    zoomCanvas = c; zoomName = 'صفحة ' + (i + 1) + ' ' + stamp() + '.jpg';
+    $('zoomImg').src = c.toDataURL('image/jpeg', 0.92); $('zoom').hidden = false; if ($('zoomSave')) $('zoomSave').hidden = false; $('zoomClose').focus();
+  }
+  if ($('zoomSave')) $('zoomSave').addEventListener('click', function () {
+    var src = zoomCanvas ? zoomCanvas.toDataURL('image/jpeg', 0.92) : $('zoomImg').src; if (!src) return;
+    try { var bin = atob(src.split(',')[1]), arr = new Uint8Array(bin.length); for (var k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k); Engine.download(new Blob([arr], { type: 'image/jpeg' }), zoomName || ('الأصل ' + stamp() + '.jpg')); } catch (e) {}
+  });
   var zoomW = 100;
   function setZoom(w) { zoomW = Math.max(60, Math.min(400, w)); $('zoom').style.setProperty('--zw', zoomW + '%'); }
   if ($('zoomIn')) { $('zoomIn').addEventListener('click', function () { setZoom(zoomW * 1.25); }); $('zoomOut').addEventListener('click', function () { setZoom(zoomW / 1.25); }); }
@@ -689,13 +733,29 @@
     show('settings');
     $('setLearnState').textContent = learnOn() ? 'مفعّل — ' + profileLabel() : 'غير مفعّل';
     $('setEnhance').checked = enhanceOn();
+    if ($('setFast')) $('setFast').checked = Engine.fastOn();
     $('storageInfo').textContent = Store.which() === 'ls' ? 'هذا المتصفح لا يسمح بقاعدة بيانات محلية: تُحفظ النصوص فقط بدون صور الورق.' : '';
     Store.usage().then(function (u) { if (u && u.usage) $('storageInfo').textContent = 'المساحة المستخدمة على هذا الجهاز: ' + (u.usage / 1048576).toFixed(1) + ' MB' + (u.quota ? ' من ' + Math.round(u.quota / 1048576) + ' MB' : ''); }).catch(function () {});
     Store.listDocs(MODE).then(function (ds) { return Store.listTrash(MODE).then(function (ts) { $('setDocsInfo').textContent = ds.length + ' ملفات محفوظة، ' + ts.length + ' في المحذوفات.'; }); }).catch(function () {});
+    renderUsage();
   }
+  function money(x) { return '$' + (x < 0.01 && x > 0 ? x.toFixed(3) : x.toFixed(2)); }
+  function tok(n) { return n >= 1e6 ? (n / 1e6).toFixed(2) + ' مليون' : n >= 1000 ? Math.round(n / 1000) + ' ألف' : String(n); }
+  function renderUsage() {
+    var box = $('usageBox'); if (!box) return;
+    var u = Engine.usageSummary();
+    if (!u.total.calls) { box.innerHTML = '<p class="small">لم تُسجَّل أي قراءة بـ Claude على هذا الجهاز بعد.</p>'; return; }
+    var rows = [['اليوم', u.today], ['هذا الشهر', u.month], ['الإجمالي' + (u.first ? ' منذ ' + u.first : ''), u.total]];
+    box.innerHTML = '<table class="utable"><thead><tr><th></th><th>طلبات</th><th>رموز (tokens)</th><th>التكلفة التقديرية</th></tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + r[1].calls + '</td><td>' + tok(r[1].tokens) + '</td><td><b>' + money(r[1].usd) + '</b></td></tr>'; }).join('') + '</tbody></table>' +
+      '<p class="small">حسب الموديل: ' + Object.keys(u.models).map(function (m) { var x = u.models[m]; return m.replace('claude-', '') + ' ' + money(x.usd) + ' (' + x.calls + ' طلب)'; }).join(' · ') + '</p>' +
+      '<p class="small">التكلفة محسوبة من عدد الرموز في كل رد على أسعار Anthropic المعلنة (Opus 5.5: $4 / $20 للمليون، ومع ⚡ وضع السرعة $8 / $40؛ Sonnet 5.5: $2 / $10؛ Haiku 5.5: $0.10 / $0.50؛ الذاكرة المؤقتة أرخص). الرقم الرسمي والرصيد المتبقي في console.anthropic.com → Usage. هذا الجهاز فقط: كل جهاز يحسب استهلاكه.</p>';
+  }
+  if ($('usageResetBtn')) $('usageResetBtn').addEventListener('click', function () { if (window.confirm('تصفير عداد الاستهلاك على هذا الجهاز؟')) { Engine.usageReset(); renderUsage(); } });
   if ($('settings')) {
     $('setLearnBtn').addEventListener('click', renderLearn);
     $('setEnhance').addEventListener('change', function () { if ($('enhanceChk')) $('enhanceChk').checked = this.checked; });
+    if ($('setFast')) $('setFast').addEventListener('change', function () { Engine.setFast(this.checked); });
     $('deleteAllBtn').addEventListener('click', function () {
       if (!window.confirm('حذف كل الملفات المحفوظة على هذا الجهاز نهائيًا (بما فيها المحذوفات)؟ لا يمكن التراجع عن هذا.')) return;
       Store.listDocs(MODE).then(function (ds) { return Store.listTrash(MODE).then(function (ts) { return Promise.all(ds.concat(ts).map(function (d) { return Store.purgeDoc(d.id); })); }); })
@@ -740,9 +800,77 @@
   function stamp() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function examHeader() {
     var h = {}; ['hLine1', 'hLine2', 'hLine3', 'hSubject', 'hGrade', 'hTime', 'hTitle'].forEach(function (id) { h[id] = $(id) ? $(id).value : ''; });
-    return { line1: h.hLine1, line2: h.hLine2, line3: h.hLine3, subject: h.hSubject, grade: h.hGrade, time: h.hTime, title: h.hTitle };
+    var out = { line1: h.hLine1, line2: h.hLine2, line3: h.hLine3, subject: h.hSubject, grade: h.hGrade, time: h.hTime, title: h.hTitle };
+    var k = examKind(); if (curDoc && curDoc.kindTitle) out.title = curDoc.kindTitle;
+    if (k === 'revision') out.right = ['Subject: ' + (out.subject || ''), 'Grade: ' + (out.grade || ''), 'Date: ' + (out.date || '………………')];
+    else if (k === 'notes') { out.noTable = true; out.right = []; }
+    else if (k === 'plain') return null;
+    else out.right = ['Subject: ' + (out.subject || ''), 'Grade: ' + (out.grade || ''), 'Time: ' + (out.time || '')];
+    return out;
   }
-  function baseName() { var n = baseName0(); if (n) return n; if (!EXAM) { var t = tplOf(tplKey()); return (t ? t.label.replace(/[\\\/:*?"<>|]/g, '-') : 'مستند') + ' ' + stamp(); } var h = examHeader(); return ((h.grade || '') + ' ' + (h.title || 'Exam')).replace(/[\\\/:*?"<>|]/g, '-').trim(); }
+  /* ---------- «ما نوع هذه الورقة؟» asked once per document before the first Word / PDF ---------- */
+  var EXAM_KINDS = [
+    { key: 'exam', icon: '📝', label: 'امتحان', hint: 'رأس المدرسة كامل: المادة والصف والزمن، وعنوان الامتحان', title: function () { return Engine.lsGet('exam.hTitle') || 'First term exam'; } },
+    { key: 'revision', icon: '📋', label: 'مراجعة / ورقة عمل', hint: 'رأس بالمادة والصف والتاريخ، وعنوان «Revision Sheet»', title: function () { return 'Revision Sheet'; } },
+    { key: 'notes', icon: '📒', label: 'مذكرة / شرح', hint: 'عنوان فقط بدون جدول الرأس', title: function () { return 'Notes'; } },
+    { key: 'plain', icon: '📄', label: 'ورقة عادية', hint: 'النص كما هو، بدون رأس ولا عنوان', title: function () { return ''; } }
+  ];
+  function examKind() { return (curDoc && curDoc.kind) || 'exam'; }
+  function kindLabel() {
+    var b = $('kindBtn'); if (!b) return;
+    if (EXAM) { var k = EXAM_KINDS.filter(function (x) { return x.key === examKind(); })[0] || EXAM_KINDS[0]; b.textContent = k.icon + ' ' + k.label + ' ▾'; }
+    else { var t = tplOf(tplKey()); b.textContent = '🗂️ ' + (t ? t.label : 'ملف عادي (بدون شكل المكتب)') + ' ▾'; }
+  }
+  var kindThen = null, kindChoice = '';
+  function askKind(then) {
+    kindThen = then || null;
+    var list = $('kindList'), extra = $('kindExtra');
+    if (EXAM) {
+      kindChoice = examKind();
+      list.innerHTML = EXAM_KINDS.map(function (k) { return '<button class="kind" type="button" data-kind="' + k.key + '" aria-pressed="' + (k.key === kindChoice) + '"><span class="ki">' + k.icon + '</span><span><b>' + k.label + '</b><small>' + k.hint + '</small></span></button>'; }).join('');
+      extra.innerHTML = '<label class="tplrow">عنوان الورقة<input id="kindTitle" dir="ltr" autocomplete="off"></label>';
+      $('kindTitle').value = (curDoc && curDoc.kindTitle) || EXAM_KINDS.filter(function (k) { return k.key === kindChoice; })[0].title();
+      $('kindHint').textContent = 'اختاري نوع الورقة ليخرج الملف بالرأس والشكل المناسبين.';
+    } else {
+      var detected = (curDoc && curDoc.type) || Office.detect(parasText(allParas())) || '';
+      kindChoice = tplKey() || '';
+      var opts = [{ key: '', label: 'ملف عادي (بدون شكل المكتب)', icon: '📄' }].concat(TPLS.map(function (t) { return { key: t.key, label: t.label, icon: '📜', stamp: t.stamp }; }));
+      list.innerHTML = opts.map(function (o) { return '<button class="kind" type="button" data-kind="' + o.key + '" aria-pressed="' + (o.key === kindChoice) + '"><span class="ki">' + o.icon + '</span><span><b>' + escH(o.label) + '</b>' + (o.key && o.key === detected ? '<small>المقترح من قراءة الورقة</small>' : '') + '</span></button>'; }).join('');
+      extra.innerHTML = '<div class="tplrow2" id="kindLaw"><label class="tplrow">اسم المحامي في الختم<input id="kindLawName" autocomplete="off"></label><label class="tplrow">الصفة<select id="kindLawTitle"><option>المحامي</option><option>المحامية</option></select></label></div>';
+      $('kindLawName').value = $('lawName').value; $('kindLawTitle').value = $('lawTitle').value;
+      $('kindHint').textContent = 'اختر نوع الورقة ليخرج Word و PDF بشكل المكتب لهذا النوع: الخطوط والهوامش والختم.';
+      kindExtraLegal();
+    }
+    $('kindDlg').hidden = false;
+    var sel = list.querySelector('[aria-pressed="true"]'); if (sel) sel.focus();
+  }
+  function kindExtraLegal() { var t = tplOf(kindChoice); if ($('kindLaw')) $('kindLaw').hidden = !(t && t.stamp); }
+  if ($('kindDlg')) {
+    $('kindList').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-kind]'); if (!b) return;
+      kindChoice = b.dataset.kind;
+      Array.prototype.forEach.call($('kindList').querySelectorAll('[data-kind]'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      if (EXAM) { var k = EXAM_KINDS.filter(function (x) { return x.key === kindChoice; })[0]; if (k && $('kindTitle')) $('kindTitle').value = k.title(); } else kindExtraLegal();
+    });
+    $('kindCancel').addEventListener('click', function () { $('kindDlg').hidden = true; kindThen = null; });
+    $('kindOk').addEventListener('click', function () {
+      if (curDoc) {
+        if (EXAM) { curDoc.kind = kindChoice; curDoc.kindTitle = ($('kindTitle').value || '').trim(); }
+        else {
+          $('tplSel').value = kindChoice; tplHint(); $('lawName').value = $('kindLawName').value; $('lawTitle').value = $('kindLawTitle').value; Engine.lsSet('kateb.lawName', $('lawName').value.trim()); Engine.lsSet('kateb.lawTitle', $('lawTitle').value);
+          if (kindChoice && curDoc.name === curDoc.nameAuto) { curDoc.name = curDoc.nameAuto = autoName(kindChoice); $('docName').value = curDoc.name; }
+        }
+        curDoc.kindOk = true; queueSave();
+      }
+      kindLabel(); $('kindDlg').hidden = true;
+      var fn = kindThen; kindThen = null; if (fn) fn();
+    });
+    $('kindDlg').addEventListener('click', function (e) { if (e.target === $('kindDlg')) $('kindCancel').click(); });
+    if ($('kindBtn')) $('kindBtn').addEventListener('click', function () { askKind(null); });
+    if (!EXAM) $('tplSel').addEventListener('change', kindLabel);
+  }
+  function withKind(fn) { if (curDoc && !curDoc.kindOk) askKind(fn); else fn(); }
+  function baseName() { var n = baseName0(); if (n) return n; if (!EXAM) { var t = tplOf(tplKey()); return (t ? t.label.replace(/[\\\/:*?"<>|]/g, '-') : 'مستند') + ' ' + stamp(); } var h = examHeader() || {}; return ((h.grade || '') + ' ' + (h.title || 'Exam')).replace(/[\\\/:*?"<>|]/g, '-').trim(); }
   function leftNote() { var n = marks().length; return n ? ' ما زال فيه ' + n + ' كلمة صفراء غير مؤكدة، وستظهر بالأصفر في الملف.' : ''; }
 
   function nothingToExport() {
@@ -751,8 +879,10 @@
     $('savedNote').hidden = false; $('savedNote').textContent = 'لا يوجد نص للحفظ: لم تُقرأ أي كلمات من الصورة. صوّر الورقة مرة أخرى.';
     return true;
   }
-  $('wordBtn').addEventListener('click', async function () {
-    var btn = this; if (nothingToExport()) return; btn.disabled = true;
+  $('wordBtn').addEventListener('click', function () { if (nothingToExport()) return; withKind(doWord); });
+  $('pdfBtn').addEventListener('click', function () { if (nothingToExport()) return; withKind(doPdf); });
+  async function doWord() {
+    var btn = $('wordBtn'); btn.disabled = true;
     try {
       var blob, all = sheets();
       marks().forEach(function (m) { m.classList.remove('cur'); });
@@ -769,11 +899,10 @@
       exported();
     } catch (e) { $('savedNote').hidden = false; $('savedNote').textContent = 'تعذر حفظ الملف. حاول مرة أخرى.'; }
     finally { btn.disabled = false; }
-  });
+  }
 
   /* PDF: the browser's own print engine lays out Arabic perfectly; the person picks «Save as PDF». */
-  $('pdfBtn').addEventListener('click', async function () {
-    if (nothingToExport()) return;
+  async function doPdf() {
     var root = $('printRoot'), h = EXAM ? examHeader() : null, key = tplKey();
     if (key) {
       try {
@@ -788,13 +917,13 @@
     }
     if ($('tplPage')) $('tplPage').textContent = '';
     marks().forEach(function (m) { m.classList.remove('cur'); });
-    var head = h ? '<table class="xhead"><tbody>' + [[h.line1, 'Subject: ' + (h.subject || '')], [h.line2, 'Grade: ' + (h.grade || '')], [h.line3, 'Time: ' + (h.time || '')]].map(function (r) {
-      return '<tr><td>' + escH(r[0] || '') + '</td><td>' + escH(r[1]) + '</td></tr>'; }).join('') + '</tbody></table>' + (h.title ? '<p class="xtitle">' + escH(h.title) + '</p>' : '') : '';
+    var head = h ? (h.noTable ? '' : '<table class="xhead"><tbody>' + [[h.line1, h.right[0]], [h.line2, h.right[1]], [h.line3, h.right[2]]].map(function (r) {
+      return '<tr><td>' + escH(r[0] || '') + '</td><td>' + escH(r[1] || '') + '</td></tr>'; }).join('') + '</tbody></table>') + (h.title ? '<p class="xtitle">' + escH(h.title) + '</p>' : '') : '';
     root.className = 'sheet doc' + (EXAM ? ' exam' : ''); root.dir = EXAM ? 'ltr' : 'rtl';
     root.innerHTML = head + sheets().map(function (s) { return s.innerHTML; }).join('');
     Array.prototype.forEach.call(root.querySelectorAll('[contenteditable]'), function (el) { el.removeAttribute('contenteditable'); });
     printNow();
-  });
+  }
   function printNow(after) {
     var title = document.title; document.title = baseName();
     setTimeout(function () {
@@ -812,7 +941,7 @@
     var runs = [];
     (function walk(n, f) {
       n.childNodes.forEach(function (c) {
-        if (c.nodeType === 3) { if (c.nodeValue) runs.push({ text: (EXAM ? c.nodeValue : Verify.west(c.nodeValue)).replace(/\n/g, ' '), b: f.b, u: f.u, hl: f.hl }); return; }
+        if (c.nodeType === 3) { if (c.nodeValue) runs.push({ text: (EXAM ? c.nodeValue : Verify.west(Verify.stripMarks(c.nodeValue))).replace(/\n/g, ' '), b: f.b, u: f.u, hl: f.hl }); return; }
         if (c.nodeType !== 1 || c.tagName === 'BR') return;
         if (c.classList.contains('frac')) { runs.push({ frac: [c.dataset.n, c.dataset.d], text: c.dataset.n + '/' + c.dataset.d, b: f.b, u: f.u, hl: f.hl }); return; }
         var g = { b: f.b || c.tagName === 'B' || c.tagName === 'STRONG', u: f.u || c.tagName === 'U', hl: f.hl || c.tagName === 'MARK' };
@@ -873,7 +1002,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '13';
+  var APP_VER = '15';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -919,7 +1048,7 @@
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream && !standalone()) $('iosHint').hidden = false;
 
   window.__test = { finish: finish, toResult: toResult, setResults: function (r) { results = r; }, show: show, sheetToParas: sheetToParas, domBlocks: domBlocks, results: function () { return results; },
-    doc: function () { return curDoc; }, save: function () { return saveDraft(); }, saved: function () { return saveChain.then(function () { return learnChain; }); }, undo: undo, redo: redo, hist: function () { return { n: hist.length, i: hi }; }, nav: function () { return { cur: curScreen, stack: nav.slice() }; } };
+    doc: function () { return curDoc; }, usage: function () { return Engine.usageSummary(); }, askKind: askKind, save: function () { return saveDraft(); }, saved: function () { return saveChain.then(function () { return learnChain; }); }, undo: undo, redo: redo, hist: function () { return { n: hist.length, i: hi }; }, nav: function () { return { cur: curScreen, stack: nav.slice() }; } };
 
   /* ---------- exam header fields (remembered on this device) ---------- */
   if (EXAM) ['hLine1', 'hLine2', 'hLine3', 'hSubject', 'hGrade', 'hTime', 'hTitle'].forEach(function (id) {
