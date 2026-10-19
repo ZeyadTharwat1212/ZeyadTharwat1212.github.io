@@ -34,10 +34,11 @@ var Engine = (function () {
   function audioBlobFromHash() { var m = (location.hash || '').match(/[&#]g=([A-Za-z0-9_-]+)/); return m ? m[1] : null; }
   function audioKey(main) { var k = lsGet(LS_AUDIO); if (k) return k; return main && provider(main) === 'gemini' ? main : null; }
   function setAudioKey(k) { if (k) lsSet(LS_AUDIO, k); else { try { localStorage.removeItem(LS_AUDIO); } catch (e) {} } }
-  /* the Gemini models for audio: 2.5 Pro first (best Arabic), then Flash, then whatever the key lists */
+  /* the Gemini models for audio: Flash first (seconds per minute of speech, good Arabic), Pro as the fallback
+     (it thinks before answering: 5-10× slower on the same recording) */
   async function audioModels(key) {
     var all = rank(await listModels(key)), pref = [];
-    ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'].forEach(function (p) { all.forEach(function (m) { if (m.indexOf(p) === 0 && pref.indexOf(m) < 0) pref.push(m); }); });
+    ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro'].forEach(function (p) { all.forEach(function (m) { if (m.indexOf(p) === 0 && m.indexOf('lite') < 0 && pref.indexOf(m) < 0) pref.push(m); }); });
     return pref.concat(all.filter(function (m) { return pref.indexOf(m) < 0; }));
   }
   function savedKey() { return lsGet(LS_KEY); }
