@@ -200,7 +200,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.deepStrictEqual(calls.slice().sort(), ['judge', 'kind', 'numbers', 'read', 'read2']);
     const c = calls.claude, reads = c.filter(x => x.kind === 'read' || x.kind === 'read2'), judge = c.find(x => x.kind === 'judge'), nums = c.find(x => x.kind === 'numbers'), kindCall = c.find(x => x.kind === 'kind');
     assert.ok(kindCall.model === 'claude-haiku-5-5' && kindCall.images === 1, 'type detection: one small Haiku call');
-    assert.ok(reads.every(x => x.model === 'claude-opus-5-5' && x.images === 6 && x.effort === 'medium'), 'reads on Opus with the whole page + 5 strips');
+    assert.ok(reads.every(x => x.model === 'claude-opus-5-5' && x.images === 6 && x.effort === 'high' && x.fast), 'reads on Opus with the whole page + 5 strips');
     assert.ok(reads.every(x => x.system.includes('STANDARD FORMULAS') && x.system.includes('دعوى صحة توقيع')), 'both reads get the sihha bank');
     assert.ok(nums.model === 'claude-opus-5-5' && nums.effort === 'high', 'numbers pass on Opus');
     assert.match(await page.textContent('#readerInfo'), /claude-opus-5-5/, 'review screen shows the real model used');
