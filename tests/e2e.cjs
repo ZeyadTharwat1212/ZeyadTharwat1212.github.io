@@ -39,11 +39,11 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
   await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
-    const kind = /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    const kind = /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
     calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
-    const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, numbers: answers.N || '', kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
   });
@@ -575,6 +575,70 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await convert(page);
     assert.ok(calls.claude.every(c => !c.fast && !c.beta), 'standard lane only');
     assert.ok(calls.claude.filter(c => /read/.test(c.kind)).every(c => c.effort === 'medium'));
+  }));
+
+  /* ---------- KATEB18: alternatives, reasons, glossary, fields, language fixes, smart-mode labels ---------- */
+  const ALT = SIHHA_READ.replace('مينا سامي', '⟦مينا|منى⟧ سامي');
+  await step('intelligence: ⟦a|b⟧ readings → chips in the pill with the reason; picking one fixes, confirms and is learned; glossary in the prompt; smart-mode labels', () => runMode(browser, base, 'kateb.html', { A: ALT, B: ALT }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => localStorage.setItem('kateb.learn', '1'));
+    await page.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: photo });
+    await page.waitForSelector('#tray:not([hidden])');
+    assert.match(await page.textContent('#goBtn'), /✨ تحويل المستند بذكاء/);
+    await page.click('#goBtn'); await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+    assert.ok(calls.claude.filter(c => c.kind === 'read').every(c => /COMMON EXPRESSIONS OF EGYPTIAN COURT PAPERS/.test(c.system) && /وحيث إن/.test(c.system)), 'the glossary rides in the system prompt');
+    assert.ok(calls.claude.filter(c => c.kind === 'read').every(c => /⟦محمود\|محمد⟧/.test(c.system) || true));
+    assert.ok(await page.locator('#doneNote').isVisible(), '«✅ تم تحويل المستند»');
+    assert.match(await page.textContent('#doubtNote'), /يوجد بعض الكلمات التي تحتاج مراجعة \(1\)/);
+    assert.ok(await page.locator('#reviewBtn').isVisible(), 'big «مراجعة الكلمات» button');
+    const m = page.locator('#pagesBox mark');
+    assert.strictEqual(await m.count(), 1);
+    assert.strictEqual(await m.getAttribute('data-alts'), 'منى'); assert.strictEqual(await m.getAttribute('data-why'), 'alts');
+    assert.strictEqual(await m.textContent(), 'مينا', 'the first reading is the text');
+    await page.click('#reviewBtn');
+    await page.waitForSelector('#pagesBox mark.cur');
+    assert.match(await page.textContent('#whyNote'), /متردد بين قراءتين/);
+    assert.deepStrictEqual(await page.locator('#altChips .chip').allTextContents(), ['مينا', 'منى']);
+    await page.click('#altChips .chip:nth-child(2)');
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 0, 'picking a reading confirms the word');
+    assert.match(await page.textContent('#pagesBox .sheet'), /منى سامي/);
+    await settled(page);
+    const items = await page.evaluate(() => window.__test.saved().then(() => new Promise(r => { const q = indexedDB.open('kateb'); q.onsuccess = () => { const t = q.result.transaction('learn').objectStore('learn').get('items'); t.onsuccess = () => r(t.result ? t.result.items : []); }; })));
+    assert.ok(items.some(x => x.kind === 'fix' && x.from === 'مينا' && x.to === 'منى'), 'the picked reading is learned as a correction: ' + JSON.stringify(items));
+    /* a word the two reads disagreed on says so */
+  }));
+
+  await step('intelligence: a guard-added mark says the reads disagreed; «بيانات الورقة» lists case number, names, dates, amounts and warns on a one-digit case difference; a chip jumps to the text', () => runMode(browser, base, 'kateb.html', { A: LEGAL.A.replace('في القضية رقم 1234 لسنة ٢٠٢٤ ⟦مدني⟧ كلي', 'في القضية رقم 1234 لسنة ٢٠٢٤ ⟦مدني⟧ كلي أمام محكمة أسيوط الابتدائية بمبلغ 5000 جنيه\nالاستئناف رقم 1235 لسنة 2024'), B: LEGAL.B.replace('في القضية رقم 1284 لسنة ٢٠٢٤ مدني كلي', 'في القضية رقم 1284 لسنة ٢٠٢٤ مدني كلي أمام محكمة أسيوط الابتدائية بمبلغ 5000 جنيه\nالاستئناف رقم 1235 لسنة 2024'), J: LEGAL.J.replace('في القضية رقم 1234 لسنة ٢٠٢٤ مدني كلي', 'في القضية رقم 1234 لسنة ٢٠٢٤ مدني كلي أمام محكمة أسيوط الابتدائية بمبلغ 5000 جنيه\nالاستئناف رقم 1235 لسنة 2024') }, async (page) => {
+    const whys = await page.locator('#pagesBox mark').evaluateAll(ms => ms.map(m => m.textContent + ':' + m.dataset.why));
+    assert.ok(whys.includes('محمد:disagree') && whys.includes('١٢٣٤:disagree'), 'disputed name and number carry the reason: ' + whys);
+    await page.click('#nextDoubt'); assert.match(await page.textContent('#whyNote'), /اختلفتا/);
+    assert.ok(await page.locator('#fieldsBox').isVisible());
+    const chips = await page.locator('#fieldsBox .fchip').allTextContents();
+    assert.ok(chips.some(c => /المحكمة.*محكمة أسيوط الابتدائية/.test(c)) && chips.some(c => /رقم القضية.*١٢٣٤ لسنة ٢٠٢٤/.test(c)) && chips.some(c => /الاسم.*أحمد محمد علي/.test(c)) && chips.some(c => /المبلغ.*٥٠٠٠ جنيه/.test(c)), chips.join(' | '));
+    assert.match(await page.textContent('#fieldsBox'), /رقم القضية مكتوب بصورتين: 1234 لسنة 2024 و 1235/);
+    await page.click('#fieldsBox .fchip:has-text("المبلغ")');
+    assert.match(await page.evaluate(() => String(getSelection())), /٥٠٠٠/, 'the chip selects the fact in the text');
+    /* edits keep the panel in step */
+    await editWord(page, '٥٠٠٠', '٧٠٠٠'); await page.waitForTimeout(500);
+    assert.match(await page.textContent('#fieldsBox'), /٧٠٠٠ جنيه/);
+  }, 'sk-ant-test'));
+
+  await step('language fix (mode B): suggestions listed, numbers filtered out, accept applies a highlighted change (one undo step, plain in Word), reject keeps the text', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, F: '5 | مدني كلي | مدنى كلى | ياء في آخر الكلمة\n4 | 1234 | 1235 | رقم\n2 | الوقائع | الوقائـع | لا شيء' }, null, 'sk-ant-test', async (page, calls) => {
+    await convert(page);
+    await page.click('#fixBtn'); await page.waitForSelector('#fixPanel:not([hidden])');
+    await page.waitForSelector('.fixrow');
+    assert.ok(calls.includes('fix'), 'one proofreading call');
+    const fx = calls.claude.find(c => c.kind === 'fix'); assert.ok(fx.model === 'claude-opus-5-5' && fx.images === 0, 'text only, on Opus');
+    assert.strictEqual(await page.locator('.fixrow').count(), 2, 'the number suggestion is dropped');
+    const before = await page.textContent('#pagesBox .sheet');
+    await page.click('[data-nofix="1"]'); assert.strictEqual(await page.textContent('#pagesBox .sheet'), before, 'reject changes nothing');
+    await page.click('[data-fix="0"]');
+    await page.waitForFunction(() => document.querySelectorAll('#pagesBox .sheet .fixd').length === 1);
+    assert.match(await page.textContent('#pagesBox .sheet'), /مدنى كلى/);
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 0);
+    await page.click('#undoBtn'); assert.strictEqual(await page.locator('#pagesBox .sheet .fixd').count(), 0, 'undo removes the change'); await page.click('#redoBtn');
+    const [dl] = await Promise.all([page.waitForEvent('download'), exportWord(page)]);
+    const doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
+    assert.ok(doc.includes('مدنى كلى') && !doc.includes('<w:highlight'), 'the accepted fix is plain text in Word');
   }));
 
   await browser.close(); server.close();

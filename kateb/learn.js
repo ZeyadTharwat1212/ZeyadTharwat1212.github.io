@@ -66,14 +66,14 @@ var Learn = (function () {
   function applyLexicon(text, items, profile, minN) {
     var lex = {}; of(items, profile).forEach(function (r) { if (r.n >= (minN || 2)) lex[r.kind === 'fix' ? r.to : r.from] = 1; });
     var cleared = 0;
-    var out = String(text || '').replace(/⟦([^⟧]*)⟧/g, function (m, w) { var c = clean(w); if (c && lex[c] && !/[0-9٠-٩]/.test(c)) { cleared++; return w; } return m; });
+    var out = String(text || '').replace(/⟦([^⟧]*)⟧/g, function (m, w) { var first = w.split('|')[0], c = clean(first); if (c && lex[c] && !/[0-9٠-٩]/.test(c)) { cleared++; return first; } return m; });
     return { text: out, cleared: cleared };
   }
   /* on the device: a doubtful word corrected the same way twice before becomes the correction, still marked */
   function applyFixes(text, items, profile, minN) {
     var fix = {}; of(items, profile, 'fix').forEach(function (r) { if (r.n >= (minN || 2)) fix[r.from] = r.to; });
     var fixed = 0;
-    var out = String(text || '').replace(/⟦([^⟧]*)⟧/g, function (m, w) { var c = clean(w); if (c && fix[c]) { fixed++; return '⟦' + fix[c] + '⟧'; } return m; });
+    var out = String(text || '').replace(/⟦([^⟧]*)⟧/g, function (m, w) { var c = clean(w.split('|')[0]); if (c && fix[c]) { fixed++; return '⟦' + fix[c] + '⟧'; } return m; });
     return { text: out, fixed: fixed };
   }
   function stats(items, profile) {

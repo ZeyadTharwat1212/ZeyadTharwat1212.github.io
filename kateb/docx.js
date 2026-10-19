@@ -117,7 +117,12 @@ var DocxBuilder = (function () {
   function inline(line) {
     var runs = [], b = false, u = false, hl = false, buf = '';
     var re = /(_{3,}|\*\*|__|⟦|⟧)/g, last = 0, mm;
-    function push() { if (buf) runs.push({ text: buf, b: b, u: u, hl: hl }); buf = ''; }
+    function push() {
+      if (!buf) return;
+      if (hl && buf.indexOf('|') > 0) { var parts = buf.split('|').map(function (x) { return x.trim(); }).filter(Boolean); runs.push({ text: parts[0], b: b, u: u, hl: hl, alts: parts.slice(1) }); }
+      else runs.push({ text: buf, b: b, u: u, hl: hl });
+      buf = '';
+    }
     while ((mm = re.exec(line))) {
       buf += line.slice(last, mm.index); push();
       if (/^_{3,}$/.test(mm[1])) { buf = mm[1]; push(); } else if (mm[1] === '**') b = !b; else if (mm[1] === '__') u = !u; else if (mm[1] === '⟦') hl = true; else hl = false;

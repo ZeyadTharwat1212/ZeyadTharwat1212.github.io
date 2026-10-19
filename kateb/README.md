@@ -73,6 +73,29 @@ To rebuild the bank after adding office files or web formulas (kept outside the 
   the first always). «استرجاع النص الأول» restores the reading; «🔄 إعادة التحويل» reads the stored photos again.
 - «⬅️ رجوع» walks a screen stack (also the phone's back button); the review screen keeps its state.
 
+## Intelligence layer (v16)
+- **Readings to choose from**: a reader that hesitates writes `⟦محمود|محمد⟧` (most likely first, at most three).
+  Only the first reading is the word for every check; the review pill shows the readings as chips and why the word
+  is yellow (`data-why`: القارئ غير متأكد / متردد بين قراءتين / القراءتان اختلفتا / غير مقروءة). Picking a chip
+  confirms the word, and a picked reading that differs from the first is learned as a correction.
+- **Glossary** (`kateb/bank/glossary.json`, `tests/tools/build_glossary.py`): ~420 fixed expressions of Egyptian
+  court papers of every type (pleadings, judgments, notices, contracts, inheritance, family). They go into the
+  reader's cached system prompt with every legal page, next to the formulas of the detected paper type.
+- **Faithful by default (mode A, «النص الأصلي كما هو»)**: the prompt says a slip the hand really made stays, an
+  unusual legal phrase stays, only unreadable words are marked, numbers and names come from the ink only.
+- **«✍️ تصحيح اللغة والإملاء» (mode B)**: one text-only Opus pass lists spelling/grammar suggestions (hamza, ة/ه,
+  ى/ي, agreement, missing/repeated word, punctuation; never names, numbers, dates, formulas; number suggestions are
+  dropped on the device). Each is accepted or rejected by hand, an accepted change is a green `span.fixd` (plain in
+  Word), one undo step; the faithful text stays in the versions.
+- **«🔎 بيانات الورقة»** (`kateb/fields.js`): court, case numbers (رقم … لسنة …), dates, amounts, party names
+  found in the text, as chips that select the fact in the editor; consistency warnings for a case number that
+  differs by one digit, a name written two close ways, an impossible date — warnings only, never merged.
+- Smart-mode wording: «✨ تحويل المستند بذكاء», «✅ تم تحويل المستند», «يوجد بعض الكلمات التي تحتاج مراجعة (n)»,
+  «مراجعة الكلمات».
+- `tests/eval/run_eval.cjs` (real key: `CLAUDE_KEY`, `LEARN=0/1`) now also reports critical-field accuracy
+  (case numbers, dates, amounts, names found in the truth) and hallucinated words, so pipeline changes are
+  compared on real pages before being called improvements.
+
 ## Speed: ⚡ fast mode (default on, ⚙️ الإعدادات)
 Every Opus call (the two reads, the judge, the numbers pass) goes through Claude's fast mode (`speed: "fast"`, beta
 `fast-mode-2026-02-01`): the same model answering up to 2.5× faster at twice the list price (about $0.5-0.7 a page).
