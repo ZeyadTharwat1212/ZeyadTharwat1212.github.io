@@ -71,7 +71,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   page.on('dialog', d => d.accept());
   await page.goto(base + '/' + file);
   await page.waitForSelector('#start:not([hidden])');
-  if (drive) { await drive(page); assert.deepStrictEqual(errors, [], 'no page errors'); await context.close(); return; }
+  if (drive) { await drive(page, calls, context); assert.deepStrictEqual(errors, [], 'no page errors'); await context.close(); return; }
   await page.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: await pagePhoto(browser) });
   await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
   await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
@@ -84,7 +84,8 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   const server = await serve(), base = 'http://127.0.0.1:' + server.address().port;
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   let failed = 0;
-  async function step(name, fn) { try { await fn(); console.log('ok   ' + name); } catch (e) { failed++; console.log('FAIL ' + name + '\n     ' + (e && e.stack || e)); } }
+  const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY='undo|learning' runs a few steps
+  async function step(name, fn) { if (ONLY && !ONLY.test(name)) return; try { await fn(); console.log('ok   ' + name); } catch (e) { failed++; console.log('FAIL ' + name + '\n     ' + (e && e.stack || e)); } }
 
   await step('legal: two reads differ → judge → guarded marks → review → Word + PDF + draft', () => runMode(browser, base, 'kateb.html', LEGAL, async (page, calls) => {
     assert.deepStrictEqual(calls.sort(), ['judge', 'numbers', 'read', 'read2'], 'both reads + one judge + the numbers pass, no separate rotation call');
@@ -277,6 +278,184 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'start-phone.png') });
     await context.close();
   });
+
+  /* ---------- KATEB15: documents, autosave, undo/redo, versions, navigation, learning ---------- */
+  const photo = await pagePhoto(browser);
+  async function convert(page) {
+    await page.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: photo });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
+    await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+  }
+  async function settled(page) { await page.waitForTimeout(900); await page.evaluate(() => window.__test.saved()); }
+  const saveState = page => page.evaluate(() => document.getElementById('saveStatus').className.replace('savestat', '').trim());
+  async function editWord(page, from, to) {
+    await page.evaluate(([f, t]) => {
+      const sheet = document.querySelector('#pagesBox .sheet');
+      const walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT); let n;
+      while ((n = walker.nextNode())) if (n.nodeValue.includes(f)) { n.nodeValue = n.nodeValue.replace(f, t); break; }
+      sheet.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }, [from, to]);
+  }
+
+  await step('documents: autosave status, «ملفاتي السابقة» survives a reload, rename, delete → «المحذوفات» (30 days) → restore, permanent delete asks first', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
+    await convert(page);
+    await page.waitForFunction(() => /ok/.test(document.getElementById('saveStatus').className));
+    assert.strictEqual(await page.textContent('#saveStatus'), '✅ تم الحفظ تلقائيًا');
+    assert.match(await page.inputValue('#docName'), /^مذكرة — /, 'a name is given from the paper type and the time');
+    await page.fill('#docName', 'قضية أحمد');
+    assert.strictEqual(await saveState(page), 'saving', 'a change shows «جارٍ الحفظ...» at once');
+    await settled(page); assert.strictEqual(await saveState(page), 'ok');
+    assert.ok(await page.locator('#backBtn').isVisible(), '«رجوع» on the review screen');
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.waitForFunction(() => /1 ملف/.test(document.getElementById('filesCount').textContent));
+    await page.click('#filesBtn'); await page.waitForSelector('#files:not([hidden])');
+    await page.waitForSelector('.doc');
+    assert.strictEqual(await page.textContent('.doc .dname'), 'قضية أحمد');
+    assert.strictEqual(await page.textContent('.doc .chip'), 'مسودة');
+    assert.strictEqual(await page.locator('.doc .dthumb img').count(), 1, 'card shows the first page photo');
+    assert.match(await page.textContent('.doc .dprev'), /مذكرة بدفاع/);
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'files.png'), fullPage: true });
+    /* persists across a reload (IndexedDB) */
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#filesBtn'); await page.waitForSelector('.doc');
+    assert.strictEqual(await page.textContent('.doc .dname'), 'قضية أحمد');
+    await page.evaluate(() => { window.prompt = () => 'عقد بيع الشقة'; });
+    await page.click('.doc [data-act="rename"]'); await page.waitForFunction(() => document.querySelector('.doc .dname') && document.querySelector('.doc .dname').textContent === 'عقد بيع الشقة');
+    await page.fill('#filesSearch', 'ليس موجودًا'); assert.ok(await page.locator('#filesEmpty').isVisible()); assert.strictEqual(await page.locator('.doc').count(), 0);
+    await page.fill('#filesSearch', 'الشقة'); assert.strictEqual(await page.locator('.doc').count(), 1);
+    await page.fill('#filesSearch', '');
+    await page.click('.doc [data-act="trash"]');
+    await page.waitForSelector('#filesEmpty:not([hidden])');
+    await page.waitForFunction(() => document.getElementById('trashCount').textContent === '(1)');
+    await page.click('#trashBtn'); await page.waitForSelector('#trash:not([hidden])'); await page.waitForSelector('.doc');
+    assert.match(await page.textContent('.doc small'), /يُحذف نهائيًا بعد 30 يوم/);
+    await page.click('.doc [data-act="restore"]'); await page.waitForSelector('#trashEmpty:not([hidden])');
+    await page.click('#backBtn'); await page.waitForSelector('#files:not([hidden])'); await page.waitForSelector('.doc');
+    assert.strictEqual(await page.textContent('.doc .dname'), 'عقد بيع الشقة', 'restored with its name');
+    await page.click('.doc [data-act="trash"]'); await page.waitForSelector('#filesEmpty:not([hidden])');
+    await page.click('#trashBtn'); await page.waitForSelector('.doc');
+    await page.evaluate(() => { window.confirm = () => false; });
+    await page.click('.doc [data-act="purge"]'); await page.waitForTimeout(300);
+    assert.strictEqual(await page.locator('.doc').count(), 1, 'declining the dialog keeps the file');
+    await page.evaluate(() => { window.confirm = () => true; });
+    await page.click('.doc [data-act="purge"]'); await page.waitForSelector('#trashEmpty:not([hidden])');
+    assert.ok(await page.locator('#emptyTrashBtn').isHidden());
+    /* the phone's back button walks the same stack */
+    await page.goBack(); await page.waitForSelector('#files:not([hidden])');
+    await page.goBack(); await page.waitForSelector('#start:not([hidden])');
+    assert.ok(await page.locator('#backBtn').isHidden(), 'no «رجوع» on the main screen');
+  }));
+
+  await step('review: undo / redo (buttons, Ctrl+Z, confirmations), «نسخ سابقة», «استرجاع النص الأول», reopening keeps the edits, «ملف جديد»', () => runMode(browser, base, 'kateb.html', LEGAL, null, 'sk-ant-test', async (page) => {
+    await convert(page);
+    await page.waitForFunction(() => /ok/.test(document.getElementById('saveStatus').className));
+    assert.ok(await page.locator('#undoBtn').isDisabled() && await page.locator('#redoBtn').isDisabled());
+    const before = await page.textContent('#pagesBox .sheet');
+    await page.evaluate(() => { const p = document.querySelector('#pagesBox .sheet p.sub'); const r = document.createRange(); r.selectNodeContents(p); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); p.focus(); });
+    await page.keyboard.type(' زيادة');
+    await page.waitForFunction(() => !document.getElementById('undoBtn').disabled);
+    await page.click('#undoBtn');
+    assert.strictEqual(await page.textContent('#pagesBox .sheet'), before, 'undo removes the typed word');
+    assert.ok(!(await page.locator('#redoBtn').isDisabled()));
+    await page.click('#redoBtn');
+    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /زيادة$/, 'redo brings it back');
+    await page.keyboard.press('Control+z');
+    assert.strictEqual(await page.textContent('#pagesBox .sheet'), before, 'Ctrl+Z undoes');
+    await page.keyboard.press('Control+y');
+    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /زيادة$/, 'Ctrl+Y redoes');
+    /* confirming a doubtful word is one undo step */
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 2);
+    await page.click('#nextDoubt'); await page.click('#okDoubt');
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 1);
+    await page.click('#undoBtn'); assert.strictEqual(await page.locator('#pagesBox mark').count(), 2, 'undo restores the yellow mark');
+    await page.click('#redoBtn'); assert.strictEqual(await page.locator('#pagesBox mark').count(), 1);
+    /* versions */
+    await page.click('#versionsBtn'); await page.waitForSelector('#versionsPanel:not([hidden])');
+    assert.match(await page.textContent('#versionsList'), /النص الأول من القراءة/);
+    await settled(page);
+    await page.click('#firstTextBtn');
+    await page.waitForFunction(b => document.querySelector('#pagesBox .sheet').textContent === b, before);
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 2, 'the first text has its marks again');
+    assert.match(await page.textContent('#versionsList'), /قبل الاستعادة/, 'the text before the restore is kept as a version');
+    await page.click('#undoBtn'); assert.match(await page.textContent('#pagesBox .sheet p.sub'), /زيادة$/, 'a restore can be undone');
+    await settled(page);
+    /* leave and come back: the edited text is what opens */
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.waitForSelector('#resumeBtn:not([hidden])');
+    assert.match(await page.textContent('#resumeWhen'), /^مذكرة/, 'the last document is named on the main screen');
+    await page.click('#resumeBtn'); await page.waitForSelector('#done:not([hidden])');
+    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /زيادة$/);
+    assert.ok(await page.locator('#restoredNote').isVisible());
+    assert.strictEqual(await saveState(page), 'ok');
+    await page.click('#againBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#filesBtn'); await page.waitForSelector('.doc');
+    assert.strictEqual(await page.locator('.doc').count(), 1);
+    if (SHOTS) { await page.click('.doc [data-act="open"]'); await page.waitForSelector('#done:not([hidden])'); await page.click('#versionsBtn'); await page.screenshot({ path: path.join(SHOTS, 'review-15.png'), fullPage: true }); }
+  }));
+
+  await step('settings: storage, privacy text, «حذف كل الملفات المحفوظة»', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page) => {
+    await convert(page); await page.waitForFunction(() => /ok/.test(document.getElementById('saveStatus').className));
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#settingsBtn'); await page.waitForSelector('#settings:not([hidden])');
+    await page.waitForFunction(() => /1 ملفات/.test(document.getElementById('setDocsInfo').textContent));
+    assert.match(await page.textContent('#settings'), /لا تُرفع إلى أي خادم/);
+    assert.match(await page.textContent('#setLearnState'), /غير مفعّل/);
+    await page.click('#deleteAllBtn');
+    await page.waitForFunction(() => /^0 ملفات/.test(document.getElementById('setDocsInfo').textContent));
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    assert.ok(await page.locator('#resumeBtn').isHidden(), 'nothing to resume after deleting everything');
+  }));
+
+  const DOUBT = LEGAL.J.replace('أحمد محمد علي', '⟦احمد⟧ محمد علي');
+  await step('learning (real): off by default and absent from the prompt; on → a correction and a confirmed word are recorded per profile, shown in «تحسين خط اليد», sent to the reader with the next page, a twice-confirmed word is no longer yellow; delete clears it', () => runMode(browser, base, 'kateb.html', { A: DOUBT, B: DOUBT }, null, 'sk-ant-test', async (page, calls) => {
+    await convert(page);
+    const sys = () => calls.claude.filter(c => c.kind === 'read').map(c => c.system);
+    assert.ok(sys().every(s => !/THIS WRITER'S HAND/.test(s)), 'learning off: nothing about the writer in the prompt');
+    await page.waitForFunction(() => /ok/.test(document.getElementById('saveStatus').className));
+    assert.ok(await page.locator('#learnHint').isVisible(), 'the review screen offers to switch learning on once');
+    await page.click('#learnHintOn');
+    assert.ok(await page.locator('#learnHint').isHidden());
+    /* a correction of a confident word + a confirmed doubtful word */
+    await editWord(page, 'محمد علي', 'محمود علي');
+    await settled(page);
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 1);
+    await page.click('#nextDoubt'); await page.click('#okDoubt');
+    await settled(page);
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    assert.match(await page.textContent('#learnState'), /مفعّل — 👨 خط بابا/, 'the legal page learns بابا\'s hand by default');
+    await page.click('#learnBtn'); await page.waitForSelector('#learn:not([hidden])');
+    assert.ok(await page.isChecked('#learnChk'));
+    await page.waitForFunction(() => /1 تصحيح و 1 كلمة مؤكدة/.test(document.getElementById('learnStats').textContent));
+    const rows = await page.locator('.lrow').allTextContents();
+    assert.ok(rows.some(r => /محمد.*محمود/.test(r)), 'the correction is listed: ' + rows);
+    assert.ok(rows.some(r => /احمد.*مؤكدة/.test(r)), 'the confirmed word is listed: ' + rows);
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'learn.png'), fullPage: true });
+    /* another profile has nothing; back to بابا */
+    await page.click('#profileSeg [data-profile="mama"]'); await page.waitForFunction(() => /لم يتعلم شيئًا بعد/.test(document.getElementById('learnStats').textContent));
+    await page.click('#profileSeg [data-profile="baba"]'); await page.waitForFunction(() => /1 تصحيح/.test(document.getElementById('learnStats').textContent));
+    /* next page: the reader is told, on the device the once-confirmed word is still yellow (needs two) */
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    calls.length = 0; calls.claude = [];
+    await convert(page);
+    const s2 = sys(); assert.ok(s2.length >= 1 && s2.every(s => /THIS WRITER'S HAND.*«بابا».*«محمد» → «محمود».*احمد/s.test(s)), 'the system prompt carries the learned words');
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'one confirmation is not enough to lift the doubt');
+    await page.click('#nextDoubt'); await page.click('#okDoubt'); await settled(page);
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await convert(page);
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 0, 'confirmed twice in this hand: read without a mark');
+    assert.match(await page.textContent('#readerInfo'), /1 كلمة عُرفت من خط 👨 خط بابا/);
+    assert.match(await page.textContent('#pagesBox .sheet'), /احمد/);
+    /* delete learning data */
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#learnBtn'); await page.waitForSelector('#learn:not([hidden])');
+    await page.waitForFunction(() => /2 كلمة مؤكدة|كلمة مؤكدة/.test(document.getElementById('learnStats').textContent));
+    await page.click('.lrow button'); await page.waitForFunction(() => document.querySelectorAll('.lrow').length === 1, null, { timeout: 5000 });
+    await page.click('#deleteLearnBtn2');
+    await page.waitForFunction(() => /لم يتعلم شيئًا بعد/.test(document.getElementById('learnStats').textContent));
+    await page.uncheck('#learnChk'); assert.ok(await page.locator('#learnBody').isHidden());
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    assert.match(await page.textContent('#learnState'), /غير مفعّل/);
+  }));
 
   await browser.close(); server.close();
   console.log(failed ? failed + ' failed' : 'all passed');

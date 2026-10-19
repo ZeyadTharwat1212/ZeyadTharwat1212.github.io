@@ -1,11 +1,11 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v12';
+var CACHE = 'kateb-v13';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=12', 'kateb/engine.js?v=12', 'kateb/verify.js?v=12', 'kateb/docx.js?v=12', 'kateb/exam.js?v=12', 'kateb/app.js?v=12',
-  'kateb/office.js?v=12', 'kateb/bank.js?v=12', 'kateb/arabic.js?v=12', 'kateb/scan.js?v=12', 'kateb/templates/templates.json?v=12',
-  'kateb/templates/announce.docx?v=12', 'kateb/templates/gift.docx?v=12', 'kateb/templates/inherit_announce.docx?v=12', 'kateb/templates/inherit_request.docx?v=12', 'kateb/templates/iqrar.docx?v=12', 'kateb/templates/memo.docx?v=12', 'kateb/templates/price.docx?v=12', 'kateb/templates/reannounce.docx?v=12', 'kateb/templates/sahifa.docx?v=12', 'kateb/templates/sale.docx?v=12', 'kateb/templates/sihha.docx?v=12', 'kateb/templates/warning.docx?v=12',
+  'kateb/style.css?v=13', 'kateb/engine.js?v=13', 'kateb/verify.js?v=13', 'kateb/docx.js?v=13', 'kateb/exam.js?v=13', 'kateb/app.js?v=13',
+  'kateb/office.js?v=13', 'kateb/bank.js?v=13', 'kateb/arabic.js?v=13', 'kateb/scan.js?v=13', 'kateb/store.js?v=13', 'kateb/learn.js?v=13', 'kateb/templates/templates.json?v=13',
+  'kateb/templates/announce.docx?v=13', 'kateb/templates/gift.docx?v=13', 'kateb/templates/inherit_announce.docx?v=13', 'kateb/templates/inherit_request.docx?v=13', 'kateb/templates/iqrar.docx?v=13', 'kateb/templates/memo.docx?v=13', 'kateb/templates/price.docx?v=13', 'kateb/templates/reannounce.docx?v=13', 'kateb/templates/sahifa.docx?v=13', 'kateb/templates/sale.docx?v=13', 'kateb/templates/sihha.docx?v=13', 'kateb/templates/warning.docx?v=13',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',

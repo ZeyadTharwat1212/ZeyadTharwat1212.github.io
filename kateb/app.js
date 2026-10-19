@@ -6,14 +6,50 @@
   var APP = window.APP || { mode: 'legal' }, EXAM = APP.mode === 'exam';
   var $ = function (id) { return document.getElementById(id); };
   var KEY = null, pages = [], results = [], running = false;
-  var DRAFT = 'kateb.draft.' + (EXAM ? 'exam' : 'legal');
+  var MODE = EXAM ? 'exam' : 'legal', DRAFT = 'kateb.draft.' + MODE, LAST = 'kateb.lastDoc.' + MODE;
+  var curDoc = null, reconvertDoc = null;                     // the document open in the review screen (Store record)
 
-  function show(id) {
-    ['lock', 'nokey', 'start', 'work', 'done', 'fail'].forEach(function (s) { $(s).hidden = s !== id; });
+  /* KATEB15: screens form a stack so «رجوع» (and the phone's back button) returns to the previous screen with its
+     state untouched; «start» is the root. */
+  var SCREENS = ['lock', 'nokey', 'start', 'work', 'done', 'fail', 'files', 'trash', 'settings', 'learn'];
+  var STACKED = ['start', 'done', 'files', 'trash', 'settings', 'learn'];
+  var nav = [], curScreen = null, backing = false;
+  function show(id, noPush) {
+    if (id === 'start') nav = [];
+    else if (!noPush && !backing && curScreen && curScreen !== id && STACKED.indexOf(curScreen) >= 0 && STACKED.indexOf(id) >= 0) {
+      nav.push(curScreen);
+      try { history.pushState({ k: id }, '', location.href); } catch (e) {}
+    }
+    curScreen = id;
+    SCREENS.forEach(function (s) { if ($(s)) $(s).hidden = s !== id; });
     document.body.classList.toggle('wide', id === 'done');
     $('doubtBar').hidden = id !== 'done' || !marks().length;
+    if ($('backBtn')) $('backBtn').hidden = ['start', 'lock', 'nokey', 'work'].indexOf(id) >= 0;
     window.scrollTo(0, 0);
   }
+  function goBack() {
+    if (running && curScreen === 'work') return;
+    var prev = nav.pop() || 'start';
+    if (prev === 'done' && !results.length) prev = 'start';
+    backing = true;
+    try {
+      if (prev === 'start') toStart();
+      else if (prev === 'files') renderFiles();
+      else if (prev === 'trash') renderTrash();
+      else if (prev === 'settings') renderSettings();
+      else if (prev === 'learn') renderLearn();
+      else show(prev, true);
+    } finally { backing = false; }
+  }
+  /* «رجوع»: through the browser history when this screen was pushed there (so the phone's back button agrees), else directly */
+  if ($('backBtn')) $('backBtn').addEventListener('click', function () {
+    var st = null; try { st = history.state; } catch (e) {}
+    if (nav.length && st && st.k === curScreen) history.back(); else goBack();
+  });
+  window.addEventListener('popstate', function () {
+    if (running) { try { history.pushState({ k: curScreen }, '', location.href); } catch (e) {} return; }
+    if (curScreen !== 'start') goBack();
+  });
 
   /* ---------- unlock ---------- */
   (function boot() {
@@ -49,7 +85,20 @@
     $('resumeBtn').hidden = !d;
     if (d) $('resumeWhen').textContent = new Date(d.t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
     show('start');
+    homeCards();
   }
+  /* the three cards under the camera: files count, learning state */
+  function homeCards() {
+    Store.listDocs(MODE).then(function (ds) { if ($('filesCount')) $('filesCount').textContent = ds.length ? ds.length + (ds.length === 1 ? ' ملف' : ' ملفات') : 'لا ملفات بعد'; }).catch(function () {});
+    if ($('learnState')) $('learnState').textContent = learnOn() ? 'مفعّل — ' + profileLabel() : 'غير مفعّل';
+    Store.getDoc(Engine.lsGet(LAST) || '').then(function (doc) {
+      if (!doc || doc.deletedAt) return;
+      $('resumeBtn').hidden = false; $('resumeWhen').textContent = doc.name;
+    }).catch(function () {});
+  }
+  if ($('filesBtn')) $('filesBtn').addEventListener('click', renderFiles);
+  if ($('learnBtn')) $('learnBtn').addEventListener('click', renderLearn);
+  if ($('settingsBtn')) $('settingsBtn').addEventListener('click', renderSettings);
 
   /* ---------- pick ---------- */
   $('pickBtn').addEventListener('click', function () { $('file').click(); });
@@ -105,7 +154,16 @@
   $('againBtn').addEventListener('click', toStart);
   $('retryBtn').addEventListener('click', function () { if (pages.length) run(); else toStart(); });
   $('homeBtn').addEventListener('click', toStart);
-  $('resumeBtn').addEventListener('click', function () { var d = loadDraft(); if (!d) { toStart(); return; } results = d.pages; finish(true); });
+  $('resumeBtn').addEventListener('click', function () {
+    Store.getDoc(Engine.lsGet(LAST) || '').then(function (doc) {
+      if (doc && !doc.deletedAt) { openDoc(doc); return; }
+      var d = loadDraft(); if (!d) { toStart(); return; } curDoc = null; results = d.pages; finish(true);
+    }).catch(function () { var d = loadDraft(); if (!d) { toStart(); return; } curDoc = null; results = d.pages; finish(true); });
+  });
+  function openDoc(doc) {
+    curDoc = doc; results = doc.pages.map(function (p) { return { html: p.html, img: p.img, text: p.text, type: doc.type }; });
+    usedModels = {}; finish(true);
+  }
 
   function setProgress(done, total, text) {
     $('stepText').textContent = text; $('barFill').style.width = Math.round(100 * done / Math.max(1, total)) + '%';
@@ -171,7 +229,7 @@
       } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
     }
     if (type && typeof Bank !== 'undefined') bank = await Bank.load(type);
-    var system = (bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, 400)) : '') + caseContext();
+    var system = (bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, 400)) : '') + caseContext() + learnPrompt();
     system = system || undefined;
     step(1, 'جارٍ قراءة ' + label + ' (قراءتان معاً' + (bank ? ' بصيغ «' + (TYPE_LABEL[type] || type) + '»' : '') + ')…');
     var pair = await readTwice(imgs, system);
@@ -181,7 +239,7 @@
     step(2, 'جارٍ مراجعة ' + label + ' مع الأصل والصيغ المعتادة…');
     if (!type && !EXAM && typeof Office !== 'undefined') {
       type = Office.detect(a);
-      if (type && typeof Bank !== 'undefined') { bank = await Bank.load(type); system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, 400)) : '') + caseContext()) || undefined; }
+      if (type && typeof Bank !== 'undefined') { bank = await Bank.load(type); system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, 400)) : '') + caseContext() + learnPrompt()) || undefined; }
     }
     var final = a, d = b ? Verify.disagreements(a, b) : null;
     /* the numbers pass runs beside the judge: every number, date and amount read once more on its own */
@@ -198,6 +256,13 @@
         var tc = Engine.clean(rc.text); if (tc.length > a.length * 0.6 && !rc.truncated) final = tc;
       }
     } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
+    var learned = 0;
+    if (learnOn() && learnItems.length) {
+      /* this hand's own words: a doubt the model kept on a word the family already confirmed is lifted (the guard
+         below still marks it when the two reads disagree); a word corrected the same way twice before is swapped */
+      var lf = Learn.applyFixes(final, learnItems, profile()), ll = Learn.applyLexicon(lf.text, learnItems, profile());
+      final = ll.text; learned = lf.fixed + ll.cleared;
+    }
     var g = Verify.guard(final, a, b || a, !EXAM), text = g.text, snapped = 0;
     var numbers = await numbersP;
     if (numbers) { var nc = Verify.checkNumbers(text, numbers); text = nc.text; }
@@ -213,12 +278,13 @@
     var r = await toResult(text);
     r.img = Engine.scaled(p.canvas, 1600).toDataURL('image/jpeg', 0.8);
     r.agree = d ? Math.round(d.agreement * 100) : null;
-    r.text = text; r.type = type; r.snapped = snapped;
+    r.text = text; r.type = type; r.snapped = snapped; r.learned = learned;
     return r;
   }
 
   async function run() {
     if (running) return; running = true; show('work'); results = []; usedModels = {};
+    try { learnItems = learnOn() ? await loadLearn() : []; } catch (e) { learnItems = []; }
     var n = pages.length, S = 3;
     try {
       for (var i = 0; i < n; i++) {
@@ -237,7 +303,7 @@
   function runsHtml(runs) {
     return (runs || []).map(function (r) {
       var h = r.frac ? '<span class="frac" contenteditable="false" data-n="' + escH(r.frac[0]) + '" data-d="' + escH(r.frac[1]) + '"><span>' + escH(r.frac[0]) + '</span><span>' + escH(r.frac[1]) + '</span></span>' : escH(shown(r.text));
-      if (r.u) h = '<u>' + h + '</u>'; if (r.b) h = '<b>' + h + '</b>'; if (r.hl) h = '<mark>' + h + '</mark>'; return h;
+      if (r.u) h = '<u>' + h + '</u>'; if (r.b) h = '<b>' + h + '</b>'; if (r.hl) h = '<mark data-o="' + escH(r.text) + '">' + h + '</mark>'; return h;
     }).join('');
   }
   function dirOf(t) { return /[A-Za-z]/.test(t) && !DocxBuilder.isRtlText(t) ? 'ltr' : 'rtl'; }
@@ -281,12 +347,25 @@
     }).join('');
     $('savedNote').hidden = true; cur = -1;
     $('restoredNote').hidden = !restored;
-    var ri = $('readerInfo'), ms = Object.keys(usedModels);
-    if (ri) { ri.hidden = !ms.length; ri.textContent = ms.length ? 'قُرئت الصفحات فعلياً بـ: ' + ms.join(' + ') : ''; }
+    var ri = $('readerInfo'), ms = Object.keys(usedModels), nl = results.reduce(function (t, r) { return t + (r.learned || 0); }, 0);
+    if (ri) { ri.hidden = !ms.length; ri.textContent = ms.length ? 'قُرئت الصفحات فعلياً بـ: ' + ms.join(' + ') + (nl ? ' — ' + nl + ' كلمة عُرفت من خط ' + profileLabel() : '') : ''; }
+    if (!restored) {
+      var ps = results.map(function (r) { return { html: r.html, img: r.img, text: r.text }; });
+      if (reconvertDoc) { curDoc = reconvertDoc; reconvertDoc = null; Store.addVersion(curDoc, ps, 'reread'); curDoc.pages = ps; curDoc.learned = []; }
+      else curDoc = Store.newDoc(MODE, autoName(), ps, { type: results[0] && results[0].type || null });
+    }
+    if ($('docName')) $('docName').value = curDoc ? curDoc.name : '';
+    if ($('versionsPanel')) $('versionsPanel').hidden = true;
+    if ($('learnHint')) $('learnHint').hidden = learnOn() || Engine.lsGet('kateb.learnHint') === '1';
+    histReset();
     refreshDoubts();
     show('done');
-    if (!restored) saveDraft();
+    if (!restored) saveDraft(); else setSave(curDoc ? 'ok' : '');
     setupTemplate();
+  }
+  function autoName() {
+    var t = results[0] && results[0].type, base = !EXAM ? (TYPE_LABEL[t] || 'مستند') : ((Engine.lsGet('exam.hGrade') || 'امتحان') + ' ' + (Engine.lsGet('exam.hTitle') || '')).trim();
+    return base + ' — ' + new Date().toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
   }
 
   /* ---------- office templates (legal page): the file comes out in the office's own layout ---------- */
@@ -352,19 +431,23 @@
   $('nextDoubt').addEventListener('click', nextDoubt);
   $('okDoubt').addEventListener('click', function () {
     var ms = marks(), m = document.querySelector('#pagesBox mark.cur') || ms[0]; if (!m) return;
-    var i = ms.indexOf(m); confirmMark(m); refreshDoubts(); queueSave();
+    var i = ms.indexOf(m); learnConfirm(m); confirmMark(m); refreshDoubts(); histCommit(); queueSave();
     ms = marks(); if (ms.length) focusMark(ms[Math.min(i, ms.length - 1)]);
   });
   $('okAllBtn').addEventListener('click', function () {
     var n = marks().length; if (!n) return;
     if (!window.confirm('هل راجعت كل الكلمات الصفراء (' + n + ') مع الأصل؟ سيتم إزالة اللون الأصفر منها كلها.')) return;
-    marks().forEach(confirmMark); refreshDoubts(); queueSave();
+    marks().forEach(function (m) { learnConfirm(m); confirmMark(m); }); refreshDoubts(); histCommit(); queueSave();
   });
   $('pagesBox').addEventListener('click', function (e) {
     var m = e.target.closest && e.target.closest('mark'); if (m) { marks().forEach(function (x) { x.classList.toggle('cur', x === m); }); }
     var o = e.target.closest && e.target.closest('.orig'); if (o) { $('zoomImg').src = o.querySelector('img').src; $('zoom').hidden = false; $('zoomClose').focus(); }
   });
-  $('pagesBox').addEventListener('input', function () { refreshDoubts(); queueSave(); });
+  $('pagesBox').addEventListener('input', function () { refreshDoubts(); histQueue(); queueSave(); });
+  /* the keyboard's own undo (Ctrl+Z, or the phone keyboard's undo) goes through the app's history */
+  $('pagesBox').addEventListener('beforeinput', function (e) {
+    if (e.inputType === 'historyUndo') { e.preventDefault(); undo(); } else if (e.inputType === 'historyRedo') { e.preventDefault(); redo(); }
+  });
   /* on screen the paper shows ٠-٩ like the office's Word does; the file keeps 0-9 inside (walkRuns converts) */
   if (!EXAM) $('pagesBox').addEventListener('beforeinput', function (e) {
     if (e.inputType !== 'insertText' || !e.data || !/^[0-9۰-۹]$/.test(e.data)) return;
@@ -412,18 +495,246 @@
       var m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = next === 'dark' ? '#0B1020' : m.dataset.light || m.content;
     });
   })();
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') $('zoom').hidden = true; });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') $('zoom').hidden = true;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && curScreen === 'done' && !$('done').hidden) {
+      var k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+    }
+  });
+
+  /* ---------- undo / redo: snapshots of the pages' text (typing pauses, confirmations, restores) ---------- */
+  var hist = [], hi = -1, histT = null, HIST_MAX = 100;
+  function snapshot() { return sheets().map(function (s) { return s.innerHTML.replace(/<mark class="cur"/g, '<mark'); }); }
+  function sameSnap(a, b) { return !!a && !!b && a.length === b.length && a.every(function (x, i) { return x === b[i]; }); }
+  function histBtns() { if ($('undoBtn')) { $('undoBtn').disabled = hi <= 0; $('redoBtn').disabled = hi >= hist.length - 1; } }
+  function histReset() { clearTimeout(histT); histT = null; hist = [snapshot()]; hi = 0; histBtns(); }
+  function histCommit() {
+    clearTimeout(histT); histT = null;
+    var s = snapshot(); if (sameSnap(s, hist[hi])) return;
+    hist = hist.slice(0, hi + 1); hist.push(s); if (hist.length > HIST_MAX) hist.shift(); hi = hist.length - 1; histBtns();
+  }
+  function histQueue() { clearTimeout(histT); histT = setTimeout(histCommit, 500); }
+  function histApply(s) {
+    sheets().forEach(function (sh, i) { if (s[i] !== undefined && sh.innerHTML !== s[i]) sh.innerHTML = s[i]; });
+    cur = -1; refreshDoubts(); histBtns(); queueSave();
+  }
+  function undo() { if (histT) histCommit(); if (hi <= 0) return; hi--; histApply(hist[hi]); }
+  function redo() { if (histT) histCommit(); if (hi >= hist.length - 1) return; hi++; histApply(hist[hi]); }
+  if ($('undoBtn')) { $('undoBtn').addEventListener('click', undo); $('redoBtn').addEventListener('click', redo); }
+
+  /* ---------- versions, first text, read again, new file ---------- */
+  var VLABEL = { first: 'النص الأول من القراءة', auto: 'حفظ تلقائي', 'export': 'قبل التصدير', reread: 'قبل إعادة التحويل', restore: 'قبل الاستعادة' };
+  function renderVersions() {
+    var box = $('versionsList'); if (!box || !curDoc) return;
+    var vs = (curDoc.versions || []).slice().reverse();
+    box.innerHTML = vs.map(function (v, i) {
+      var idx = vs.length - 1 - i;
+      return '<div class="vrow"><span><b>' + (VLABEL[v.label] || v.label) + '</b><small>' + new Date(v.t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }) + '</small></span><button class="btn sm" type="button" data-restore="' + idx + '">استعادة</button></div>';
+    }).join('') || '<p class="small">لا توجد نسخ سابقة بعد.</p>';
+  }
+  function restoreVersion(idx) {
+    if (!curDoc || !curDoc.versions[idx]) return;
+    var v = curDoc.versions[idx];
+    if (!window.confirm('استعادة «' + (VLABEL[v.label] || v.label) + '» (' + new Date(v.t).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) + ')؟ النص الحالي يبقى في «نسخ سابقة» ويمكن التراجع.')) return;
+    histCommit();
+    Store.addVersion(curDoc, pagesNow(), 'restore');
+    var ss = sheets(); v.pages.forEach(function (p, i) { if (ss[i]) ss[i].innerHTML = p.html; });
+    cur = -1; refreshDoubts(); histCommit(); queueSave(); renderVersions();
+    $('savedNote').hidden = false; $('savedNote').textContent = 'تمت استعادة «' + (VLABEL[v.label] || v.label) + '».';
+  }
+  if ($('versionsBtn')) {
+    $('versionsBtn').addEventListener('click', function () { var p = $('versionsPanel'); p.hidden = !p.hidden; if (!p.hidden) renderVersions(); });
+    $('versionsList').addEventListener('click', function (e) { var b = e.target.closest('[data-restore]'); if (b) restoreVersion(+b.dataset.restore); });
+    $('firstTextBtn').addEventListener('click', function () { restoreVersion(0); });
+    $('reconvertBtn').addEventListener('click', async function () {
+      if (running || !curDoc) return;
+      var imgs = (curDoc.pages || []).map(function (p) { return p.img; }).filter(Boolean);
+      if (!imgs.length) { $('savedNote').hidden = false; $('savedNote').textContent = 'صور هذا الملف غير محفوظة على هذا الجهاز، فلا يمكن إعادة قراءته. صوّر الورقة مرة أخرى.'; return; }
+      if (!window.confirm('إعادة قراءة الورقة من الصور؟ النص الحالي يبقى في «نسخ سابقة».')) return;
+      clearTimeout(saveT); await saveDraft(true);
+      try { var cs = []; for (var i = 0; i < imgs.length; i++) cs.push(await imgToCanvas(imgs[i])); } catch (e) { fail(e); return; }
+      reconvertDoc = curDoc; startCanvases(cs);
+    });
+  }
+  function imgToCanvas(src) {
+    return new Promise(function (res, rej) {
+      var im = new Image(); im.onload = function () { var c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im, 0, 0); res(c); };
+      im.onerror = function () { rej(new Error('image')); }; im.src = src;
+    });
+  }
+  if ($('docName')) $('docName').addEventListener('input', function () { if (curDoc) { curDoc.name = this.value.trim() || curDoc.name; queueSave(); } });
+  if ($('learnHintOff')) $('learnHintOff').addEventListener('click', function () { Engine.lsSet('kateb.learnHint', '1'); $('learnHint').hidden = true; });
+  if ($('learnHintOn')) $('learnHintOn').addEventListener('click', function () { setLearnOn(true); $('learnHint').hidden = true; homeCards(); });
 
   /* ---------- draft: survives a refresh or a closed tab on this device ---------- */
-  function queueSave() { clearTimeout(saveT); saveT = setTimeout(saveDraft, 800); }
-  function saveDraft() {
-    var ps = sheets().map(function (s, i) { return { html: s.innerHTML.replace(/<mark class="cur">/g, '<mark>'), img: results[i] && results[i].img }; });
-    if (!ps.length) return;
+  function queueSave() { clearTimeout(saveT); saveT = setTimeout(saveDraft, 800); setSave('saving'); }
+  function pagesNow() { return sheets().map(function (s, i) { return { html: s.innerHTML.replace(/<mark class="cur"/g, '<mark'), img: results[i] && results[i].img, text: s.textContent }; }); }
+  function setSave(state) {
+    var el = $('saveStatus'); if (!el) return;
+    el.className = 'savestat ' + state;
+    el.textContent = state === 'saving' ? 'جارٍ الحفظ...' : state === 'ok' ? '✅ تم الحفظ تلقائيًا' : state === 'err' ? 'تعذر الحفظ. حاول مرة أخرى.' : '';
+    el.title = state === 'err' ? 'اضغط لإعادة المحاولة' : '';
+  }
+  if ($('saveStatus')) $('saveStatus').addEventListener('click', function () { if (/err/.test(this.className)) saveDraft(true); });
+  var saveChain = Promise.resolve();
+  /* every change is written to the device: the small localStorage draft at once (survives a closed tab even
+     mid-write), then the full document (with photos and versions) in the store. `force` also keeps a version. */
+  function saveDraft(force) {
+    clearTimeout(saveT); saveT = null;
+    var ps = pagesNow(); if (!ps.length) return Promise.resolve();
+    setSave('saving');
+    ps.forEach(function (p, i) { if (results[i]) results[i].html = p.html; });
     try { localStorage.setItem(DRAFT, JSON.stringify({ t: Date.now(), pages: ps })); }
     catch (e) { try { localStorage.setItem(DRAFT, JSON.stringify({ t: Date.now(), pages: ps.map(function (p) { return { html: p.html }; }) })); } catch (e2) {} }
-    ps.forEach(function (p, i) { if (results[i]) results[i].html = p.html; });
+    if (!curDoc) curDoc = Store.newDoc(MODE, autoName(), ps, { type: results[0] && results[0].type || null });
+    curDoc.pages = ps; curDoc.tpl = tplKey();
+    if ($('docName') && $('docName').value.trim()) curDoc.name = $('docName').value.trim();
+    Store.addVersion(curDoc, ps, force === true ? 'export' : 'auto', force === true ? 0 : 10 * 60 * 1000);
+    var doc = curDoc;
+    saveChain = saveChain.then(function () { return learnFromEdits(doc); }).catch(function () {})
+      .then(function () { return Store.saveDoc(doc); })
+      .then(function () { Engine.lsSet(LAST, doc.id); if (curDoc === doc) setSave('ok'); }, function () { if (curDoc === doc) setSave('err'); });
+    return saveChain;
+  }
+  /* a tab closed or the phone switched apps while a save was pending: write now */
+  function flushSave() { if (saveT && curScreen === 'done') saveDraft(); }
+  window.addEventListener('pagehide', flushSave);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flushSave(); });
+
+  /* ---------- handwriting learning (see learn.js): records on this device, per writer profile ---------- */
+  var learnItems = [];
+  function learnOn() { return Engine.lsGet('kateb.learn') === '1'; }
+  function setLearnOn(on) { Engine.lsSet('kateb.learn', on ? '1' : '0'); }
+  function profile() { return Engine.lsGet('kateb.profile.' + MODE) || (EXAM ? 'mama' : 'baba'); }
+  function setProfile(p) { Engine.lsSet('kateb.profile.' + MODE, p); }
+  function profileLabel() { var p = profile(); return p === 'mama' ? '👩 خط ماما' : p === 'baba' ? '👨 خط بابا' : 'خط عام'; }
+  function loadLearn() { return Store.get('learn', 'items').then(function (r) { return (r && r.items) || []; }); }
+  function saveLearn(items) { return Store.put('learn', { id: 'items', items: items }); }
+  function learnPrompt() { return learnOn() && learnItems.length ? Learn.promptText(learnItems, profile()) : ''; }
+  function htmlText(html) { var d = document.createElement('div'); d.innerHTML = html; return Array.prototype.map.call(d.querySelectorAll('p,td,div,figure'), function (p) { return p.textContent; }).join('\n') || d.textContent; }
+  /* a doubtful word confirmed as read: this hand writes it so */
+  function learnConfirm(m) {
+    if (!learnOn() || !m || !m.dataset.o) return;
+    var w = Learn.clean(m.textContent), o = Learn.clean(EXAM ? m.dataset.o : Verify.arabicDigits(m.dataset.o));
+    if (w && w === o) queueLearn(function (items) { return Learn.record(items, profile(), 'word', w); });
+  }
+  /* words the reviewer replaced since the first reading: this hand's spelling of them */
+  function learnFromEdits(doc) {
+    if (!learnOn() || !doc || !doc.versions || !doc.versions[0]) return Promise.resolve();
+    var first = doc.versions[0].pages.map(function (p) { return htmlText(p.html); }).join('\n'), now = doc.pages.map(function (p) { return p.text || htmlText(p.html); }).join('\n');
+    var pairs = Learn.wordDiff(first, now).filter(function (p) { var k = p.from + '→' + p.to; if (doc.learned.indexOf(k) >= 0) return false; doc.learned.push(k); return true; });
+    if (!pairs.length) return Promise.resolve();
+    return queueLearn(function (items) { pairs.forEach(function (p) { Learn.record(items, profile(), 'fix', p.from, p.to); }); return true; });
+  }
+  var learnChain = Promise.resolve();
+  function queueLearn(fn) {
+    learnChain = learnChain.then(loadLearn).then(function (items) { if (fn(items)) { learnItems = items; return saveLearn(items); } }).catch(function () {});
+    return learnChain;
   }
   function loadDraft() { try { var d = JSON.parse(localStorage.getItem(DRAFT) || 'null'); return d && d.pages && d.pages.length ? d : null; } catch (e) { return null; } }
+
+  /* ---------- «ملفاتي السابقة», «المحذوفات», «الإعدادات», «تحسين خط اليد» ---------- */
+  function when(t) { return new Date(t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }); }
+  function docCard(d, trash) {
+    var img = d.pages && d.pages[0] && d.pages[0].img, n = d.pages ? d.pages.length : 0;
+    var preview = htmlText(d.pages && d.pages[0] ? d.pages[0].html : '').replace(/\s+/g, ' ').trim().slice(0, 90);
+    return '<article class="doc" data-id="' + d.id + '">' +
+      '<div class="dthumb">' + (img ? '<img alt="" src="' + img + '">' : '<span>📄</span>') + '</div>' +
+      '<div class="dbody"><b class="dname">' + escH(d.name) + '</b>' +
+      '<small>' + (trash ? 'حُذف ' + when(d.deletedAt) + ' — يُحذف نهائيًا بعد ' + Store.daysLeft(d) + ' يوم' : 'آخر تعديل ' + when(d.updated)) + ' · ' + (n === 1 ? 'صفحة واحدة' : n + ' صفحات') + '</small>' +
+      '<span class="chip ' + (d.status === 'exported' ? 'ok' : '') + '">' + (d.status === 'exported' ? 'تم التصدير' : 'مسودة') + '</span>' +
+      (preview ? '<p class="dprev">' + escH(preview) + '…</p>' : '') + '</div>' +
+      '<div class="dacts">' + (trash
+        ? '<button class="btn sm" type="button" data-act="restore">↩️ استرجاع</button><button class="btn sm danger" type="button" data-act="purge">حذف نهائي</button>'
+        : '<button class="btn sm go" type="button" data-act="open">فتح</button><button class="btn sm" type="button" data-act="rename">إعادة تسمية</button><button class="btn sm danger" type="button" data-act="trash">حذف</button>') + '</div></article>';
+  }
+  var filesAll = [];
+  function renderFiles() {
+    show('files');
+    Store.listDocs(MODE).then(function (ds) { filesAll = ds; drawFiles(); return Store.listTrash(MODE); }).then(function (ts) { $('trashCount').textContent = ts.length ? '(' + ts.length + ')' : ''; }).catch(function () { filesAll = []; drawFiles(); });
+  }
+  function drawFiles() {
+    var q = ($('filesSearch').value || '').trim(), ds = q ? filesAll.filter(function (d) { return (d.name || '').indexOf(q) >= 0 || htmlText(d.pages[0] ? d.pages[0].html : '').indexOf(q) >= 0; }) : filesAll;
+    $('docList').innerHTML = ds.map(function (d) { return docCard(d, false); }).join('');
+    $('filesEmpty').hidden = !!ds.length; $('filesEmpty').textContent = q ? 'لا يوجد ملف بهذا الاسم.' : 'لا توجد ملفات محفوظة بعد. كل ورقة تحوّلها تُحفظ هنا تلقائيًا.';
+  }
+  function renderTrash() {
+    show('trash');
+    Store.listTrash(MODE).then(function (ds) {
+      $('trashList').innerHTML = ds.map(function (d) { return docCard(d, true); }).join('');
+      $('trashEmpty').hidden = !!ds.length; $('emptyTrashBtn').hidden = !ds.length;
+    }).catch(function () { $('trashList').innerHTML = ''; $('trashEmpty').hidden = false; });
+  }
+  if ($('files')) {
+    $('filesSearch').addEventListener('input', drawFiles);
+    $('trashBtn').addEventListener('click', renderTrash);
+    $('docList').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]'), card = e.target.closest('.doc'); if (!b || !card) return;
+      var id = card.dataset.id, d = filesAll.filter(function (x) { return x.id === id; })[0]; if (!d) return;
+      if (b.dataset.act === 'open') { Store.getDoc(id).then(function (doc) { if (doc) openDoc(doc); }); }
+      else if (b.dataset.act === 'rename') { var n = window.prompt('اسم الملف الجديد:', d.name); if (n && n.trim()) Store.renameDoc(id, n.trim()).then(function () { if (curDoc && curDoc.id === id) curDoc.name = n.trim(); renderFiles(); }); }
+      else if (b.dataset.act === 'trash') { if (window.confirm('نقل «' + d.name + '» إلى المحذوفات؟ يمكنك استرجاعه خلال 30 يومًا.')) Store.trashDoc(id).then(function () { if (curDoc && curDoc.id === id) { curDoc = null; results = []; } renderFiles(); }); }
+    });
+    $('trashList').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]'), card = e.target.closest('.doc'); if (!b || !card) return;
+      var id = card.dataset.id, name = card.querySelector('.dname').textContent;
+      if (b.dataset.act === 'restore') Store.restoreDoc(id).then(renderTrash);
+      else if (b.dataset.act === 'purge') { if (window.confirm('حذف «' + name + '» نهائيًا؟ لا يمكن التراجع عن هذا.')) Store.purgeDoc(id).then(renderTrash); }
+    });
+    $('emptyTrashBtn').addEventListener('click', function () { if (window.confirm('حذف كل الملفات في المحذوفات نهائيًا؟ لا يمكن التراجع عن هذا.')) Store.emptyTrash(MODE).then(renderTrash); });
+  }
+  function renderSettings() {
+    show('settings');
+    $('setLearnState').textContent = learnOn() ? 'مفعّل — ' + profileLabel() : 'غير مفعّل';
+    $('setEnhance').checked = enhanceOn();
+    $('storageInfo').textContent = Store.which() === 'ls' ? 'هذا المتصفح لا يسمح بقاعدة بيانات محلية: تُحفظ النصوص فقط بدون صور الورق.' : '';
+    Store.usage().then(function (u) { if (u && u.usage) $('storageInfo').textContent = 'المساحة المستخدمة على هذا الجهاز: ' + (u.usage / 1048576).toFixed(1) + ' MB' + (u.quota ? ' من ' + Math.round(u.quota / 1048576) + ' MB' : ''); }).catch(function () {});
+    Store.listDocs(MODE).then(function (ds) { return Store.listTrash(MODE).then(function (ts) { $('setDocsInfo').textContent = ds.length + ' ملفات محفوظة، ' + ts.length + ' في المحذوفات.'; }); }).catch(function () {});
+  }
+  if ($('settings')) {
+    $('setLearnBtn').addEventListener('click', renderLearn);
+    $('setEnhance').addEventListener('change', function () { if ($('enhanceChk')) $('enhanceChk').checked = this.checked; });
+    $('deleteAllBtn').addEventListener('click', function () {
+      if (!window.confirm('حذف كل الملفات المحفوظة على هذا الجهاز نهائيًا (بما فيها المحذوفات)؟ لا يمكن التراجع عن هذا.')) return;
+      Store.listDocs(MODE).then(function (ds) { return Store.listTrash(MODE).then(function (ts) { return Promise.all(ds.concat(ts).map(function (d) { return Store.purgeDoc(d.id); })); }); })
+        .then(function () { try { localStorage.removeItem(DRAFT); localStorage.removeItem(LAST); } catch (e) {} curDoc = null; results = []; renderSettings(); });
+    });
+    $('deleteLearnBtn').addEventListener('click', deleteLearn);
+  }
+  function deleteLearn() {
+    if (!window.confirm('حذف كل ما تعلّمه التطبيق من تصحيحاتك (' + profileLabel() + ' وغيره)؟ القراءة ترجع كما كانت قبل التعلم.')) return;
+    learnChain = learnChain.then(function () { return Store.clear('learn'); }).then(function () { learnItems = []; if (curScreen === 'learn') renderLearn(); else renderSettings(); }).catch(function () {});
+  }
+  function renderLearn() {
+    show('learn');
+    $('learnChk').checked = learnOn();
+    Array.prototype.forEach.call(document.querySelectorAll('#profileSeg [data-profile]'), function (b) { b.setAttribute('aria-pressed', b.dataset.profile === profile() ? 'true' : 'false'); });
+    $('learnBody').hidden = !learnOn();
+    loadLearn().then(function (items) {
+      learnItems = items;
+      var st = Learn.stats(items, profile()), rows = Learn.top(Learn.of(items, profile()), 200);
+      $('learnStats').innerHTML = st.total
+        ? '<b>' + profileLabel() + ':</b> ' + st.fixes + ' تصحيح' + (st.fixes === 1 ? '' : 'ات') + ' و ' + st.words + ' كلمة مؤكدة' + (st.last ? ' — آخر تعلّم ' + when(st.last) : '') + '.<br><small>كل هذه الكلمات تُعرض على القارئ مع الصفحة التالية بنفس الخط، والمؤكدة منها لا تُظلَّل بالأصفر مرة أخرى.</small>'
+        : 'لم يتعلم شيئًا بعد عن ' + profileLabel() + '. حوّل ورقة وصحّح الكلمات الصفراء أو أي كلمة خاطئة، ثم ستظهر هنا.';
+      $('learnList').innerHTML = rows.map(function (r) {
+        return '<div class="lrow" data-lid="' + escH(r.id) + '"><span>' + (r.kind === 'fix' ? '<s>' + escH(r.from) + '</s> ← <b>' + escH(r.to) + '</b>' : '<b>' + escH(r.from) + '</b> <small>مؤكدة</small>') + '<small> ×' + r.n + '</small></span><button class="iconbtn sm" type="button" aria-label="حذف" title="حذف هذه الكلمة">✕</button></div>';
+      }).join('');
+    }).catch(function () { $('learnStats').textContent = 'تعذر فتح بيانات التعلم على هذا الجهاز.'; });
+  }
+  if ($('learn')) {
+    $('learnChk').addEventListener('change', function () { setLearnOn(this.checked); $('learnBody').hidden = !this.checked; homeCards(); });
+    $('profileSeg').addEventListener('click', function (e) { var b = e.target.closest('[data-profile]'); if (!b) return; setProfile(b.dataset.profile); renderLearn(); homeCards(); });
+    $('learnList').addEventListener('click', function (e) {
+      var b = e.target.closest('button'), row = e.target.closest('[data-lid]'); if (!b || !row) return;
+      var id = row.dataset.lid;
+      queueLearn(function (items) { for (var i = items.length - 1; i >= 0; i--) if (items[i].id === id) items.splice(i, 1); return true; }).then(renderLearn);
+    });
+    $('deleteLearnBtn2').addEventListener('click', deleteLearn);
+  }
+  /* recently deleted files older than 30 days go for good; runs once per open */
+  Store.purgeOld().catch(function () {});
 
   /* ---------- download ---------- */
   function stamp() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -431,7 +742,7 @@
     var h = {}; ['hLine1', 'hLine2', 'hLine3', 'hSubject', 'hGrade', 'hTime', 'hTitle'].forEach(function (id) { h[id] = $(id) ? $(id).value : ''; });
     return { line1: h.hLine1, line2: h.hLine2, line3: h.hLine3, subject: h.hSubject, grade: h.hGrade, time: h.hTime, title: h.hTitle };
   }
-  function baseName() { if (!EXAM) { var t = tplOf(tplKey()); return (t ? t.label.replace(/[\\\/:*?"<>|]/g, '-') : 'مستند') + ' ' + stamp(); } var h = examHeader(); return ((h.grade || '') + ' ' + (h.title || 'Exam')).replace(/[\\\/:*?"<>|]/g, '-').trim(); }
+  function baseName() { var n = baseName0(); if (n) return n; if (!EXAM) { var t = tplOf(tplKey()); return (t ? t.label.replace(/[\\\/:*?"<>|]/g, '-') : 'مستند') + ' ' + stamp(); } var h = examHeader(); return ((h.grade || '') + ' ' + (h.title || 'Exam')).replace(/[\\\/:*?"<>|]/g, '-').trim(); }
   function leftNote() { var n = marks().length; return n ? ' ما زال فيه ' + n + ' كلمة صفراء غير مؤكدة، وستظهر بالأصفر في الملف.' : ''; }
 
   function nothingToExport() {
@@ -455,6 +766,7 @@
       }
       Engine.download(blob, baseName() + '.docx');
       $('savedNote').hidden = false; $('savedNote').textContent = 'تم حفظ ملف Word في «التنزيلات».' + leftNote();
+      exported();
     } catch (e) { $('savedNote').hidden = false; $('savedNote').textContent = 'تعذر حفظ الملف. حاول مرة أخرى.'; }
     finally { btn.disabled = false; }
   });
@@ -489,8 +801,11 @@
       try { window.print(); } catch (e) {}
       document.title = title; if (after) after();
       $('savedNote').hidden = false; $('savedNote').textContent = 'في نافذة الطباعة اختر «حفظ كملف PDF» (Save as PDF).' + leftNote();
+      exported();
     }, 60);
   }
+  function exported() { if (curDoc) { curDoc.status = 'exported'; curDoc.exportedAt = Date.now(); } saveDraft(true); }
+  function baseName0() { return curDoc && curDoc.name ? curDoc.name.replace(/[\\\/:*?"<>|]/g, '-') : ''; }
 
   /* legal: edited sheet → blocks (paragraphs and tables) */
   function walkRuns(node) {
@@ -558,7 +873,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '12';
+  var APP_VER = '13';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -603,7 +918,8 @@
   /* iPhone / iPad Safari has no install prompt: show the two taps instead */
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream && !standalone()) $('iosHint').hidden = false;
 
-  window.__test = { finish: finish, toResult: toResult, setResults: function (r) { results = r; }, show: show, sheetToParas: sheetToParas, domBlocks: domBlocks, results: function () { return results; } };
+  window.__test = { finish: finish, toResult: toResult, setResults: function (r) { results = r; }, show: show, sheetToParas: sheetToParas, domBlocks: domBlocks, results: function () { return results; },
+    doc: function () { return curDoc; }, save: function () { return saveDraft(); }, saved: function () { return saveChain.then(function () { return learnChain; }); }, undo: undo, redo: redo, hist: function () { return { n: hist.length, i: hi }; }, nav: function () { return { cur: curScreen, stack: nav.slice() }; } };
 
   /* ---------- exam header fields (remembered on this device) ---------- */
   if (EXAM) ['hLine1', 'hLine2', 'hLine3', 'hSubject', 'hGrade', 'hTime', 'hTitle'].forEach(function (id) {
