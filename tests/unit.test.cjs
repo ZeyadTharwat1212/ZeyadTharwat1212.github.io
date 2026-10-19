@@ -43,6 +43,12 @@ test('guard keeps a number marked when either reader doubted it; a confirmed wor
   assert.strictEqual(Verify.guard('رقم ⟦55⟧ لسنة', 'رقم 55 لسنة', 'رقم 55 لسنة').text, 'رقم ⟦55⟧ لسنة', 'no double brackets');
 });
 
+test('house digits: Western digits and day/month/year, as the office types them', () => {
+  assert.strictEqual(Verify.houseDigits('المؤرخ ١٠/١/٢٠٢٠ م ومبلغ ٢٥٠٠٠٠ ج'), 'المؤرخ 10/1/2020 م ومبلغ 250000 ج');
+  assert.strictEqual(Verify.houseDigits('بتاريخ 2020/1/10'), 'بتاريخ 10/1/2020');
+  assert.strictEqual(Verify.houseDigits('[FIG] <svg>٣</svg>'), '[FIG] <svg>٣</svg>');
+});
+
 test('error rates', () => {
   assert.strictEqual(Verify.wer(A, A), 0);
   assert.ok(Math.abs(Verify.wer(A, B) - 2 / 13) < 1e-9);

@@ -157,6 +157,18 @@ var Verify = (function () {
     return { text: out, changed: changed, marked: marked };
   }
 
+  /* house style of the office (measured on its 1,740 documents): Western digits always (114,386 vs 157), dates as
+     day/month/year (4,836 vs 1). Applied after reading, so the hand's ٠-٩ never reach the file. */
+  function houseDigits(text) {
+    return String(text || '').split('\n').map(function (line) {
+      if (isFig(line)) return line;
+      var t = west(line);
+      t = t.replace(/\b(\d{4})\s*\/\s*(\d{1,2})\s*\/\s*(\d{1,2})\b/g, '$3/$2/$1');          // 2020/1/10 → 10/1/2020
+      t = t.replace(/\b(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})\b/g, '$1/$2/$3');          // spaces inside a date
+      return t;
+    }).join('\n');
+  }
+
   function stripMarkup(text) {
     return String(text || '').replace(/\r/g, '').split('\n').filter(function (l) { return !isFig(l); }).map(function (line) {
       return segments(line).filter(function (s) { return s.word; }).map(function (s) { return s.t.replace(/[⟦⟧]/g, ''); }).join(' ');
@@ -190,6 +202,6 @@ var Verify = (function () {
   }
   function doubtRecall(ref, hypMarked) { var a = audit(ref, hypMarked); return a.wrong ? a.caught / a.wrong : 1; }
 
-  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers };
+  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers, houseDigits: houseDigits, west: west };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Verify;

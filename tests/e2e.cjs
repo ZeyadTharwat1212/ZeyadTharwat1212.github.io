@@ -93,12 +93,11 @@ async function runMode(browser, base, file, answers, check, key) {
     assert.strictEqual(await page.locator('#pagesBox p.li').count(), 1);
     assert.ok(await page.locator('#doubtBar').isVisible());
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'legal-review.png'), fullPage: true });
-    /* a digit typed inside an Arabic line becomes an Arabic-Indic digit; next to Latin letters it stays ASCII */
+    /* house style in the editor: digits are Western; an Arabic-Indic keystroke is converted */
     await page.evaluate(() => { const p = document.querySelector('#pagesBox .sheet p.sub'); const r = document.createRange(); r.selectNodeContents(p); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); p.focus(); });
-    await page.keyboard.type(' 5');
-    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /٥$/, 'Arabic-Indic digit after Arabic text');
-    await page.keyboard.type(' ab7');
-    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /ab7$/, 'ASCII digit after Latin letters');
+    await page.keyboard.type(' 5٧');
+    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /57$/, 'Western digits in the editor');
+    assert.ok(!/[٠-٩]/.test(await page.textContent('#pagesBox .sheet')), 'no Arabic-Indic digits anywhere (house style)');
     await page.keyboard.press('Shift+Home'); await page.keyboard.press('End');
     await page.click('#nextDoubt');
     assert.strictEqual(await page.locator('#pagesBox mark.cur').count(), 1);
