@@ -422,6 +422,6 @@ var Office = (function () {
     return { html: paras.map(function (p) { return p.html; }).join(''), pageCss: page };
   }
 
-  return { spec: spec, labels: labels, detect: detect, lawyerFrom: lawyerFrom, partyName: partyName, build: build, printHtml: printHtml, roleOf: roleOf, norm: norm, _plan: plan, _rprSet: rprSet };
+  return { spec: spec, labels: labels, detect: detect, lawyerFrom: lawyerFrom, partyName: partyName, client: client, build: build, printHtml: printHtml, roleOf: roleOf, norm: norm, _plan: plan, _rprSet: rprSet };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Office;

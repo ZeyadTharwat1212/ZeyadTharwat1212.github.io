@@ -1256,12 +1256,13 @@
     return true;
   }
   $('wordBtn').addEventListener('click', function () { if (nothingToExport()) return; withKind(doWord); });
-  /* the actual .docx file goes to the system share sheet (Web Share API with files); WhatsApp is one of its
-     targets on phones. Without file sharing (desktop browsers, older phones) the button stays hidden. */
-  var shareFile = null, shareKey = '';
-  function canShareFiles() {
-    try { var f = new File(['x'], 'x.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }); return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [f] })); } catch (e) { return false; }
-  }
+  /* «📤 مشاركة الملف»: the system share sheet (WhatsApp is one of its targets on phones) gets the actual file.
+     Browsers only accept certain file types there: iOS Safari takes the .docx; Chrome's safelist has PDF but
+     not Office files, so there the reviewed text is drawn onto A4 pages (Raster) and shared as a PDF. Where no
+     file can be shared the Word file is downloaded and the person is told how to send it. */
+  var shareFile = null, shareKey = '', shareKind = '';
+  function canShareFile(f) { try { return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [f] })); } catch (e) { return false; } }
+  function shareAvailable() { return typeof navigator !== 'undefined' && typeof navigator.share === 'function'; }
   async function buildWordBlob() {
     marks().forEach(function (m) { m.classList.remove('cur'); });
     var zip;
@@ -1269,27 +1270,56 @@
     else { var blocks = []; sheets().forEach(function (s) { blocks = blocks.concat(domBlocks(s)); }); zip = ExamBuilder.build(JSZip, blocks, examHeader(), {}); }
     return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   }
+  /* the pages as pictures → PDF (office stamp and side column drawn when the chosen template has them) */
+  async function buildPdfBlob() {
+    marks().forEach(function (m) { m.classList.remove('cur'); });
+    try { if (document.fonts && document.fonts.load) await Promise.race([document.fonts.load('16px "Noto Naskh Arabic"'), new Promise(function (r) { setTimeout(r, 1500); })]); } catch (e) {}
+    var opts = { dir: EXAM ? 'ltr' : 'rtl', pageNumbers: !EXAM, arabicDigits: !EXAM };
+    var blocks;
+    if (!EXAM) {
+      blocks = allParas();
+      var t = tplOf(tplKey());
+      if (t) {
+        var L = lawyer(), c = Office.client(blocks), subj = blocks.filter(function (b) { return b.heading; }).slice(0, 1).map(function (b) { return b.runs.map(function (r) { return r.text; }).join(''); })[0] || t.label;
+        if (t.stamp && L.name) opts.stamp = ['مكتب', L.name, (L.title || 'المحامي').replace('المحامي', 'المحــامي') + (L.nakd ? ' بالنقض' : '')];
+        if (t.stamp) opts.side = ['الموضوع', subj, 'كطلب ' + c.who + ' وتحت ' + c.resp, '', 'وكيل ' + c.who, '', L.title || 'المحامي'];
+        opts.left = 16; opts.right = 14; opts.top = 18;
+      }
+    } else { blocks = []; sheets().forEach(function (s) { blocks = blocks.concat(domBlocks(s)); }); var h = examHeader(); if (h) blocks.unshift({ k: 'q', runs: [{ text: (h.title || '') + '   ' + (h.right || []).filter(Boolean).join('   ') }] }); }
+    var pages = await Raster.pages(blocks, opts);
+    return Raster.pdf(pages);
+  }
   async function doShare() {
     var btn = $('shareBtn'), note = $('savedNote');
     var sig = sheets().map(function (s) { return s.innerHTML; }).join('|') + '|' + tplKey() + '|' + baseName();
+    note.hidden = false; note.textContent = 'جارٍ تجهيز الملف للمشاركة…'; btn.disabled = true;
     try {
       if (!shareFile || shareKey !== sig) {
-        btn.disabled = true;
-        var blob = await buildWordBlob();
-        shareFile = new File([blob], baseName() + '.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }); shareKey = sig;
-        btn.disabled = false;
+        var docx = new File([await buildWordBlob()], baseName() + '.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        if (canShareFile(docx)) { shareFile = docx; shareKind = 'word'; }
+        else {
+          var pdf = new File([await buildPdfBlob()], baseName() + '.pdf', { type: 'application/pdf' });
+          if (canShareFile(pdf)) { shareFile = pdf; shareKind = 'pdf'; } else { shareFile = docx; shareKind = 'none'; }
+        }
+        shareKey = sig;
+      }
+      btn.disabled = false;
+      if (shareKind === 'none') {
+        Engine.download(shareFile, shareFile.name);
+        note.textContent = 'هذا المتصفح لا يشارك الملفات مباشرة. تم حفظ ملف Word في «التنزيلات»: افتح واتساب ← مرفق 📎 ← مستند ← اختره.'; exported(); return;
       }
       await navigator.share({ files: [shareFile], title: baseName() });
-      note.hidden = false; note.textContent = 'اختر واتساب (أو أي تطبيق) من القائمة التي ظهرت، ثم الشخص الذي تريد إرسال الملف له.';
+      note.textContent = (shareKind === 'pdf' ? 'الملف المشارَك PDF (المتصفح لا يشارك ملفات Word مباشرة؛ ملف Word بالضغط على «تحميل Word»). ' : '') + 'اختر واتساب (أو أي تطبيق) من القائمة التي ظهرت، ثم الشخص الذي تريد إرسال الملف له.';
       exported();
     } catch (e) {
       btn.disabled = false;
-      if (e && e.name === 'AbortError') return;                                   // the person closed the share sheet
-      note.hidden = false; note.textContent = e && e.name === 'NotAllowedError' ? 'الملف جاهز — اضغط «مشاركة الملف» مرة أخرى لفتح قائمة المشاركة.' : 'تعذرت المشاركة من هذا المتصفح. حمّل ملف Word ثم أرسله من واتساب (مرفق ← مستند).';
+      if (e && e.name === 'AbortError') { note.textContent = 'أُغلقت قائمة المشاركة.'; return; }
+      note.textContent = e && e.name === 'NotAllowedError' ? 'الملف جاهز — اضغط «مشاركة الملف» مرة أخرى لفتح قائمة المشاركة.' : 'تعذرت المشاركة (' + ((e && ((e.name || e.code) + (e.message ? ': ' + String(e.message).slice(0, 80) : ''))) || 'خطأ') + '). حمّل ملف Word ثم أرسله من واتساب (مرفق ← مستند).';
     }
+    note.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
   if ($('shareBtn')) {
-    $('shareBtn').hidden = !canShareFiles();
+    $('shareBtn').hidden = !shareAvailable();
     $('shareBtn').addEventListener('click', function () { if (nothingToExport()) return; withKind(doShare); });
   }
   $('pdfBtn').addEventListener('click', function () { if (nothingToExport()) return; withKind(doPdf); });
@@ -1414,7 +1444,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '19';
+  var APP_VER = '20';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

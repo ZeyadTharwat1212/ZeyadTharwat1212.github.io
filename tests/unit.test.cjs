@@ -402,3 +402,18 @@ test('speech: chunk transcripts merge without the overlap, in order; commands tu
   assert.deepStrictEqual(Speech.chunkPlan(120, new Float32Array(10), 100), [[0, 120]], 'short audio stays whole');
   assert.strictEqual(Speech.fmtTime(65), '١:٠٥');
 });
+
+test('raster: a PDF of JPEG pages has a valid structure (header, pages, xref, trailer)', () => {
+  const Raster = require('../kateb/raster.js');
+  const fake = new Uint8Array([0xFF, 0xD8, 0xFF, 0xD9]);
+  const pdf = Buffer.from(Raster.pdfFromJpegs([{ data: fake, w: 1240, h: 1754 }, { data: fake, w: 1240, h: 1754 }]));
+  const txt = pdf.toString('latin1');
+  assert.ok(txt.startsWith('%PDF-1.4'));
+  assert.ok(txt.includes('/Type /Pages /Kids [3 0 R 6 0 R] /Count 2'));
+  assert.ok(txt.includes('/Filter /DCTDecode /Length 4'));
+  const xref = +txt.match(/startxref\n(\d+)/)[1];
+  assert.strictEqual(txt.slice(xref, xref + 4), 'xref');
+  assert.ok(txt.includes('0 9\n0000000000 65535 f'), 'nine entries: the free one, catalog, pages, 2 × (page, content, image)');
+  const off = +txt.match(/\n(\d{10}) 00000 n \n/)[1]; assert.strictEqual(txt.slice(off, off + 7), '1 0 obj');
+  assert.ok(txt.trimEnd().endsWith('%%EOF'));
+});
