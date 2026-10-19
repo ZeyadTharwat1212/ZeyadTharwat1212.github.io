@@ -87,7 +87,7 @@ async function runMode(browser, base, file, answers, check, key) {
     assert.deepStrictEqual(calls.sort(), ['judge', 'numbers', 'read', 'read2'], 'both reads + one judge + the numbers pass, no separate rotation call');
     assert.strictEqual(await page.locator('.pg .orig img').count(), 1, 'original photo beside the text');
     const marked = await page.locator('#pagesBox mark').allTextContents();
-    assert.deepStrictEqual(marked.sort(), ['1234', 'محمد'].sort(), 'disputed name + number are marked; a word the judge confirmed is not');
+    assert.deepStrictEqual(marked.sort(), ['١٢٣٤', 'محمد'].sort(), 'disputed name + number are marked (shown with Arabic digits); a word the judge confirmed is not');
     assert.strictEqual(await page.locator('#pagesBox table td').count(), 4);
     assert.strictEqual(await page.locator('#pagesBox p.sub').count(), 1);
     assert.strictEqual(await page.locator('#pagesBox p.li').count(), 1);
@@ -96,8 +96,8 @@ async function runMode(browser, base, file, answers, check, key) {
     /* house style in the editor: digits are Western; an Arabic-Indic keystroke is converted */
     await page.evaluate(() => { const p = document.querySelector('#pagesBox .sheet p.sub'); const r = document.createRange(); r.selectNodeContents(p); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); p.focus(); });
     await page.keyboard.type(' 5٧');
-    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /57$/, 'Western digits in the editor');
-    assert.ok(!/[٠-٩]/.test(await page.textContent('#pagesBox .sheet')), 'no Arabic-Indic digits anywhere (house style)');
+    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /٥٧$/, 'the screen shows ٠-٩ like the office Word display');
+    assert.ok(!/[0-9]/.test(await page.textContent('#pagesBox .sheet')), 'no Western digits on screen');
     await page.keyboard.press('Shift+Home'); await page.keyboard.press('End');
     await page.click('#nextDoubt');
     assert.strictEqual(await page.locator('#pagesBox mark.cur').count(), 1);
@@ -109,7 +109,8 @@ async function runMode(browser, base, file, answers, check, key) {
     assert.match(dl.suggestedFilename(), /\.docx$|^download$/);
     const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
     const doc = await zip.file('word/document.xml').async('string');
-    for (const w of ['مذكرة بدفاع', 'أحمد محمد علي', '<w:tbl>', '<w:highlight w:val="yellow"/>']) assert.ok(doc.includes(w), 'Word has ' + w);
+    for (const w of ['مذكرة بدفاع', 'أحمد محمد علي', '<w:tbl>', '<w:highlight w:val="yellow"/>', '1234', '57']) assert.ok(doc.includes(w), 'Word has ' + w);
+    assert.ok(!/[٠-٩]/.test(doc), 'the Word file stores Western digits like the office files');
     if (SHOTS) fs.writeFileSync(path.join(SHOTS, 'legal.docx'), fs.readFileSync(await dl.path()));
     await page.click('#pdfBtn'); await page.waitForFunction(() => window.__printed === 1);
     assert.ok((await page.innerHTML('#printRoot')).includes('مذكرة بدفاع'));
@@ -195,7 +196,7 @@ async function runMode(browser, base, file, answers, check, key) {
   }, 'sk-ant-test'));
   await step('Claude: the numbers pass completes a truncated year and flags a number it did not see', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ.replace('7/1/2026', '7/1/202'), B: SIHHA_READ.replace('7/1/2026', '7/1/202'), N: '2026 | الموافق\n7/1/2026 | بيع مؤرخ في' }, async (page) => {
     const txt = await page.textContent('#pagesBox .sheet');
-    assert.ok(txt.includes('7/1/2026'), 'year completed from the numbers pass: ' + txt);
+    assert.ok(txt.includes('٧/١/٢٠٢٦'), 'year completed from the numbers pass (shown with Arabic digits): ' + txt);
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'the completed number is yellow for the eye');
   }, 'sk-ant-test'));
   await step('Claude: a sideways page is rotated from the ROT line and read again', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ, ROT: 90 }, async (page, calls) => {

@@ -175,9 +175,10 @@
 
   /* ---------- results → review ---------- */
   function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function shown(t) { return EXAM ? t : Verify.arabicDigits(t); }      // the office's papers show ٠-٩ (Word: Numeral = Context)
   function runsHtml(runs) {
     return (runs || []).map(function (r) {
-      var h = r.frac ? '<span class="frac" contenteditable="false" data-n="' + escH(r.frac[0]) + '" data-d="' + escH(r.frac[1]) + '"><span>' + escH(r.frac[0]) + '</span><span>' + escH(r.frac[1]) + '</span></span>' : escH(r.text);
+      var h = r.frac ? '<span class="frac" contenteditable="false" data-n="' + escH(r.frac[0]) + '" data-d="' + escH(r.frac[1]) + '"><span>' + escH(r.frac[0]) + '</span><span>' + escH(r.frac[1]) + '</span></span>' : escH(shown(r.text));
       if (r.u) h = '<u>' + h + '</u>'; if (r.b) h = '<b>' + h + '</b>'; if (r.hl) h = '<mark>' + h + '</mark>'; return h;
     }).join('');
   }
@@ -304,11 +305,11 @@
     var o = e.target.closest && e.target.closest('.orig'); if (o) { $('zoomImg').src = o.querySelector('img').src; $('zoom').hidden = false; $('zoomClose').focus(); }
   });
   $('pagesBox').addEventListener('input', function () { refreshDoubts(); queueSave(); });
-  /* house style: numbers in the office's papers are always Western digits, so a ٠-٩ keystroke becomes 0-9 */
+  /* on screen the paper shows ٠-٩ like the office's Word does; the file keeps 0-9 inside (walkRuns converts) */
   if (!EXAM) $('pagesBox').addEventListener('beforeinput', function (e) {
-    if (e.inputType !== 'insertText' || !e.data || !/^[٠-٩۰-۹]$/.test(e.data)) return;
+    if (e.inputType !== 'insertText' || !e.data || !/^[0-9۰-۹]$/.test(e.data)) return;
     e.preventDefault();
-    document.execCommand('insertText', false, Verify.west(e.data));
+    document.execCommand('insertText', false, Verify.arabicDigits(Verify.west(e.data)));
   });
   $('zoomClose').addEventListener('click', function () { $('zoom').hidden = true; });
   var zoomW = 100;
@@ -429,7 +430,7 @@
     var runs = [];
     (function walk(n, f) {
       n.childNodes.forEach(function (c) {
-        if (c.nodeType === 3) { if (c.nodeValue) runs.push({ text: c.nodeValue.replace(/\n/g, ' '), b: f.b, u: f.u, hl: f.hl }); return; }
+        if (c.nodeType === 3) { if (c.nodeValue) runs.push({ text: (EXAM ? c.nodeValue : Verify.west(c.nodeValue)).replace(/\n/g, ' '), b: f.b, u: f.u, hl: f.hl }); return; }
         if (c.nodeType !== 1 || c.tagName === 'BR') return;
         if (c.classList.contains('frac')) { runs.push({ frac: [c.dataset.n, c.dataset.d], text: c.dataset.n + '/' + c.dataset.d, b: f.b, u: f.u, hl: f.hl }); return; }
         var g = { b: f.b || c.tagName === 'B' || c.tagName === 'STRONG', u: f.u || c.tagName === 'U', hl: f.hl || c.tagName === 'MARK' };
