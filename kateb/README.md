@@ -1,6 +1,7 @@
 # Al-Kateb — handwriting → Word / PDF
 
-Static pages on GitHub Pages; no server, nothing paid. Each person's free Gemini key is locked in their link (setup.html).
+Static pages on GitHub Pages; no server. The reading key is locked in each person's link (setup.html): a Claude key
+(`sk-ant-…`, paid, console.anthropic.com) or a Gemini key (free tier). The engine picks the provider from the key.
 
 | Page | For | Output |
 |---|---|---|
@@ -13,6 +14,7 @@ Both pages are thin shells over the shared code in this folder:
 |---|---|
 | `engine.js` | key unlock (AES-GCM), Gemini calls with model fallback and rate-limit waits, photo/PDF → page images, rotation |
 | `verify.js` | compares two readings word by word, marks every word they did not agree on (`guard`), error rates for the tests |
+| `bank.js` + `bank/*.json` | formula bank: the fixed wording of each paper type (from the office's files + published formulas, names/numbers as placeholders); feeds the judge prompt and `snap()` fixes doubtful words that sit inside a known formula |
 | `docx.js` | legal Word builder: titles, side headings, numbered items, tables, bold/underline, yellow doubts, page numbers |
 | `exam.js` | exam Word builder |
 | `app.js` | screens, the reading pipeline, the review screen, Word/PDF export, saved draft |
@@ -38,16 +40,25 @@ To rebuild after changing the chosen originals (kept outside the repo):
     python tests/tools/build_templates.py <folder with sihha.docx, sale.docx, …> kateb/templates
 
 ## How a page is read
-1. Rotation check, then the page is sent whole + as 2–3 sharper strips.
-2. **Read 1** and **read 2** are made independently (different instructions and temperature).
-3. If they agree word for word → done. If not → a **judge** pass looks at the images for each disagreement.
-4. `Verify.guard` then marks yellow: any word neither read saw, any word either read was unsure of,
-   and every word the two reads disagreed on (legal mode; exam mode: numbers).
-5. **Review screen**: the photo sits beside the editable text; «التالي» jumps to the next yellow word and the
-   same height of the photo, «صحيح» confirms it. Edits are saved on the device (survive a refresh).
-6. Word is built in the browser; PDF uses the browser's print engine (perfect Arabic shaping) → «Save as PDF».
+1. The page is sent whole + as 2–3 sharper strips (1568px on Claude, 3072px on Gemini).
+2. **Read 1** and **read 2** run **at the same time** (Claude Sonnet 5.5, different instructions and temperature).
+   The first line of each reply says how far the page must be turned (ROT); a sideways page is turned and read again.
+3. The paper type is detected from the title (`Office.detect`) and its **formula bank** is loaded.
+4. If the reads agree word for word and nothing is doubtful → done. Otherwise a **judge** pass (Claude Opus 5.5, high
+   effort) sees the images, both reads, the formula bank of this paper type, and the earlier pages of the same paper
+   (names, case numbers, dates recur), and settles each disagreement from the ink.
+5. `Verify.guard` marks yellow any word neither read saw, any word a read doubted, and every word the reads
+   disagreed on (legal mode; exam mode: numbers). `Bank.snap` then un-marks doubtful words that sit inside a known
+   formula with matching neighbours (never names, numbers, dates or places).
+6. **Review screen**: the photo sits beside the editable text; «التالي» / «صحيح» walk the yellow words.
+7. Word is built in the browser (office template or plain); PDF uses the browser's print engine.
 
-If the second read fails (daily quota), the old single proofreading pass is used instead.
+On Gemini the same pipeline runs with the free models (slower; the second read falls back to one proofreading pass
+when the quota is gone).
+
+To rebuild the bank after adding office files or web formulas (kept outside the repo):
+
+    python tests/tools/build_bank.py <txt folder from the .doc files> <folder of .docx> <web formulas folder or -> kateb/bank
 
 ## Changing the code
 Bump `?v=N` on the script/style tags in both HTML pages and in `sw.js` (`CACHE` + `SHELL`) so phones load the new files. Then run the tests:

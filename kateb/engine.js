@@ -1,7 +1,9 @@
-/* Shared engine: unlock key, prepare images, call Gemini (free tier), helpers. No Claude at runtime. */
+/* Shared engine: unlock key, prepare images, call the reader (Claude when the key is sk-ant-…, else Gemini free tier), helpers. */
 var Engine = (function () {
   'use strict';
-  var API = 'https://generativelanguage.googleapis.com/v1beta';
+  var API = 'https://generativelanguage.googleapis.com/v1beta', CLAUDE_API = 'https://api.anthropic.com/v1/messages';
+  var CLAUDE_MODEL = 'claude-sonnet-5-5', CLAUDE_BEST = 'claude-opus-5-5', CLAUDE_FAST = 'claude-haiku-5-5';   // reads / judge / tiny checks
+  function provider(key) { return /^sk-ant-/.test(String(key || '')) ? 'claude' : 'gemini'; }
   var LS_KEY = 'kateb.apikey', LS_MODEL = 'kateb.model';
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -57,9 +59,44 @@ var Engine = (function () {
   }
   function blobToB64(blob) { return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { res(String(fr.result).split(',')[1]); }; fr.onerror = rej; fr.readAsDataURL(blob); }); }
 
+  /* Claude Messages API straight from the browser (the key is locked in the link, like the Gemini one).
+     opt.system goes in a cached system block (the formula bank), opt.effort low|medium|high, opt.fast → Haiku. */
+  async function generateClaude(key, prompt, blobs, opt) {
+    var content = [];
+    for (var i = 0; i < (blobs || []).length; i++) content.push({ type: 'image', source: { type: 'base64', media_type: blobs[i].type || 'image/jpeg', data: await blobToB64(blobs[i]) } });
+    content.push({ type: 'text', text: prompt });
+    var body = { model: opt.model || (opt.fast ? CLAUDE_FAST : opt.best ? CLAUDE_BEST : CLAUDE_MODEL), max_tokens: opt.maxTokens || 8192, messages: [{ role: 'user', content: content }],
+      output_config: { effort: opt.effort || 'medium' } };
+    if (opt.system) body.system = [{ type: 'text', text: opt.system, cache_control: { type: 'ephemeral' } }];
+    var lastErr = null;
+    for (var attempt = 0; attempt < 4; attempt++) {
+      var r;
+      try {
+        r = await fetch(CLAUDE_API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify(body) });
+      } catch (e) { lastErr = { code: 'network' }; await sleep(2500); continue; }
+      if (r.ok) {
+        var j = await r.json();
+        var text = (j.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text; }).join('');
+        if (j.stop_reason === 'refusal') throw { code: 'SAFETY' };
+        if (!text) { lastErr = { code: j.stop_reason || 'empty' }; break; }
+        return { text: text, model: j.model || body.model, truncated: j.stop_reason === 'max_tokens' };
+      }
+      var t = await r.text().catch(function () { return ''; });
+      if (r.status === 401 || (r.status === 400 && /api key|authentication/i.test(t))) throw { code: 'bad_key' };
+      if (r.status === 400 && /credit|billing|balance/i.test(t)) throw { code: 'credit' };
+      if (r.status === 429) { var ra = +(r.headers.get('retry-after') || 0) || 8; if (opt.onWait) opt.onWait(ra); await sleep(ra * 1000); lastErr = { code: 'rate' }; continue; }
+      if (r.status === 529 || r.status >= 500) { await sleep(3000 * (attempt + 1)); lastErr = { code: 'server' }; continue; }
+      if (r.status === 404 && body.model !== CLAUDE_MODEL) { body.model = CLAUDE_MODEL; continue; }
+      lastErr = { code: 'model_' + r.status }; break;
+    }
+    throw lastErr || { code: 'unknown' };
+  }
+
   /* one call with model fallback + waiting on rate limits. onWait(seconds) lets the page show "please wait". */
   async function generate(key, prompt, blobs, opt) {
     opt = opt || {};
+    if (provider(key) === 'claude') return generateClaude(key, prompt, blobs, opt);
+    if (opt.system) prompt = opt.system + '\n\n' + prompt;
     var parts = [{ text: prompt }];
     for (var i = 0; i < (blobs || []).length; i++) parts.push({ inline_data: { mime_type: blobs[i].type || 'image/jpeg', data: await blobToB64(blobs[i]) } });
     var body = JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: { temperature: opt.temperature == null ? 0.1 : opt.temperature, maxOutputTokens: opt.maxTokens || 16384 } });
@@ -128,20 +165,21 @@ var Engine = (function () {
   }
   function jpeg(c, q) { return new Promise(function (res) { c.toBlob(res, 'image/jpeg', q || 0.9); }); }
   /* whole page + overlapping strips so small handwriting stays sharp */
-  async function pageImages(c, maxBands) {
-    var list = [await jpeg(scaled(c, 3072), 0.9)], bands = c.height < c.width * 0.9 ? 2 : (maxBands || 3);
+  async function pageImages(c, maxBands, maxSide) {
+    maxSide = maxSide || 3072;
+    var list = [await jpeg(scaled(c, maxSide), 0.9)], bands = c.height < c.width * 0.9 ? 2 : (maxBands || 3);
     var ov = 0.07, h = c.height / bands;
     for (var i = 0; i < bands; i++) {
       var y0 = Math.max(0, Math.round(i * h - ov * c.height)), y1 = Math.min(c.height, Math.round((i + 1) * h + ov * c.height));
       var b = document.createElement('canvas'); b.width = c.width; b.height = y1 - y0;
       b.getContext('2d').drawImage(c, 0, y0, c.width, y1 - y0, 0, 0, c.width, y1 - y0);
-      list.push(await jpeg(scaled(b, 3072), 0.9));
+      list.push(await jpeg(scaled(b, maxSide), 0.9));
     }
     return { blobs: list, bands: bands };
   }
   async function detectRotation(key, c, onWait) {
     try {
-      var r = await generate(key, 'By how many degrees must this photo of a document page be rotated CLOCKWISE so the writing reads upright? Reply with only one number: 0, 90, 180 or 270.', [await jpeg(scaled(c, 1200), 0.85)], { maxTokens: 512, onWait: onWait });
+      var r = await generate(key, 'By how many degrees must this photo of a document page be rotated CLOCKWISE so the writing reads upright? Reply with only one number: 0, 90, 180 or 270.', [await jpeg(scaled(c, 1200), 0.85)], { maxTokens: 512, onWait: onWait, fast: true, effort: 'low' });
       var m = r.text.match(/\b(0|90|180|270)\b/); return m ? +m[1] : 0;
     } catch (e) { if (e && (e.code === 'bad_key')) throw e; return 0; }
   }
@@ -154,6 +192,7 @@ var Engine = (function () {
 
   var ERR = {
     bad_key: 'مفتاح الذكاء الاصطناعي لا يعمل. كلّم زياد.',
+    credit: 'رصيد خدمة القراءة انتهى. كلّم زياد لشحن الرصيد.',
     quota_day: 'انتهى عدد الصفحات المسموح به اليوم. جرّب مرة أخرى بكرة.',
     rate: 'الخدمة مشغولة. اضغط «حاول مرة أخرى» بعد دقيقة.',
     network: 'لا يوجد إنترنت. تأكد من الاتصال واضغط «حاول مرة أخرى».',
@@ -165,7 +204,7 @@ var Engine = (function () {
   };
   function errText(e) { return (e && ERR[e.code]) || 'حصلت مشكلة. اضغط «حاول مرة أخرى».'; }
 
-  return { lock: lock, unlock: unlock, blobFromHash: blobFromHash, savedKey: savedKey, saveKey: saveKey, forget: forget,
+  return { provider: provider, lock: lock, unlock: unlock, blobFromHash: blobFromHash, savedKey: savedKey, saveKey: saveKey, forget: forget,
     listModels: listModels, rank: rank, generate: generate, fileToCanvases: fileToCanvases, scaled: scaled, rotated: rotated,
     pageImages: pageImages, detectRotation: detectRotation, clean: clean, download: download, errText: errText, lsGet: lsGet, lsSet: lsSet };
 })();

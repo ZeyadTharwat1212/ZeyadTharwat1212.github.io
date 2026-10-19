@@ -88,7 +88,7 @@ details.more summary{cursor:pointer;color:var(--muted);padding:6px 0}
 
 <section class="card">
   <form id="f" class="row">
-    <label class="field" style="font-size:18px">مفتاح Gemini (من aistudio.google.com/apikey)
+    <label class="field" style="font-size:18px">مفتاح القراءة: Claude (من console.anthropic.com، يبدأ بـ sk-ant-) أو Gemini (من aistudio.google.com/apikey)
       <input id="key" type="password" autocomplete="off" spellcheck="false" style="text-align:left">
     </label>
     <label class="field" style="font-size:18px">كلمة السر التي ستعطيها لأهلك (٦ حروف أو أرقام على الأقل)
@@ -118,184 +118,11 @@ details.more summary{cursor:pointer;color:var(--muted);padding:6px 0}
       <a class="btn" id="w2" target="_blank" rel="noopener">إرسال واتساب</a>
     </div>
     <p class="small">ابعت كلمة السر لهم في رسالة منفصلة. أول مرة فقط سيكتبونها، وبعد كده الرابط يفتح مباشرة على نفس الجهاز.</p>
-    <p class="small">لو حد غريب أخد الرابط وكلمة السر، اعمل مفتاح جديد من Google واحذف القديم، ثم اعمل روابط جديدة من هنا.</p>
+    <p class="small">لو حد غريب أخد الرابط وكلمة السر، اعمل مفتاح جديد واحذف القديم، ثم اعمل روابط جديدة من هنا. مفتاح Claude مدفوع: راقب الرصيد من console.anthropic.com.</p>
   </div>
 </section>
 </main>
-<script>
-/* Shared engine: unlock key, prepare images, call Gemini (free tier), helpers. No Claude at runtime. */
-var Engine = (function () {
-  'use strict';
-  var API = 'https://generativelanguage.googleapis.com/v1beta';
-  var LS_KEY = 'kateb.apikey', LS_MODEL = 'kateb.model';
-
-  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
-
-  /* ---------- password lock: key encrypted with AES-GCM, key from PBKDF2(password) ---------- */
-  function b64u(bytes) { var s = ''; bytes = new Uint8Array(bytes); for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
-  function unb64u(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
-  async function derive(password, salt) {
-    var base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
-    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 310000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-  }
-  async function lock(apiKey, password) {
-    var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-    var ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, await derive(password, salt), new TextEncoder().encode(apiKey));
-    var all = new Uint8Array(28 + ct.byteLength); all.set(salt, 0); all.set(iv, 16); all.set(new Uint8Array(ct), 28);
-    return b64u(all);
-  }
-  async function unlock(blob, password) {
-    var all = unb64u(blob), salt = all.slice(0, 16), iv = all.slice(16, 28), ct = all.slice(28);
-    var pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, await derive(password, salt), ct);
-    return new TextDecoder().decode(pt);
-  }
-  function blobFromHash() { var m = (location.hash || '').match(/k=([A-Za-z0-9_-]+)/); return m ? m[1] : null; }
-  function savedKey() { return lsGet(LS_KEY); }
-  function saveKey(k) { lsSet(LS_KEY, k); }
-  function forget() { lsDel(LS_KEY); lsDel(LS_MODEL); }
-
-  /* ---------- Gemini ---------- */
-  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  async function listModels(key) {
-    var r = await fetch(API + '/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
-    if (!r.ok) { var e = new Error('models ' + r.status); e.status = r.status; e.body = await r.text().catch(function () { return ''; }); throw e; }
-    var j = await r.json();
-    return (j.models || []).filter(function (m) { return (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0; }).map(function (m) { return m.name.replace(/^models\//, ''); });
-  }
-  /* best first: newest version; pro before flash; full before lite; stable before preview/exp */
-  function rank(models) {
-    var bad = /(tts|image|imagen|embed|live|audio|aqa|robotics|computer|native|veo|learnlm|nano|lite|gemma|thinking-exp)/i;
-    var c = models.filter(function (n) { return /^gemini-/.test(n) && !bad.test(n); });
-    function ver(n) { var m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; }
-    function score(n) { return ver(n) * 100 + (/pro/.test(n) ? 20 : /flash/.test(n) ? 10 : 0) - (/(preview|exp)/.test(n) ? 5 : 0) - (/-\d{3,}$/.test(n) ? 1 : 0); }
-    c.sort(function (a, b) { return score(b) - score(a); });
-    var flashFirst = c.filter(function (n) { return /flash/.test(n); }), pros = c.filter(function (n) { return /pro/.test(n); });
-    /* try the best pro first (best reading), then the best flash models as the reliable free fallback */
-    var order = [];
-    if (pros[0]) order.push(pros[0]);
-    flashFirst.slice(0, 3).forEach(function (n) { if (order.indexOf(n) < 0) order.push(n); });
-    c.forEach(function (n) { if (order.indexOf(n) < 0 && order.length < 6) order.push(n); });
-    if (!order.length) order = ['gemini-2.5-flash'];
-    return order;
-  }
-  function blobToB64(blob) { return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { res(String(fr.result).split(',')[1]); }; fr.onerror = rej; fr.readAsDataURL(blob); }); }
-
-  /* one call with model fallback + waiting on rate limits. onWait(seconds) lets the page show "please wait". */
-  async function generate(key, prompt, blobs, opt) {
-    opt = opt || {};
-    var parts = [{ text: prompt }];
-    for (var i = 0; i < (blobs || []).length; i++) parts.push({ inline_data: { mime_type: blobs[i].type || 'image/jpeg', data: await blobToB64(blobs[i]) } });
-    var body = JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: { temperature: opt.temperature == null ? 0.1 : opt.temperature, maxOutputTokens: opt.maxTokens || 16384 } });
-    var models = opt.models || JSON.parse(lsGet(LS_MODEL) || 'null');
-    if (!models) { try { models = rank(await listModels(key)); } catch (e) { if (e && (e.status === 400 || e.status === 403)) throw { code: 'bad_key' }; throw { code: e && e.status ? 'server' : 'network' }; } }
-    var lastErr = null;
-    for (var mi = 0; mi < models.length; mi++) {
-      var model = models[mi];
-      for (var attempt = 0; attempt < 4; attempt++) {
-        var r;
-        try { r = await fetch(API + '/models/' + model + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: body }); }
-        catch (e) { lastErr = { code: 'network' }; await sleep(3000); continue; }
-        if (r.ok) {
-          var j = await r.json(), c = (j.candidates || [])[0];
-          var text = c && c.content && c.content.parts ? c.content.parts.filter(function (p) { return !p.thought && p.text; }).map(function (p) { return p.text; }).join('') : '';
-          if (!text) { lastErr = { code: (c && c.finishReason) || 'empty' }; break; }
-          /* remember a working order so later calls start with this model */
-          if (!opt.models) lsSet(LS_MODEL, JSON.stringify([model].concat(models.filter(function (m) { return m !== model; }))));
-          return { text: text, model: model, truncated: c.finishReason === 'MAX_TOKENS' };
-        }
-        var t = await r.text().catch(function () { return ''; });
-        if (r.status === 400 && /API key not valid|API_KEY_INVALID/i.test(t)) throw { code: 'bad_key' };
-        if (r.status === 403 && /PERMISSION_DENIED|API_KEY/i.test(t) && !/model/i.test(t)) throw { code: 'bad_key' };
-        if (r.status === 429) {
-          var daily = /PerDay|per day|daily/i.test(t);
-          if (daily) { lastErr = { code: 'quota_day' }; break; }        // try next model
-          var m = t.match(/"retryDelay":\s*"(\d+)/), wait = m ? Math.min(65, +m[1] + 2) : 25;
-          if (opt.onWait) opt.onWait(wait);
-          await sleep(wait * 1000); lastErr = { code: 'rate' }; continue;
-        }
-        if (r.status >= 500) { await sleep(4000 * (attempt + 1)); lastErr = { code: 'server' }; continue; }
-        lastErr = { code: 'model_' + r.status }; break;                 // 404/403 for this model: next model
-      }
-    }
-    throw lastErr || { code: 'unknown' };
-  }
-
-  /* ---------- images ---------- */
-  function canvasOf(src) { var c = document.createElement('canvas'); c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0); return c; }
-  async function fileToCanvases(f) {
-    if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
-      var pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise, out = [];
-      for (var n = 1; n <= pdf.numPages; n++) {
-        var pg = await pdf.getPage(n), v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(4, 3000 / Math.max(v1.width, v1.height)) });
-        var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
-        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
-        await pg.render({ canvasContext: x, viewport: vp }).promise; out.push(c);
-      }
-      return out;
-    }
-    if (/\.(heic|heif)$/i.test(f.name)) throw { code: 'heic' };
-    var bmp;
-    try { bmp = await createImageBitmap(f, { imageOrientation: 'from-image' }); }
-    catch (e) { bmp = await new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej({ code: 'badimg' }); }; im.src = URL.createObjectURL(f); }); }
-    return [canvasOf(bmp)];
-  }
-  function scaled(c, maxSide) {
-    var k = Math.min(1, maxSide / Math.max(c.width, c.height)); if (k === 1) return c;
-    var n = document.createElement('canvas'); n.width = Math.round(c.width * k); n.height = Math.round(c.height * k);
-    n.getContext('2d').drawImage(c, 0, 0, n.width, n.height); return n;
-  }
-  function rotated(base, deg) {
-    if (!deg) return base; var c = document.createElement('canvas'), s = deg % 180 !== 0;
-    c.width = s ? base.height : base.width; c.height = s ? base.width : base.height;
-    var x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(deg * Math.PI / 180); x.drawImage(base, -base.width / 2, -base.height / 2); return c;
-  }
-  function jpeg(c, q) { return new Promise(function (res) { c.toBlob(res, 'image/jpeg', q || 0.9); }); }
-  /* whole page + overlapping strips so small handwriting stays sharp */
-  async function pageImages(c, maxBands) {
-    var list = [await jpeg(scaled(c, 3072), 0.9)], bands = c.height < c.width * 0.9 ? 2 : (maxBands || 3);
-    var ov = 0.07, h = c.height / bands;
-    for (var i = 0; i < bands; i++) {
-      var y0 = Math.max(0, Math.round(i * h - ov * c.height)), y1 = Math.min(c.height, Math.round((i + 1) * h + ov * c.height));
-      var b = document.createElement('canvas'); b.width = c.width; b.height = y1 - y0;
-      b.getContext('2d').drawImage(c, 0, y0, c.width, y1 - y0, 0, 0, c.width, y1 - y0);
-      list.push(await jpeg(scaled(b, 3072), 0.9));
-    }
-    return { blobs: list, bands: bands };
-  }
-  async function detectRotation(key, c, onWait) {
-    try {
-      var r = await generate(key, 'By how many degrees must this photo of a document page be rotated CLOCKWISE so the writing reads upright? Reply with only one number: 0, 90, 180 or 270.', [await jpeg(scaled(c, 1200), 0.85)], { maxTokens: 512, onWait: onWait });
-      var m = r.text.match(/\b(0|90|180|270)\b/); return m ? +m[1] : 0;
-    } catch (e) { if (e && (e.code === 'bad_key')) throw e; return 0; }
-  }
-  function clean(t) { return String(t || '').replace(/^\s*```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim(); }
-
-  function download(blob, name) {
-    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-  }
-
-  var ERR = {
-    bad_key: 'مفتاح الذكاء الاصطناعي لا يعمل. كلّم زياد.',
-    quota_day: 'انتهى عدد الصفحات المسموح به اليوم. جرّب مرة أخرى بكرة.',
-    rate: 'الخدمة مشغولة. اضغط «حاول مرة أخرى» بعد دقيقة.',
-    network: 'لا يوجد إنترنت. تأكد من الاتصال واضغط «حاول مرة أخرى».',
-    server: 'الخدمة متوقفة مؤقتاً. حاول بعد قليل.',
-    heic: 'نوع الصورة غير مدعوم. أرسل الصورة لنفسك على واتساب ثم اخترها من جديد.',
-    badimg: 'تعذر فتح الصورة. جرّب صورة أخرى.',
-    SAFETY: 'تعذرت قراءة هذه الصفحة. جرّب صورة أخرى.',
-    RECITATION: 'تعذرت قراءة هذه الصفحة. جرّب صورة أخرى.'
-  };
-  function errText(e) { return (e && ERR[e.code]) || 'حصلت مشكلة. اضغط «حاول مرة أخرى».'; }
-
-  return { lock: lock, unlock: unlock, blobFromHash: blobFromHash, savedKey: savedKey, saveKey: saveKey, forget: forget,
-    listModels: listModels, rank: rank, generate: generate, fileToCanvases: fileToCanvases, scaled: scaled, rotated: rotated,
-    pageImages: pageImages, detectRotation: detectRotation, clean: clean, download: download, errText: errText, lsGet: lsGet, lsSet: lsSet };
-})();
-
-</script>
+<script src="kateb/engine.js?v=5"></script>
 <script>
 (function(){
   var $ = function(id){ return document.getElementById(id); };
@@ -304,22 +131,24 @@ var Engine = (function () {
     e.preventDefault(); $('err').hidden = true; $('out').hidden = true;
     var key = $('key').value.trim(), p1 = $('pw1').value.trim(), p2 = $('pw2').value.trim();
     function bad(t){ $('err').textContent = t; $('err').hidden = false; }
-    if (!key) return bad('الصق مفتاح Gemini أولاً.');
+    if (!key) return bad('الصق المفتاح أولاً.');
     if (p1.length < 6) return bad('كلمة السر لازم تكون ٦ حروف أو أرقام على الأقل.');
     if (p1 !== p2) return bad('كلمتا السر غير متطابقتين.');
     $('go').disabled = true; $('go').textContent = 'جارٍ الاختبار…';
     try {
-      var models = Engine.rank(await Engine.listModels(key));
-      var r = await Engine.generate(key, 'Reply with the single word OK.', [], { models: models, maxTokens: 64 });
+      var claude = Engine.provider(key) === 'claude', r;
+      if (claude) r = await Engine.generate(key, 'Reply with the single word OK.', [], { maxTokens: 64, fast: true, effort: 'low' });
+      else { var models = Engine.rank(await Engine.listModels(key)); r = await Engine.generate(key, 'Reply with the single word OK.', [], { models: models, maxTokens: 64 }); }
       var blob = await Engine.lock(key, p1);
       var l1 = base + 'kateb.html#k=' + blob, l2 = base + 'hanan.html#k=' + blob;
       $('l1').textContent = l1; $('l2').textContent = l2;
       $('w1').href = 'https://wa.me/?text=' + encodeURIComponent('ده رابط برنامج كتابة الأوراق، افتحه واكتب كلمة السر اللي هبعتهالك:\n' + l1);
       $('w2').href = 'https://wa.me/?text=' + encodeURIComponent('ده رابط برنامج الامتحانات، افتحيه واكتبي كلمة السر اللي هبعتهالك:\n' + l2);
-      $('okText').textContent = 'المفتاح يعمل ✓ (أفضل نموذج متاح: ' + r.model + '). الروابط جاهزة:';
+      $('okText').textContent = 'المفتاح يعمل ✓ (' + (claude ? 'Claude: القراءة بـ Sonnet 5.5 والمراجعة بـ Opus 5.5' : 'Gemini: ' + r.model) + '). الروابط جاهزة:';
       $('out').hidden = false;
     } catch (err) {
-      bad(err && err.code === 'bad_key' ? 'المفتاح غير صحيح. انسخه من جديد من Google AI Studio.' :
+      bad(err && err.code === 'bad_key' ? 'المفتاح غير صحيح. انسخه من جديد.' :
+          err && err.code === 'credit' ? 'مفتاح Claude صحيح لكن لا يوجد رصيد. اشحن الرصيد من console.anthropic.com ثم أعد المحاولة.' :
           err && err.code === 'quota_day' ? 'المفتاح صحيح لكن الحد اليومي انتهى. جرّب بكرة.' :
           'تعذر الاختبار (' + ((err && (err.code || err.status)) || 'خطأ') + '). تأكد من الإنترنت وجرّب مرة أخرى.');
     } finally { $('go').disabled = false; $('go').textContent = 'اختبار المفتاح وعمل الروابط'; }

@@ -69,40 +69,65 @@
 
   function onWait(sec) { $('waitText').hidden = false; $('waitText').textContent = 'الخدمة مزدحمة، سننتظر ' + sec + ' ثانية ونكمل تلقائياً…'; }
 
-  /* one page: read twice independently, judge the differences, then mark what is still not agreed */
+  /* one page: both reads at once, rotation taken from the reads, then the judge with the formula bank of the
+     detected paper type, Verify.guard marks what the reads did not agree on, Bank.snap fixes doubtful words
+     that sit inside a known formula. */
+  var CLAUDE = Engine.provider(KEY) === 'claude';
+  function rotOf(t) { var m = /^\s*ROT:\s*(0|90|180|270)/.exec(t || ''); return m ? +m[1] : 0; }
+  function stripRot(t) { return String(t || '').replace(/^\s*ROT:\s*\d+\s*\n?/, ''); }
+  async function readTwice(imgs) {
+    var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, temperature: 0.1, effort: 'medium' });
+    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, temperature: 0.5, effort: 'medium' })
+      .then(function (r) { return r.truncated ? null : Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
+    var ra = await pa, b = await pb;
+    return { a: Engine.clean(ra.text), b: b };
+  }
+  /* the pages already read of the same paper: names, case numbers and dates must agree across pages */
+  function caseContext() {
+    var prev = results.map(function (r) { return r.text || ''; }).filter(Boolean);
+    if (!prev.length) return '';
+    var t = prev.join('\n----\n'); if (t.length > 6000) t = t.slice(-6000);
+    return "\n\nEARLIER PAGES OF THE SAME PAPER (already transcribed; the same people, case number, court, dates and amounts recur — an unclear name or number on this page that matches one here is read the same way):\n" + t;
+  }
+  var TYPE_LABEL = { sihha: 'دعوى صحة توقيع', reannounce: 'إعادة إعلان', announce: 'إعلان بأصل الصحيفة', warning: 'إنذار', sahifa: 'صحيفة دعوى / استئناف', inherit_announce: 'إعلان في مادة الوراثة', inherit_request: 'طلب وراثة', sale: 'عقد بيع', gift: 'عقد هبة', price: 'إقرار سعر', iqrar: 'إقرار', memo: 'مذكرة' };
   async function readPage(p, label, step) {
     step(0, 'جارٍ تجهيز ' + label + '…');
-    var deg = await Engine.detectRotation(KEY, p.base, onWait); p.canvas = Engine.rotated(p.base, deg);
-    var imgs = await Engine.pageImages(p.canvas, 3);
-    step(1, 'جارٍ قراءة ' + label + '…');
-    var a = Engine.clean((await Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, temperature: 0.1 })).text);
-    step(2, 'جارٍ قراءة ' + label + ' مرة ثانية للتأكد…');
-    var b = null;
-    try { var rb = await Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, temperature: 0.5 }); if (!rb.truncated) b = Engine.clean(rb.text); }
-    catch (e) { if (e && e.code === 'bad_key') throw e; }
-    step(3, 'جارٍ مراجعة ' + label + ' مع الأصل…');
+    var side = CLAUDE ? 1568 : 3072;                       // Claude reads at 1568px; bigger only slows the upload
+    p.canvas = p.base;
+    var imgs = await Engine.pageImages(p.canvas, 3, side);
+    step(1, 'جارٍ قراءة ' + label + ' (قراءتان معاً)…');
+    var pair = await readTwice(imgs);
+    var rot = rotOf(pair.a) || rotOf(pair.b);
+    if (rot) { p.canvas = Engine.rotated(p.base, rot); imgs = await Engine.pageImages(p.canvas, 3, side); pair = await readTwice(imgs); }
+    var a = stripRot(pair.a), b = pair.b ? stripRot(pair.b) : null;
+    step(2, 'جارٍ مراجعة ' + label + ' مع الأصل والصيغ المعتادة…');
+    var type = !EXAM && typeof Office !== 'undefined' ? Office.detect(a) : null;
+    var bank = type && typeof Bank !== 'undefined' ? await Bank.load(type) : null;
+    var system = (bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank)) : '') + caseContext();
+    system = system || undefined;
     var final = a, d = b ? Verify.disagreements(a, b) : null;
     try {
       if (b && !d.same) {
-        var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait });
+        var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, system: system, effort: 'high', best: true });
         var tj = Engine.clean(rj.text); if (tj.length > Math.min(a.length, b.length) * 0.6 && !rj.truncated) final = tj;
-      } else if (!b) {
-        /* second read failed (quota): fall back to one proofreading pass over the first read */
-        var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait });
+      } else if (!b || (bank && a.indexOf('⟦') >= 0)) {
+        /* one proofreading pass: second read failed, or both agree but doubts remain and the formulas may settle them */
+        var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait, system: system, effort: 'high', best: true });
         var tc = Engine.clean(rc.text); if (tc.length > a.length * 0.6 && !rc.truncated) final = tc;
       }
-    } catch (e) { if (e && e.code === 'bad_key') throw e; }
-    var g = Verify.guard(final, a, b || a, !EXAM);
-    var r = await toResult(g.text);
+    } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
+    var g = Verify.guard(final, a, b || a, !EXAM), text = g.text, snapped = 0;
+    if (bank) { var sn = Bank.snap(text, bank); text = sn.text; snapped = sn.fixed; }
+    var r = await toResult(text);
     r.img = Engine.scaled(p.canvas, 1600).toDataURL('image/jpeg', 0.8);
     r.agree = d ? Math.round(d.agreement * 100) : null;
-    r.text = g.text;
+    r.text = text; r.type = type; r.snapped = snapped;
     return r;
   }
 
   async function run() {
     if (running) return; running = true; show('work'); results = [];
-    var n = pages.length, S = 4;
+    var n = pages.length, S = 3;
     try {
       for (var i = 0; i < n; i++) {
         var label = n > 1 ? ('صفحة ' + (i + 1) + ' من ' + n) : 'الورقة';
@@ -429,6 +454,7 @@
     "Wrap anything not fully sure in ⟦ ⟧ like ⟦28.8⟧. Never guess a number silently.\n" +
     "Fix English spelling, capitals and small grammar slips in the wording, but NEVER change a number, unit, answer choice or the mathematics.\n" +
     "Leave out crossed-out work, ticks, scores, page numbers and anything not part of the exam.";
+  var ROT_NOTE = "FIRST LINE of your reply: ROT: 0 if the page reads upright, else ROT: 90 / 180 / 270 = degrees it must be turned clockwise to read upright (then still transcribe as well as you can). After that line, the transcription.\n";
   function stripsNote(bands) {
     return "Image 1 is the whole page. Images 2 to " + (bands + 1) + " are the same page cut into overlapping horizontal strips, top to bottom, at higher resolution: read the words from the strips and use image 1 for layout. Text in an overlap appears twice — write it once.\n\n";
   }
@@ -436,14 +462,20 @@
   function diffNote(d) {
     return "The two readings disagree on these words (reading 1 → " + (d.a.join(' · ') || '—') + ") (reading 2 → " + (d.b.join(' · ') || '—') + ").\n";
   }
+  function bankSystem(label, lines) {
+    return "You know the standard wording of Egyptian «" + label + "» papers exactly as this law office writes them. STANDARD FORMULAS of this paper type (names, numbers and places are replaced by {{NAME}}, # and {{PLACE}}):\n" + lines +
+      "\n\nWhen a word is hard to read but its line clearly follows one of these formulas, read it as the formula says and do not mark it. Never do that for names, numbers, dates, case numbers, amounts, addresses or anything that varies from paper to paper: those come from the ink only, and stay in ⟦ ⟧ when unsure.";
+  }
   var PROMPTS = EXAM ? {
-    read: function (b) { return "You transcribe handwritten mathematics exam drafts written by a primary-school teacher into a clean exam.\n\n" + stripsNote(b) + "Transcribe every question and every answer choice on the page, in order.\n\n" + EXAM_FORMAT; },
-    read2: function (b) { return "You transcribe handwritten mathematics exam drafts written by a primary-school teacher into a clean exam.\n\n" + stripsNote(b) + STRIPWISE + "Transcribe every question and every answer choice on the page, in order. Check each digit twice.\n\n" + EXAM_FORMAT; },
+    bankSystem: bankSystem,
+    read: function (b) { return "You transcribe handwritten mathematics exam drafts written by a primary-school teacher into a clean exam.\n\n" + stripsNote(b) + "Transcribe every question and every answer choice on the page, in order.\n\n" + ROT_NOTE + EXAM_FORMAT; },
+    read2: function (b) { return "You transcribe handwritten mathematics exam drafts written by a primary-school teacher into a clean exam.\n\n" + stripsNote(b) + STRIPWISE + "Transcribe every question and every answer choice on the page, in order. Check each digit twice.\n\n" + ROT_NOTE + EXAM_FORMAT; },
     check: function (b, d) { return "Proofread this transcription of the attached handwritten mathematics exam page against the images. " + stripsNote(b) + "Check every number, symbol, unit, fraction, answer choice and question, that nothing is missing or doubled, and that each [FIG] SVG matches its drawing. Remove ⟦ ⟧ from things you can now confirm; keep it on anything still uncertain. Keep exactly the same format.\n\n" + EXAM_FORMAT + "\n\nDRAFT:\n" + d + "\n\nReply with the full corrected transcription only."; },
     judge: function (b, r1, r2, d) { return "Two transcribers copied the attached handwritten mathematics exam page independently. " + stripsNote(b) + diffNote(d) + "For every disagreement look closely at the images and keep what the page really shows. Also re-check every number, fraction, unit and answer choice. Where the image still does not settle it, wrap it in ⟦ ⟧. Keep each [FIG] SVG from the reading whose drawing matches better.\n\n" + EXAM_FORMAT + "\n\nREADING 1:\n" + r1 + "\n\nREADING 2:\n" + r2 + "\n\nReply with the one correct full transcription only."; }
   } : {
-    read: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts.\n\n" + stripsNote(b) + "Transcribe the ENTIRE page word for word, exactly as written. For each unclear word use the sentence's meaning, legal Arabic phrasing and how the same letters look elsewhere on the page; if still unsure, mark it.\n\n" + LEGAL_FORMAT; },
-    read2: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts.\n\n" + stripsNote(b) + STRIPWISE + "Transcribe the ENTIRE page word for word. Names of people and places, numbers, dates and case numbers must be copied letter by letter; if any letter is unsure, mark the word.\n\n" + LEGAL_FORMAT; },
+    bankSystem: bankSystem,
+    read: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts (صحة توقيع، إعلانات، إنذارات، عقود بيع وهبة، إقرارات، مذكرات).\n\n" + stripsNote(b) + "Transcribe the ENTIRE page word for word, exactly as written. These papers follow fixed legal formulas: for each unclear word use the sentence's meaning, the standard phrasing of this kind of paper, and how the same letters look elsewhere on the page; if still unsure, mark it. Names, numbers, dates and amounts are never guessed from context.\n\n" + ROT_NOTE + LEGAL_FORMAT; },
+    read2: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts.\n\n" + stripsNote(b) + STRIPWISE + "Transcribe the ENTIRE page word for word. Names of people and places, numbers, dates and case numbers must be copied letter by letter; if any letter is unsure, mark the word.\n\n" + ROT_NOTE + LEGAL_FORMAT; },
     check: function (b, d) { return "You are proofreading a transcription of the attached page against the page itself. " + stripsNote(b) + "Go through the draft line by line and word by word against the images. Fix every misread word, missing or extra word, wrong number, date, name, digit order, bold/underline, and any skipped or doubled paragraph. Remove ⟦ ⟧ from words you can now confirm; keep or add ⟦ ⟧ on anything still uncertain. Keep the same format.\n\n" + LEGAL_FORMAT + "\n\nDRAFT TRANSCRIPTION:\n" + d + "\n\nReply with the full corrected transcription only."; },
     judge: function (b, r1, r2, d) { return "Two transcribers copied the attached page independently. You decide the final text. " + stripsNote(b) + diffNote(d) + "For every disagreement look closely at the ink in the images and keep what the page really shows — not what sounds better. Also check that no paragraph is missing or doubled and that the layout tags are right. Where the image still does not settle a word, wrap it in ⟦ ⟧.\n\n" + LEGAL_FORMAT + "\n\nREADING 1:\n" + r1 + "\n\nREADING 2:\n" + r2 + "\n\nReply with the one correct full transcription only."; }
   };

@@ -37,6 +37,13 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/cdnjs\.cloudflare\.com\/.*jszip/, r => r.fulfill({ contentType: 'text/javascript', body: JSZIP_SRC }));
   await context.route(/cdnjs\.cloudflare\.com\/.*pdf/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.pdfjsLib={};' }));
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
+  await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
+    const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
+    const kind = /Two transcribers/.test(prompt) ? 'judge' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort });
+    const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A }[kind];
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
+  });
   await context.route(/generativelanguage\.googleapis\.com/, async r => {
     const url = r.request().url();
     if (/\/models\?/.test(url)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }] }) });
@@ -54,11 +61,11 @@ async function pagePhoto(browser) {
   const png = await p.screenshot(); await p.close(); return png;
 }
 
-async function runMode(browser, base, file, answers, check) {
+async function runMode(browser, base, file, answers, check, key) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, serviceWorkers: 'block' });
   const calls = [];
   await fakeWorld(context, answers, calls);
-  await context.addInitScript(() => { try { localStorage.setItem('kateb.apikey', 'test-key'); } catch (e) {} window.__printed = 0; window.print = () => { window.__printed++; }; });
+  await context.addInitScript(k => { try { localStorage.setItem('kateb.apikey', k); } catch (e) {} window.__printed = 0; window.print = () => { window.__printed++; }; }, key || 'test-key');
   const page = await context.newPage();
   const errors = []; page.on('pageerror', e => errors.push(String(e)));
   await page.goto(base + '/' + file);
@@ -77,7 +84,7 @@ async function runMode(browser, base, file, answers, check) {
   async function step(name, fn) { try { await fn(); console.log('ok   ' + name); } catch (e) { failed++; console.log('FAIL ' + name + '\n     ' + (e && e.stack || e)); } }
 
   await step('legal: two reads differ → judge → guarded marks → review → Word + PDF + draft', () => runMode(browser, base, 'kateb.html', LEGAL, async (page, calls) => {
-    assert.deepStrictEqual(calls, ['rot', 'read', 'read2', 'judge']);
+    assert.deepStrictEqual(calls.sort(), ['judge', 'read', 'read2'], 'both reads + one judge, no separate rotation call');
     assert.strictEqual(await page.locator('.pg .orig img').count(), 1, 'original photo beside the text');
     const marked = await page.locator('#pagesBox mark').allTextContents();
     assert.deepStrictEqual(marked.sort(), ['1234', 'محمد', 'مدني'].sort(), 'disputed name + number + reader-1 doubt are marked');
@@ -109,14 +116,14 @@ async function runMode(browser, base, file, answers, check) {
   }));
 
   await step('legal: readings agree → no judge call, nothing extra marked', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, async (page, calls) => {
-    assert.deepStrictEqual(calls, ['rot', 'read', 'read2']);
+    assert.deepStrictEqual(calls.sort(), ['read', 'read2']);
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 0);
     assert.ok(await page.locator('#doubtBar').isHidden());
     assert.match(await page.textContent('#doubtNote'), /جاهز/);
   }));
 
   await step('exam: figure, fraction, options → Word with header + PDF', () => runMode(browser, base, 'hanan.html', EXAM, async (page, calls) => {
-    assert.deepStrictEqual(calls, ['rot', 'read', 'read2']);
+    assert.deepStrictEqual(calls.sort(), ['read', 'read2']);
     assert.strictEqual(await page.locator('#pagesBox figure img').count(), 1);
     assert.strictEqual(await page.locator('#pagesBox .frac').count(), 1);
     assert.strictEqual(await page.locator('#pagesBox .opt [data-cell]').count(), 4);
@@ -163,6 +170,23 @@ async function runMode(browser, base, file, answers, check) {
     const doc2 = await (await JSZip.loadAsync(fs.readFileSync(await dl2.path()))).file('word/document.xml').async('string');
     assert.ok(!doc2.includes('Zokrofi'), 'plain layout when no template is chosen');
   }));
+
+  const SIHHA_B = SIHHA_READ.replace('مينا سامي', 'مينا سامى').replace('باع المعلن', 'باع ⟦المعلز⟧');
+  await step('Claude: two parallel Sonnet reads, Opus judge with the صحة توقيع formula bank, rotation from the read, snap fixes a formula word', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_B, J: SIHHA_B, ROT: 0 }, async (page, calls) => {
+    assert.deepStrictEqual(calls.slice().sort(), ['judge', 'read', 'read2']);
+    const c = calls.claude, reads = c.filter(x => x.kind !== 'judge'), judge = c.find(x => x.kind === 'judge');
+    assert.ok(reads.every(x => x.model === 'claude-sonnet-5-5' && x.images === 4 && x.effort === 'medium'), 'reads on Sonnet with 4 images');
+    assert.strictEqual(judge.model, 'claude-opus-5-5');
+    assert.ok(judge.system.includes('STANDARD FORMULAS') && judge.system.includes('دعوى صحة توقيع'), 'judge gets the sihha bank');
+    assert.ok(judge.effort === 'high');
+    const txt = await page.textContent('#pagesBox .sheet');
+    assert.ok(txt.includes('باع المعلن إليه'), 'snap restored the formula word: ' + txt);
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'only the disputed name stays yellow');
+  }, 'sk-ant-test'));
+  await step('Claude: a sideways page is rotated from the ROT line and read again', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ, ROT: 90 }, async (page, calls) => {
+    assert.ok(calls.filter(k => k === 'read').length >= 2, 'read again after rotating');
+    assert.ok(!(await page.textContent('#pagesBox .sheet')).includes('ROT:'));
+  }, 'sk-ant-test'));
 
   await step('installable app: manifest, icons, offline shell; paste-link unlock', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
