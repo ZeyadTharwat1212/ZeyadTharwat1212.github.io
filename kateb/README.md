@@ -94,9 +94,13 @@ To rebuild the bank after adding office files or web formulas (kept outside the 
   region → convex hull → four corners), straightened with a homography, then cleaned as before. The tray keeps the
   photo as taken and the page; the viewer toggles «الصورة الأصلية / المحسّنة», «✂️ تعديل القص» drags the four
   corners, «✅ استخدام الصورة» applies. No crop when nothing paper-like is found (scans, PDFs, full-frame pages).
-- **Share** (`doShare`): the actual `.docx` goes to the system share sheet through the Web Share API with files
-  (WhatsApp is one of its targets on phones); the button is hidden where file sharing is not available and the
-  download stays. PDF is produced by the browser's print dialog, so it is not shareable this way.
+- **Share** (`doShare`, v20): the system share sheet (Web Share API with files; WhatsApp is one of its targets on
+  phones) gets a real file. Browsers accept only certain types there: iOS Safari takes the `.docx` itself; Chrome's
+  safelist has PDF but not Office files, so the reviewed text is drawn onto A4 pages with the browser's own Arabic
+  rendering (`kateb/raster.js`: headings, bold/underline/yellow, tables, figures, the office stamp box and side
+  column when the template has them, dates read from the right) and packed into a PDF written by hand (JPEG pages).
+  A sheet that takes no files at all downloads the Word file and says how to attach it in WhatsApp; a browser with
+  no share sheet hides the button. The print PDF («تحميل PDF») stays the selectable-text one.
 - **Voice dictation** (`speech.js` + `convertAudio`): MediaRecorder with pause/resume, a level waveform, duration;
   the browser's own recogniser (`ar-EG`, interim grey / final black) shows the text while speaking, with spoken
   commands («نقطة» «فاصلة» at the end of a phrase, «سطر جديد», «فقرة جديدة», «عنوان» before a title; switchable).

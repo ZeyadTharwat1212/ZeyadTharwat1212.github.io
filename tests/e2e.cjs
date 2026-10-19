@@ -688,8 +688,9 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await context.addInitScript(() => {
       try { localStorage.setItem('kateb.apikey', 'sk-ant-test'); } catch (e) {}
       window.__shared = null;
-      navigator.canShare = d => !!(d && d.files && d.files.length);
-      navigator.share = async d => { const f = d.files[0]; window.__shared = { name: f.name, type: f.type, size: f.size, title: d.title }; };
+      /* like Chrome on Android: files can be shared, but only PDF (not .docx) passes the safelist */
+      navigator.canShare = d => !!(d && d.files && d.files.length && d.files[0].type === 'application/pdf');
+      navigator.share = async d => { const f = d.files[0]; const head = String.fromCharCode.apply(null, new Uint8Array(await f.slice(0, 5).arrayBuffer())); window.__shared = { name: f.name, type: f.type, size: f.size, title: d.title, head }; };
     });
     const page = await context.newPage(); page.on('dialog', d => d.accept());
     const errors = []; page.on('pageerror', e => errors.push(String(e)));
@@ -700,17 +701,32 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('#shareBtn'); await page.waitForSelector('#kindDlg:not([hidden])'); await page.click('#kindOk');
     await page.waitForFunction(() => window.__shared);
     const sh = await page.evaluate(() => window.__shared);
-    assert.ok(/\.docx$/.test(sh.name) && sh.type.includes('wordprocessingml') && sh.size > 2000, JSON.stringify(sh));
-    assert.match(await page.textContent('#savedNote'), /اختر واتساب/);
+    assert.ok(/\.pdf$/.test(sh.name) && sh.type === 'application/pdf' && sh.size > 20000 && sh.head === '%PDF-', 'Chrome-style sheet gets a real PDF of the pages: ' + JSON.stringify(sh));
+    assert.match(await page.textContent('#savedNote'), /PDF.*اختر واتساب/);
     assert.deepStrictEqual(errors, []);
+    /* iOS-style sheet takes the Word file itself */
+    await page.evaluate(() => { navigator.canShare = d => !!(d && d.files && d.files.length); window.__shared = null; });
+    await page.evaluate(() => { const s = document.querySelector('#pagesBox .sheet p'); s.textContent += ' تعديل'; s.dispatchEvent(new InputEvent('input', { bubbles: true })); });
+    await page.click('#shareBtn'); await page.waitForFunction(() => window.__shared);
+    const sh2 = await page.evaluate(() => window.__shared);
+    assert.ok(/\.docx$/.test(sh2.name) && sh2.type.includes('wordprocessingml') && sh2.head === 'PK\u0003\u0004' + sh2.head.slice(4), 'Safari-style sheet gets the .docx: ' + JSON.stringify(sh2));
     await context.close();
     /* desktop without file sharing: no dead button */
     const c2 = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
     await fakeWorld(c2, { A: SIHHA_READ, B: SIHHA_READ }, []); await c2.addInitScript(() => { try { localStorage.setItem('kateb.apikey', 'sk-ant-test'); } catch (e) {} delete navigator.share; delete navigator.canShare; });
     const p2 = await c2.newPage(); p2.on('dialog', d => d.accept()); await p2.goto(base + '/kateb.html'); await p2.waitForSelector('#start:not([hidden])');
     await p2.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: photo }); await p2.waitForSelector('#tray:not([hidden])'); await p2.click('#goBtn'); await p2.waitForSelector('#done:not([hidden])', { timeout: 20000 });
-    assert.ok(await p2.locator('#shareBtn').isHidden(), 'no share button without file sharing');
+    assert.ok(await p2.locator('#shareBtn').isHidden(), 'no share button where the browser has no share sheet at all');
     await c2.close();
+    /* a share sheet that takes no files at all: the Word file is downloaded and the way to send it is explained */
+    const c3 = await browser.newContext({ viewport: { width: 420, height: 860 }, serviceWorkers: 'block', acceptDownloads: true });
+    await fakeWorld(c3, { A: SIHHA_READ, B: SIHHA_READ }, []); await c3.addInitScript(() => { try { localStorage.setItem('kateb.apikey', 'sk-ant-test'); } catch (e) {} navigator.canShare = () => false; navigator.share = async () => {}; });
+    const p3 = await c3.newPage(); p3.on('dialog', d => d.accept()); await p3.goto(base + '/kateb.html'); await p3.waitForSelector('#start:not([hidden])');
+    await p3.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: photo }); await p3.waitForSelector('#tray:not([hidden])'); await p3.click('#goBtn'); await p3.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+    const [dl3] = await Promise.all([p3.waitForEvent('download'), (async () => { await p3.click('#shareBtn'); await p3.waitForSelector('#kindDlg:not([hidden])'); await p3.click('#kindOk'); })()]);
+    assert.match(dl3.suggestedFilename(), /\.docx$|^download$/);
+    assert.match(await p3.textContent('#savedNote'), /مرفق/);
+    await c3.close();
   });
 
   await step('voice dictation: record (fake microphone) with live text and spoken commands, pause/resume, stop → playback → transcribed by the audio key (WAV chunk) → laid out by Claude → review with the recording kept on the document', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: TRANSCRIPT, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
