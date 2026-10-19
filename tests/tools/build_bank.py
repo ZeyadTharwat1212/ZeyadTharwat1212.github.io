@@ -94,6 +94,7 @@ def has_private(k):
     """a normalised line that still carries something identifying is left out"""
     if re.search(r'\b(بطاقه|قومي)\b.*#', k) and '{{NAME}}' not in k: return True
     if re.search(r'[0-9]', k): return True
+    if len([w for w in k.split() if len(re.findall('[\u0621-\u064A]', w)) >= 2]) < 3: return True   # junk: mostly placeholders
     if re.search(r'(السيد|السيده|الاستاذ|الدكتور|المرحوم)[هة]?\s*/\s*(?!\{\{NAME\}\})\S', k): return True
     return False
 

@@ -10,7 +10,7 @@ var Bank = (function () {
   /* same tokens as build_bank.py: whitespace split, tokens that normalise to nothing dropped */
   function words(t) { return String(t || '').split(/\s+/).map(norm).filter(Boolean); }
   function sameWord(x, y) { return x === y || PLACE.test(y) || lev(x, y) <= Math.max(1, Math.floor(Math.max(x.length, y.length) / 3)); }
-  var PLACE = /^(\{\{\w+\}\}|#+)$/;
+  var PLACE = /#|\{\{/;                                   // any token holding a number or a placeholder is variable data
 
   async function load(type) {
     if (!type) return null;
@@ -92,6 +92,7 @@ var Bank = (function () {
         var core = tk.replace(/[*_⟦⟧]/g, ''); if (!norm(core)) return tk;
         var idx = wi++;
         if (tk.indexOf('⟦') < 0) return tk;
+        if (/[0-9٠-٩]/.test(core)) { kept++; return tk; }        // numbers are never settled by a formula
         var m = map[idx]; if (!m) { kept++; return tk; }
         var bw = m.h.bw[m.j]; if (PLACE.test(bw)) { kept++; return tk; }
         var orig = m.h.line.o ? m.h.line.o[m.j] : null;
