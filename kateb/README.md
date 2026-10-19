@@ -84,6 +84,13 @@ marked when the model doubted it (the two reads must still agree). The learn scr
 count and a delete per row; «حذف بيانات التعلم» clears all. Nothing leaves the device except, during a read, the
 learned words inside the prompt. Measure the effect with `tests/eval` (same pages with learning on and off).
 
+## Hosting: GitHub Pages or Cloudflare Pages
+The site is static, so either host serves it unchanged. Cloudflare Pages: *Workers & Pages → Create → Pages → Connect
+to Git → this repo*, production branch `main`, framework **None**, no build command, output directory `/`. Every merge
+to `main` then deploys in about a minute, and `_headers` keeps `sw.js`, `version.json` and the pages uncached so the
+self-update works. Links keep working with the new domain: only the part before `#k=` changes (the key blob is the
+same), and each phone asks for the password once on the new domain.
+
 ## Changing the code
 Bump the version everywhere (`python tests/tools/bump.py N`: `?v=N`, `sw.js`, `APP_VER`, `version.json`) so every open phone updates itself. Then run the tests:
 
