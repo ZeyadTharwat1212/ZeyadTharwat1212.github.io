@@ -73,6 +73,25 @@ To rebuild the bank after adding office files or web formulas (kept outside the 
   the first always). «استرجاع النص الأول» restores the reading; «🔄 إعادة التحويل» reads the stored photos again.
 - «⬅️ رجوع» walks a screen stack (also the phone's back button); the review screen keeps its state.
 
+## Paper kind, cancel, usage, scans
+- The first Word / PDF of a document asks «ما نوع هذه الورقة؟» (once per document; «🗂️ / 📝 … ▾» next to the name
+  re-opens it). Legal: every office template with the detected one pre-selected, lawyer name for stamp templates.
+  Exam: امتحان (full school header), مراجعة (Subject / Grade / Date + «Revision Sheet»), مذكرة (title only),
+  عادية (no header); the title is editable. «إلغاء» leaves without a file.
+- «✖ إلغاء القراءة» on the work screen aborts the reader calls (AbortController) and returns to the start; nothing is
+  saved. «إلغاء الكل» empties the tray. A tray photo opens full size after clean-up and can be downloaded as JPG
+  (the zoom overlay's download also saves the original photo of a reviewed page).
+- Claude usage: every reply's `usage` is added to a ledger on the device (`kateb.usage`, per day per model);
+  ⚙️ الإعدادات shows today / month / total calls, tokens and the estimated cost at Anthropic list prices (the real
+  bill is on console.anthropic.com); the review screen shows the cost of the page just read, kept on the document.
+- Files are named like the office's own: «صحة توقيع مينا سامي», «إعادة إعلان نجوى لطفى» (type + the client found by
+  `Office.partyName`: the person on whose request the paper is made, else the first party, else the first «السيد / …»;
+  type + date when no name is found). The name is editable at the top of the review screen; an untouched name follows
+  the type chosen in the kind dialog.
+- Dates on screen and in the PDF read from the right (`٢٠٢٠/١١/١٠` = 10 Nov 2020) like Word shows them in an
+  Arabic paragraph: `Verify.rtlDates` puts a right-to-left mark around each slash for display; `walkRuns` strips
+  them so the Word file keeps the office's plain `10/11/2020`.
+
 ## Handwriting learning (opt-in, real, on the device)
 Off until switched on in «🧠 تحسين خط اليد». When on, per writer profile (👩 ماما / 👨 بابا / عام):
 - a word the reviewer replaces since the first reading is recorded as *misread → correct* (`Learn.wordDiff`:

@@ -72,10 +72,11 @@ var Engine = (function () {
     for (var attempt = 0; attempt < 4; attempt++) {
       var r;
       try {
-        r = await fetch(CLAUDE_API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify(body) });
-      } catch (e) { lastErr = { code: 'network' }; await sleep(2500); continue; }
+        r = await fetch(CLAUDE_API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify(body), signal: opt.signal });
+      } catch (e) { if (e && e.name === 'AbortError') throw { code: 'cancelled' }; lastErr = { code: 'network' }; await sleep(2500); continue; }
       if (r.ok) {
         var j = await r.json();
+        if (j.usage) recordUsage(j.model || body.model, j.usage);
         var text = (j.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text; }).join('');
         if (j.stop_reason === 'refusal') throw { code: 'SAFETY' };
         if (!text) { lastErr = { code: j.stop_reason || 'empty' }; break; }
@@ -107,8 +108,8 @@ var Engine = (function () {
       var model = models[mi];
       for (var attempt = 0; attempt < 4; attempt++) {
         var r;
-        try { r = await fetch(API + '/models/' + model + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: body }); }
-        catch (e) { lastErr = { code: 'network' }; await sleep(3000); continue; }
+        try { r = await fetch(API + '/models/' + model + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: body, signal: opt.signal }); }
+        catch (e) { if (e && e.name === 'AbortError') throw { code: 'cancelled' }; lastErr = { code: 'network' }; await sleep(3000); continue; }
         if (r.ok) {
           var j = await r.json(), c = (j.candidates || [])[0];
           var text = c && c.content && c.content.parts ? c.content.parts.filter(function (p) { return !p.thought && p.text; }).map(function (p) { return p.text; }).join('') : '';
@@ -202,10 +203,47 @@ var Engine = (function () {
     SAFETY: 'تعذرت قراءة هذه الصفحة. جرّب صورة أخرى.',
     RECITATION: 'تعذرت قراءة هذه الصفحة. جرّب صورة أخرى.'
   };
+  ERR.cancelled = 'تم الإلغاء.';
   function errText(e) { return (e && ERR[e.code]) || 'حصلت مشكلة. اضغط «حاول مرة أخرى».'; }
+
+  /* ---------- Claude usage ledger (on this device): tokens per day per model → estimated cost ----------
+     Prices are Anthropic's published list prices per million tokens: [input, output, cache write, cache read].
+     The real bill is on console.anthropic.com; this is an estimate from the usage field of every reply. */
+  var LS_USAGE = 'kateb.usage';
+  var PRICE = { 'claude-opus-5-5': [4, 20, 5, 0.2], 'claude-sonnet-5-5': [2, 10, 2.5, 0.2], 'claude-haiku-5-5': [0.1, 0.5, 0.125, 0.01] };
+  function priceOf(model) { var ks = Object.keys(PRICE); for (var i = 0; i < ks.length; i++) if (String(model || '').indexOf(ks[i]) === 0) return PRICE[ks[i]]; return PRICE['claude-opus-5-5']; }
+  function usd(model, u) { var p = priceOf(model); return ((u.i || 0) * p[0] + (u.o || 0) * p[1] + (u.w || 0) * p[2] + (u.r || 0) * p[3]) / 1e6; }
+  function day(t) { var d = t ? new Date(t) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function usageLoad() { try { var u = JSON.parse(lsGet(LS_USAGE) || 'null'); return u && u.d ? u : { d: {} }; } catch (e) { return { d: {} }; } }
+  var usageSinks = [];
+  function recordUsage(model, usage) {
+    var rec = { c: 1, i: usage.input_tokens || 0, o: usage.output_tokens || 0, w: usage.cache_creation_input_tokens || 0, r: usage.cache_read_input_tokens || 0 };
+    var L = usageLoad(), k = day(), m = String(model || 'claude'), row = (L.d[k] = L.d[k] || {}), cur = (row[m] = row[m] || { c: 0, i: 0, o: 0, w: 0, r: 0 });
+    Object.keys(rec).forEach(function (x) { cur[x] += rec[x]; });
+    var days = Object.keys(L.d).sort(); while (days.length > 400) delete L.d[days.shift()];
+    lsSet(LS_USAGE, JSON.stringify(L));
+    usageSinks.forEach(function (fn) { try { fn(m, rec, usd(m, rec)); } catch (e) {} });
+  }
+  function onUsage(fn) { usageSinks.push(fn); }
+  function sum(into, m, u) { into.calls += u.c; into.tokens += u.i + u.o + u.w + u.r; into.usd += usd(m, u); }
+  function usageSummary() {
+    var L = usageLoad(), today = day(), month = today.slice(0, 7);
+    var out = { today: { calls: 0, tokens: 0, usd: 0 }, month: { calls: 0, tokens: 0, usd: 0 }, total: { calls: 0, tokens: 0, usd: 0 }, models: {}, days: 0, first: null };
+    Object.keys(L.d).sort().forEach(function (k) {
+      out.days++; if (!out.first) out.first = k;
+      Object.keys(L.d[k]).forEach(function (m) {
+        var u = L.d[k][m]; sum(out.total, m, u); if (k === today) sum(out.today, m, u); if (k.slice(0, 7) === month) sum(out.month, m, u);
+        var mm = (out.models[m] = out.models[m] || { calls: 0, tokens: 0, usd: 0 }); sum(mm, m, u);
+      });
+    });
+    return out;
+  }
+  function usageReset() { lsSet(LS_USAGE, JSON.stringify({ d: {} })); }
 
   return { provider: provider, lock: lock, unlock: unlock, blobFromHash: blobFromHash, savedKey: savedKey, saveKey: saveKey, forget: forget,
     listModels: listModels, rank: rank, generate: generate, fileToCanvases: fileToCanvases, scaled: scaled, rotated: rotated,
-    pageImages: pageImages, detectRotation: detectRotation, clean: clean, download: download, errText: errText, lsGet: lsGet, lsSet: lsSet };
+    pageImages: pageImages, detectRotation: detectRotation, clean: clean, download: download, errText: errText, lsGet: lsGet, lsSet: lsSet,
+    recordUsage: recordUsage, onUsage: onUsage, usageSummary: usageSummary, usageReset: usageReset, usd: usd, priceOf: priceOf };
 })();
 
+if (typeof module !== 'undefined' && module.exports) module.exports = Engine;

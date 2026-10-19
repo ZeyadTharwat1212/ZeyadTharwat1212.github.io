@@ -42,7 +42,8 @@ async function fakeWorld(context, answers, calls) {
     const kind = /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort });
     const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, numbers: answers.N || '', kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
-    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
+    if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0 }, content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
   });
   await context.route(/generativelanguage\.googleapis\.com/, async r => {
     const url = r.request().url();
@@ -60,6 +61,14 @@ async function pagePhoto(browser) {
   await p.setContent('<body style="margin:0;background:#fff;font:28px serif;padding:40px">مذكرة بدفاع<br>السيد / أحمد محمد علي<br>رقم 1234 لسنة ٢٠٢٤</body>');
   const png = await p.screenshot(); await p.close(); return png;
 }
+
+/* KATEB16: the first Word / PDF of a document asks «ما نوع هذه الورقة؟» — answer with the pre-selected kind */
+async function exportVia(page, btn) {
+  await page.click(btn);
+  const dlg = page.locator('#kindDlg:not([hidden])');
+  if (await dlg.count()) { await page.click('#kindOk'); }
+}
+const exportWord = page => exportVia(page, '#wordBtn'), exportPdf = page => exportVia(page, '#pdfBtn');
 
 async function runMode(browser, base, file, answers, check, key, drive) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, serviceWorkers: 'block' });
@@ -108,15 +117,16 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('#okDoubt');
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'confirm removes one mark');
     assert.match(await page.textContent('#doubtCount'), /1/);
-    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    const [dl] = await Promise.all([page.waitForEvent('download'), exportWord(page)]);
     /* headless Chromium reports Arabic download names as "download"; real browsers keep «مستند 2026-…docx» */
     assert.match(dl.suggestedFilename(), /\.docx$|^download$/);
     const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
     const doc = await zip.file('word/document.xml').async('string');
     for (const w of ['مذكرة بدفاع', 'أحمد محمد علي', '<w:tbl>', '<w:highlight w:val="yellow"/>', '1234', '57']) assert.ok(doc.includes(w), 'Word has ' + w);
+    assert.ok(!doc.includes('\u200F'), 'no direction marks in the file');
     assert.ok(!/[٠-٩]/.test(doc), 'the Word file stores Western digits like the office files');
     if (SHOTS) fs.writeFileSync(path.join(SHOTS, 'legal.docx'), fs.readFileSync(await dl.path()));
-    await page.click('#pdfBtn'); await page.waitForFunction(() => window.__printed === 1);
+    await exportPdf(page); await page.waitForFunction(() => window.__printed === 1);
     assert.ok((await page.innerHTML('#printRoot')).includes('مذكرة بدفاع'));
     if (SHOTS) { await page.emulateMedia({ media: 'print' }); await page.pdf({ path: path.join(SHOTS, 'legal.pdf'), format: 'A4', preferCSSPageSize: true }); await page.emulateMedia({ media: 'screen' }); }
     await page.waitForTimeout(900);                      // draft is saved 0.8 s after the last edit
@@ -138,11 +148,11 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(await page.locator('#pagesBox figure img').count(), 1);
     assert.strictEqual(await page.locator('#pagesBox .frac').count(), 1);
     assert.strictEqual(await page.locator('#pagesBox .opt [data-cell]').count(), 4);
-    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    const [dl] = await Promise.all([page.waitForEvent('download'), exportWord(page)]);
     const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
     assert.ok(zip.file('word/media/image1.png'), 'figure embedded');
     assert.ok((await zip.file('word/document.xml').async('string')).includes('Primary 4'));
-    await page.click('#pdfBtn'); await page.waitForFunction(() => window.__printed === 1);
+    await exportPdf(page); await page.waitForFunction(() => window.__printed === 1);
     assert.ok((await page.innerHTML('#printRoot')).includes('xhead'));
     if (SHOTS) { await page.screenshot({ path: path.join(SHOTS, 'exam-review.png'), fullPage: true }); await page.emulateMedia({ media: 'print' }); await page.pdf({ path: path.join(SHOTS, 'exam.pdf'), format: 'A4', preferCSSPageSize: true }); }
   }));
@@ -167,18 +177,18 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(await page.inputValue('#tplSel'), 'sihha', 'template detected from the title');
     assert.strictEqual(await page.inputValue('#lawName'), 'ألون إبراهيم باشا');
     assert.strictEqual(await page.inputValue('#lawTitle'), 'المحامي');
-    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    const [dl] = await Promise.all([page.waitForEvent('download'), exportWord(page)]);
     const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
     const doc = await zip.file('word/document.xml').async('string');
     assert.ok(doc.includes('Zokrofi') && doc.includes('>دعوى صحة توقيع<') && doc.includes('ألون إبراهيم باشا') && !doc.includes('{{'), 'office Word file');
     assert.ok(zip.file('word/media/image2.jpeg'), 'stamp texture kept');
     if (SHOTS) fs.writeFileSync(path.join(SHOTS, 'office-sihha.docx'), fs.readFileSync(await dl.path()));
-    await page.click('#pdfBtn'); await page.waitForFunction(() => window.__printed === 1);
+    await exportPdf(page); await page.waitForFunction(() => window.__printed === 1);
     const pr = await page.innerHTML('#printRoot');
     assert.ok((pr.match(/class="oshape"/g) || []).length >= 3 && pr.includes('كطلب الطالب وتحت مسئوليته') && pr.includes('ألون إبراهيم باشا'), 'PDF shapes: stamp, rule, side box');
     if (SHOTS) { await page.screenshot({ path: path.join(SHOTS, 'office-review.png'), fullPage: true }); await page.emulateMedia({ media: 'print' }); await page.pdf({ path: path.join(SHOTS, 'office-sihha.pdf'), format: 'A4', preferCSSPageSize: true }); await page.emulateMedia({ media: 'screen' }); }
     await page.selectOption('#tplSel', ''); 
-    const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    const [dl2] = await Promise.all([page.waitForEvent('download'), exportWord(page)]);
     const doc2 = await (await JSZip.loadAsync(fs.readFileSync(await dl2.path()))).file('word/document.xml').async('string');
     assert.ok(!doc2.includes('Zokrofi'), 'plain layout when no template is chosen');
   }));
@@ -200,7 +210,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'only the disputed name stays yellow');
   }, 'sk-ant-test'));
   await step('Claude: the numbers pass completes a truncated year and flags a number it did not see', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ.replace('7/1/2026', '7/1/202'), B: SIHHA_READ.replace('7/1/2026', '7/1/202'), N: '2026 | الموافق\n7/1/2026 | بيع مؤرخ في' }, async (page) => {
-    const txt = await page.textContent('#pagesBox .sheet');
+    const txt = (await page.textContent('#pagesBox .sheet')).replace(/\u200F/g, '');
     assert.ok(txt.includes('٧/١/٢٠٢٦'), 'year completed from the numbers pass (shown with Arabic digits): ' + txt);
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'the completed number is yellow for the eye');
   }, 'sk-ant-test'));
@@ -301,7 +311,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await convert(page);
     await page.waitForFunction(() => /ok/.test(document.getElementById('saveStatus').className));
     assert.strictEqual(await page.textContent('#saveStatus'), '✅ تم الحفظ تلقائيًا');
-    assert.match(await page.inputValue('#docName'), /^مذكرة — /, 'a name is given from the paper type and the time');
+    assert.match(await page.inputValue('#docName'), /^مذكرة (أحمد محمد علي|— )/, 'a name is given from the paper type and the client');
     await page.fill('#docName', 'قضية أحمد');
     assert.strictEqual(await saveState(page), 'saving', 'a change shows «جارٍ الحفظ...» at once');
     await settled(page); assert.strictEqual(await saveState(page), 'ok');
@@ -455,6 +465,94 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.uncheck('#learnChk'); assert.ok(await page.locator('#learnBody').isHidden());
     await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
     assert.match(await page.textContent('#learnState'), /غير مفعّل/);
+  }));
+
+  /* ---------- KATEB16: paper kind before export, cancel, tray preview, Claude usage ---------- */
+  await step('legal: «ما نوع هذه الورقة؟» before the first Word — the detected type is pre-selected, «إلغاء» downloads nothing, a chosen type changes the template, asked once per document', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ }, null, 'sk-ant-test', async (page) => {
+    await convert(page);
+    await page.waitForFunction(() => /صحة توقيع/.test(document.getElementById('kindBtn').textContent));
+    assert.strictEqual(await page.inputValue('#docName'), 'صحة توقيع مينا سامي', 'named like the office files: type + client');
+    await page.click('#wordBtn'); await page.waitForSelector('#kindDlg:not([hidden])');
+    assert.strictEqual(await page.getAttribute('#kindList [aria-pressed="true"]', 'data-kind'), 'sihha', 'the detected paper type is pre-selected');
+    assert.match(await page.textContent('#kindList [aria-pressed="true"]'), /المقترح/);
+    assert.ok((await page.locator('#kindList .kind').count()) >= 10, 'all office templates offered');
+    assert.ok(await page.locator('#kindLaw').isVisible(), 'stamp templates ask for the lawyer name');
+    let downloads = 0; page.on('download', () => downloads++);
+    await page.click('#kindCancel'); await page.waitForSelector('#kindDlg', { state: 'hidden' }); await page.waitForTimeout(300);
+    assert.strictEqual(downloads, 0, 'cancel: no file');
+    await page.click('#pdfBtn'); await page.waitForSelector('#kindDlg:not([hidden])');
+    await page.click('#kindList [data-kind="memo"]');
+    assert.ok(await page.locator('#kindLaw').isHidden(), 'a template without a stamp hides the name field');
+    await page.click('#kindOk'); await page.waitForFunction(() => window.__printed === 1);
+    assert.strictEqual(await page.inputValue('#tplSel'), 'memo', 'the chosen type is now the template');
+    assert.match(await page.textContent('#kindBtn'), /مذكرة/);
+    assert.strictEqual(await page.inputValue('#docName'), 'مذكرة مينا سامي', 'the untouched auto name follows the chosen type');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    assert.ok(await page.locator('#kindDlg').isHidden(), 'the second export does not ask again');
+    assert.match(dl.suggestedFilename(), /\.docx$|^download$/);
+    await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])'); await page.click('#kindCancel');
+  }));
+
+  await step('exam: kinds امتحان / مراجعة / مذكرة / عادية change the header of Word and PDF', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page) => {
+    await convert(page);
+    assert.match(await page.textContent('#kindBtn'), /امتحان/);
+    await page.click('#wordBtn'); await page.waitForSelector('#kindDlg:not([hidden])');
+    await page.click('#kindList [data-kind="revision"]');
+    assert.strictEqual(await page.inputValue('#kindTitle'), 'Revision Sheet');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#kindOk')]);
+    let doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
+    assert.ok(doc.includes('Revision Sheet') && doc.includes('Date:') && !doc.includes('Time:'), 'revision header');
+    await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])');
+    await page.click('#kindList [data-kind="notes"]'); await page.fill('#kindTitle', 'Fractions notes'); await page.click('#kindOk');
+    const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    doc = await (await JSZip.loadAsync(fs.readFileSync(await dl2.path()))).file('word/document.xml').async('string');
+    assert.ok(doc.includes('Fractions notes') && !doc.includes('Subject:'), 'notes: title without the header table');
+    await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])'); await page.click('#kindList [data-kind="plain"]'); await page.click('#kindOk');
+    await page.click('#pdfBtn'); await page.waitForFunction(() => window.__printed === 1);
+    const pr = await page.innerHTML('#printRoot');
+    assert.ok(!/xhead|xtitle/.test(pr), 'plain: no header in the PDF');
+    await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])'); await page.click('#kindList [data-kind="exam"]'); await page.click('#kindOk');
+    await page.click('#pdfBtn'); await page.waitForFunction(() => window.__printed === 2);
+    assert.ok(/Time:/.test(await page.innerHTML('#printRoot')), 'exam: full header again');
+  }));
+
+  await step('cancel: «إلغاء القراءة» aborts the reader calls and returns to the start; «إلغاء الكل» empties the tray; a tray photo opens full size and downloads', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, DELAY: 4000 }, null, 'sk-ant-test', async (page, calls) => {
+    await page.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: photo });
+    await page.waitForSelector('#tray:not([hidden])');
+    await page.click('#shots img'); await page.waitForSelector('#zoom:not([hidden])');
+    assert.ok(await page.locator('#zoomSave').isVisible());
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#zoomSave')]);
+    assert.match(dl.suggestedFilename(), /\.jpg$|^download$/);
+    await page.click('#zoomClose');
+    await page.click('#clearTrayBtn'); await page.waitForSelector('#tray', { state: 'hidden' });
+    await page.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: photo });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
+    await page.waitForSelector('#work:not([hidden])'); await page.waitForFunction(() => document.getElementById('stepText').textContent.includes('قراءة'));
+    await page.click('#cancelBtn');
+    await page.waitForSelector('#start:not([hidden])', { timeout: 3000 });
+    assert.ok(await page.locator('#fail').isHidden(), 'no error screen');
+    const before = calls.length; await page.waitForTimeout(5000);
+    assert.strictEqual(calls.length, before, 'no further reader calls after the cancel');
+    assert.ok(await page.locator('#resumeBtn').isHidden(), 'nothing was saved');
+  }));
+
+  await step('settings: Claude usage from the replies — calls, tokens, estimated cost per model; the review screen shows the page cost; reset', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page, calls) => {
+    await convert(page);
+    await page.waitForFunction(() => /ok/.test(document.getElementById('saveStatus').className));
+    const u = await page.evaluate(() => window.__test.usage());
+    assert.strictEqual(u.today.calls, calls.length, 'one usage record per Claude call');
+    assert.strictEqual(u.today.tokens, calls.length * 1700);
+    /* 1000 in + 200 out + 500 cache write: opus 0.004+0.004+0.0025, haiku (kind) 0.0001+0.0001+0.0000625 */
+    const opus = calls.filter(c => c !== 'kind').length, haiku = calls.length - opus;
+    const expect = opus * 0.0105 + haiku * 0.0002625;
+    assert.ok(Math.abs(u.today.usd - expect) < 1e-6, 'cost ' + u.today.usd + ' vs ' + expect);
+    assert.match(await page.textContent('#readerInfo'), /تكلفة القراءة ≈ \$0\.0\d/);
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#settingsBtn'); await page.waitForSelector('#settings:not([hidden])');
+    const box = await page.textContent('#usageBox');
+    assert.ok(/اليوم/.test(box) && /opus-5-5/.test(box) && /haiku-5-5/.test(box) && /console\.anthropic\.com/.test(box), box);
+    await page.click('#usageResetBtn');
+    await page.waitForFunction(() => /لم تُسجَّل/.test(document.getElementById('usageBox').textContent));
   }));
 
   await browser.close(); server.close();

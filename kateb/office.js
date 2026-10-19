@@ -184,6 +184,25 @@ var Office = (function () {
     var m = t.match(/ومحل(هما|هم|ها|ه)? ?المختار/), k = m ? (m[1] || 'ه') : 'ه';
     return { 'ه': { who: 'الطالب', resp: 'مسئوليته' }, 'ها': { who: 'الطالبة', resp: 'مسئوليتها' }, 'هما': { who: 'الطالبان', resp: 'مسئوليتهما' }, 'هم': { who: 'الطالبين', resp: 'مسئوليتهم' } }[k];
   }
+  /* the client's name, for the file name the office uses («صحة توقيع سمير رزق», «إعادة إعلان نجوى لطفى»):
+     the person on whose request the paper is made, else the first party of a contract, else the first «السيد / …» */
+  var TITLES = '(?:(?:السيد|السيدة|الأستاذ|الأستاذة|الدكتور|الدكتورة|الحاج|الحاجة|الشيخ|المهندس|المهندسة|ورثة|الورثة|المرحوم|المرحومة)\\s*\\/?\\s*)*';
+  var STOP = '(?=\\s+(?:بصفت|والمقيم|المقيم|ومحل|بالغ|وشهرت|المولود|ويمثل|الموطن|وجنسيت|ومهنت|ويعلن|رقم قومي|بطاقة|ت\\.?ق|-|–|—|،|,|\\(|\\)|\\/)|\\s*[\\n،,.:;()\\/]|\\s*$)';
+  var PARTY = [
+    new RegExp('بناء\\s+عل[ىي]\\s+طلب\\s+' + TITLES + '\\s*\\/?\\s*([^\\n\\/،,()]{3,60}?)' + STOP),
+    new RegExp('(?:الطرف\\s+الأول|طرف\\s+أول|البائع|الواهب|المقر|المنذر|المقدم\\s+من|مقدمة?\\s+من|مقدم\\s+من|المدعي|الطالب|المعلن)\\s*[:\\/]?\\s*' + TITLES + '\\s*\\/?\\s*([^\\n\\/،,()]{3,60}?)' + STOP),
+    new RegExp('(?:السيد|السيدة)\\s*\\/\\s*([^\\n\\/،,()]{3,60}?)' + STOP)
+  ];
+  function partyName(text) {
+    var t = String(text || '').replace(/[⟦⟧*_]/g, '').replace(/^\s*\[[A-Z]+\]\s*/gm, '').replace(/[ \t]+/g, ' ');
+    for (var i = 0; i < PARTY.length; i++) {
+      var m = t.match(PARTY[i]); if (!m) continue;
+      var name = m[1].replace(/\s+/g, ' ').trim().replace(/[\-–—:،,.؛]+$/, '').trim();
+      var w = name.split(' ').filter(function (x) { return !/^(?:و|ال)$/.test(x); }); if (w.length > 4) w = w.slice(0, 4);
+      if (w.length && /[؀-ۿ]/.test(w[0])) return w.join(' ');
+    }
+    return '';
+  }
   function subjectOf(items) {
     var t = items.filter(function (x) { return x.role === 'title' || x.role === 'title2'; }).slice(0, 2)
       .map(function (x) { return x.b.runs.map(function (r) { return r.text; }).join('').replace(/\s+/g, ' ').trim(); });
@@ -272,7 +291,8 @@ var Office = (function () {
   }
   function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   /* PDF shows ٠-٩ like the office's Word display (Numeral: Context); the Word file itself keeps 0-9 */
-  function spanHtml(text, rpr, r) { return '<span style="' + rCss(rpr, r) + '">' + escH(String(text).replace(/[0-9]/g, function (c) { return '٠١٢٣٤٥٦٧٨٩'[+c]; })).replace(/\t/g, '<span style="display:inline-block;width:3em"></span>') + '</span>'; }
+  function rtlDates(t) { return String(t).replace(/([0-9٠-٩]{1,4})\/([0-9٠-٩]{1,4})(\/([0-9٠-٩]{1,4}))?/g, function (m, a, b, c, d) { return a + '\u200F/\u200F' + b + (d ? '\u200F/\u200F' + d : ''); }); }   // dates read from the right, like Word shows them
+  function spanHtml(text, rpr, r) { return '<span style="' + rCss(rpr, r) + '">' + escH(rtlDates(String(text).replace(/[0-9]/g, function (c) { return '٠١٢٣٤٥٦٧٨٩'[+c]; }))).replace(/\t/g, '<span style="display:inline-block;width:3em"></span>') + '</span>'; }
 
   /* a Word shape (stamp box, rule, text box) → absolutely positioned HTML with the same geometry */
   function cm(emu) { return (emu / 360000).toFixed(3) + 'cm'; }
@@ -363,6 +383,6 @@ var Office = (function () {
     return { html: paras.map(function (p) { return p.html; }).join(''), pageCss: page };
   }
 
-  return { spec: spec, labels: labels, detect: detect, lawyerFrom: lawyerFrom, build: build, printHtml: printHtml, roleOf: roleOf, norm: norm, _plan: plan, _rprSet: rprSet };
+  return { spec: spec, labels: labels, detect: detect, lawyerFrom: lawyerFrom, partyName: partyName, build: build, printHtml: printHtml, roleOf: roleOf, norm: norm, _plan: plan, _rprSet: rprSet };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Office;

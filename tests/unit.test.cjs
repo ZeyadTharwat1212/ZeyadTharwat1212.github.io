@@ -301,3 +301,35 @@ test('store: documents, trash with 30-day purge, versions capped with the first 
   assert.strictEqual(w.versions.length, 2, 'within the gap the last auto version is updated, not added');
   assert.strictEqual(w.versions[1].pages[0].html, '<p>2</p>');
 });
+
+test('engine: Claude usage ledger → estimated cost per model', () => {
+  global.localStorage = { _: {}, getItem(k) { return this._[k] === undefined ? null : this._[k]; }, setItem(k, v) { this._[k] = String(v); }, removeItem(k) { delete this._[k]; } };
+  const Engine = require('../kateb/engine.js');
+  Engine.usageReset();
+  Engine.recordUsage('claude-opus-5-5', { input_tokens: 1000000, output_tokens: 100000, cache_creation_input_tokens: 200000, cache_read_input_tokens: 1000000 });
+  Engine.recordUsage('claude-haiku-5-5', { input_tokens: 1000000, output_tokens: 0 });
+  const u = Engine.usageSummary();
+  assert.strictEqual(u.today.calls, 2);
+  assert.ok(Math.abs(u.models['claude-opus-5-5'].usd - (4 + 2 + 1 + 0.2)) < 1e-9, 'opus: 4 in + 2 out + 1 cache write + 0.2 cache read');
+  assert.ok(Math.abs(u.models['claude-haiku-5-5'].usd - 0.1) < 1e-9);
+  assert.ok(Math.abs(u.total.usd - 7.3) < 1e-9);
+  assert.strictEqual(u.total.tokens, 3300000);
+  assert.deepStrictEqual(Engine.priceOf('claude-sonnet-5-5-20260101'), [2, 10, 2.5, 0.2], 'dated model ids match by prefix');
+  Engine.usageReset(); assert.strictEqual(Engine.usageSummary().total.calls, 0);
+});
+
+test('dates read from the right on screen (marks around the slashes), none of it reaches the file', () => {
+  const shown = Verify.rtlDates(Verify.arabicDigits('مؤرخ 10/11/2020 رقم 2537/2025 و 5 كيلو'));
+  assert.strictEqual(shown, 'مؤرخ ١٠‏/‏١١‏/‏٢٠٢٠ رقم ٢٥٣٧‏/‏٢٠٢٥ و ٥ كيلو');
+  assert.strictEqual(Verify.west(Verify.stripMarks(shown)), 'مؤرخ 10/11/2020 رقم 2537/2025 و 5 كيلو');
+});
+
+test('office: the client name for the file name, like the office names its files', () => {
+  const Office = require('../kateb/office.js');
+  assert.strictEqual(Office.partyName('[H] دعوى صحة توقيع\nبناء علي طلب السيد / مينا سامي - بالغ سن الرشد\nومحله المختار مكتب الأستاذ / ألون إبراهيم باشا المحامي'), 'مينا سامي');
+  assert.strictEqual(Office.partyName('بناء على طلب السيدة / نجوى لطفى محمد والمقيمة أسيوط'), 'نجوى لطفى محمد');
+  assert.strictEqual(Office.partyName('[H] عقد بيع ابتدائي\nالطرف الأول : السيد / باسم مكرم فهيم ، المقيم أسيوط (بائع)'), 'باسم مكرم فهيم');
+  assert.strictEqual(Office.partyName('بناء على طلب ورثة المرحوم / ⟦جرجس⟧ نعيم بصفتهم'), 'جرجس نعيم');
+  assert.strictEqual(Office.partyName('[H] مذكرة بدفاع\nالسيد / أحمد محمد علي\tبصفته'), 'أحمد محمد علي');
+  assert.strictEqual(Office.partyName('لا اسم هنا'), '');
+});

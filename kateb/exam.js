@@ -42,7 +42,7 @@ var ExamBuilder = (function () {
   var NOB = '<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>';
 
   function headerTable(h) {
-    var L = [h.line1, h.line2, h.line3], R = ['Subject: ' + (h.subject || ''), 'Grade: ' + (h.grade || ''), 'Time: ' + (h.time || '')];
+    var L = [h.line1, h.line2, h.line3], R = h.right || ['Subject: ' + (h.subject || ''), 'Grade: ' + (h.grade || ''), 'Time: ' + (h.time || '')];
     var rows = '';
     for (var i = 0; i < 3; i++) {
       var szL = i === 2 && (L[i] || '').length > 48 ? 16 : 20;
@@ -100,7 +100,7 @@ var ExamBuilder = (function () {
     opts = opts || {};
     var zip = new JSZip(), media = [], body = '';
     if (header) {
-      body += headerTable(header);
+      if (!header.noTable) body += headerTable(header);
       if (header.title) body += para(textRuns(header.title, { font: 'Arial Black', b: true, u: true, sz: 34 }), spacing(160, 120, 240) + '<w:jc w:val="center"/>');
     }
     var qn = 0;
