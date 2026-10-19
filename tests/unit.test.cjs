@@ -156,3 +156,47 @@ test('every template builds a well-formed file', async () => {
     assert.ok(!doc.includes('{{'), k);
   }
 });
+
+/* ---------- formula bank (kateb/bank.js + kateb/bank/*.json) ---------- */
+const Bank = require('../kateb/bank.js');
+test('bank files hold formulas with placeholders, never a client name or number', () => {
+  const files = fs.readdirSync(path.join(REPO, 'kateb/bank')).filter(f => f.endsWith('.json'));
+  assert.ok(files.length >= 10);
+  for (const f of files) {
+    const b = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank', f), 'utf8'));
+    assert.ok(b.lines.length > 5, f);
+    for (const l of b.lines) {
+      assert.ok(!/[0-9٠-٩]/.test(l.t), f + ': digits must be # → ' + l.t);
+      assert.ok(!/(السيد|السيدة|الأستاذ|الاستاذ|الدكتور)\s*\/\s*(?!\{\{NAME\}\})\S/.test(l.t), f + ': unmasked name → ' + l.t);
+      assert.strictEqual(l.o.length, Bank.words(l.t).length, f + ': original tokens align with normalised words → ' + l.t);
+    }
+  }
+});
+
+test('snap fixes a doubtful word inside a known formula, leaves names and numbers alone', () => {
+  const bank = { lines: [
+    { t: 'أنا معاون تنفيذ محكمة أول أسيوط قد انتقلت إلي {{PLACE}} وأعلنت :-', n: 50, o: 'أنا معاون تنفيذ محكمة أول أسيوط قد انتقلت إلي {{PLACE}} وأعلنت :-'.split(/\s+/) },
+    { t: 'بموجب عقد بيع مؤرخ في # باع المعلن إليه إلي الطالب ما هو عبارة عن', n: 40, o: 'بموجب عقد بيع مؤرخ في # باع المعلن إليه إلي الطالب ما هو عبارة عن'.split(/\s+/) },
+    { t: 'السيد / {{NAME}} مخاطبا مع', n: 60, o: 'السيد / {{NAME}} مخاطبا مع'.split(/\s+/) },
+  ] };
+  let r = Bank.snap('أنا ⟦معاوز⟧ تنفيذ محكمة أول أسيوط قد ⟦انتقلـت⟧ إلي شارع النميس وأعلنت :-', bank);
+  assert.strictEqual(r.text, 'أنا معاون تنفيذ محكمة أول أسيوط قد انتقلت إلي شارع النميس وأعلنت :-');
+  assert.strictEqual(r.fixed, 2);
+  r = Bank.snap('بموجب عقد بيع مؤرخ في ⟦7/1/2026⟧ باع ⟦المعلن⟧ إليه إلي الطالب ما هو عبارة عن', bank);
+  assert.match(r.text, /⟦7\/1\/2026⟧/, 'a number stays doubtful');
+  assert.doesNotMatch(r.text, /⟦المعلن⟧/);
+  r = Bank.snap('[N] 1. السيد / ⟦كريم عادل⟧ مخاطبا مع', bank);
+  assert.match(r.text, /⟦كريم عادل⟧/, 'a name stays doubtful');
+  r = Bank.snap('كلام حر لا يشبه أي صيغة ⟦غامض⟧ هنا أبداً', bank);
+  assert.match(r.text, /⟦غامض⟧/, 'no formula → untouched');
+  assert.strictEqual(Bank.snap('نص بلا شك', bank).text, 'نص بلا شك');
+});
+
+test('the real sihha bank recognises its own formulas', async () => {
+  const b = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank/sihha.json'), 'utf8'));
+  const m = Bank.match(b, 'ولما كان المادة 45 اثبات تنص علي :');
+  assert.ok(m && m.score >= 0.75, 'match ' + (m && m.score));
+  const r = Bank.snap('ولما كان ⟦المادة⟧ 45 اثبات ⟦تنض⟧ علي :', b);
+  assert.strictEqual(r.text, 'ولما كان المادة 45 اثبات تنص علي :');
+  assert.ok(Bank.promptText(b, 20).split('\n').length === 20);
+});
