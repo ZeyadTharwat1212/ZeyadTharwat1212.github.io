@@ -166,7 +166,37 @@
     refreshDoubts();
     show('done');
     if (!restored) saveDraft();
+    setupTemplate();
   }
+
+  /* ---------- office templates (legal page): the file comes out in the office's own layout ---------- */
+  var TPL = !EXAM && typeof Office !== 'undefined' && !!$('tplBox'), TPLS = [], lawNakd = false;
+  function allParas() { var out = []; sheets().forEach(function (s) { out = out.concat(sheetToParas(s)); }); return out; }
+  function parasText(ps) { return ps.map(function (p) { return p.table ? '' : p.runs.map(function (r) { return r.text; }).join(''); }).join('\n'); }
+  async function setupTemplate() {
+    if (!TPL) return;
+    try { TPLS = await Office.labels(); } catch (e) { $('tplBox').hidden = true; return; }
+    var text = parasText(allParas()), key = Office.detect(text), law = Office.lawyerFrom(text), sel = $('tplSel');
+    sel.innerHTML = '<option value="">عادي (بدون شكل المكتب)</option>' + TPLS.map(function (o) { return '<option value="' + o.key + '">' + escH(o.label) + '</option>'; }).join('');
+    sel.value = key || '';
+    $('lawName').value = law ? law.name : (Engine.lsGet('kateb.lawName') || '');
+    $('lawTitle').value = law ? law.title : (Engine.lsGet('kateb.lawTitle') || 'المحامي');
+    lawNakd = !!(law && law.nakd);
+    tplHint(); $('tplBox').hidden = false;
+  }
+  function tplOf(key) { for (var i = 0; i < TPLS.length; i++) if (TPLS[i].key === key) return TPLS[i]; return null; }
+  function tplHint() {
+    var t = tplOf($('tplSel').value);
+    $('lawName').closest('.tplrow2').hidden = !(t && t.stamp);
+    $('tplHint').textContent = t ? 'سيخرج Word و PDF بنفس شكل «' + t.label + '» في أوراق المكتب: الخطوط والأحجام والهوامش' + (t.stamp ? ' والختم والزخرفة.' : '.') : 'ملف عادي بدون شكل المكتب.';
+  }
+  function lawyer() { return { name: $('lawName').value.trim(), title: $('lawTitle').value, nakd: lawNakd }; }
+  if (TPL) {
+    $('tplSel').addEventListener('change', tplHint);
+    $('lawName').addEventListener('input', function () { Engine.lsSet('kateb.lawName', this.value.trim()); });
+    $('lawTitle').addEventListener('change', function () { Engine.lsSet('kateb.lawTitle', this.value); });
+  }
+  function tplKey() { return TPL && !$('tplBox').hidden ? $('tplSel').value : ''; }
 
   /* ---------- review: walk the doubtful words one by one ---------- */
   var cur = -1, saveT = null;
@@ -233,7 +263,7 @@
     var h = {}; ['hLine1', 'hLine2', 'hLine3', 'hSubject', 'hGrade', 'hTime', 'hTitle'].forEach(function (id) { h[id] = $(id) ? $(id).value : ''; });
     return { line1: h.hLine1, line2: h.hLine2, line3: h.hLine3, subject: h.hSubject, grade: h.hGrade, time: h.hTime, title: h.hTitle };
   }
-  function baseName() { if (!EXAM) return 'مستند ' + stamp(); var h = examHeader(); return ((h.grade || '') + ' ' + (h.title || 'Exam')).replace(/[\\\/:*?"<>|]/g, '-').trim(); }
+  function baseName() { if (!EXAM) { var t = tplOf(tplKey()); return (t ? t.label.replace(/[\\\/:*?"<>|]/g, '-') : 'مستند') + ' ' + stamp(); } var h = examHeader(); return ((h.grade || '') + ' ' + (h.title || 'Exam')).replace(/[\\\/:*?"<>|]/g, '-').trim(); }
   function leftNote() { var n = marks().length; return n ? ' ما زال فيه ' + n + ' كلمة صفراء غير مؤكدة، وستظهر بالأصفر في الملف.' : ''; }
 
   $('wordBtn').addEventListener('click', async function () {
@@ -242,8 +272,9 @@
       var blob, all = sheets();
       marks().forEach(function (m) { m.classList.remove('cur'); });
       if (!EXAM) {
-        var paras = []; all.forEach(function (s) { paras = paras.concat(sheetToParas(s)); });
-        blob = await DocxBuilder.build(JSZip, paras, { pageNumbers: true, title: 'مستند' }).generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        var paras = allParas(), key = tplKey();
+        var zip = key ? await Office.build(JSZip, paras, key, { lawyer: lawyer() }) : DocxBuilder.build(JSZip, paras, { pageNumbers: true, title: 'مستند' });
+        blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
       } else {
         var blocks = []; all.forEach(function (s) { blocks = blocks.concat(domBlocks(s)); });
         blob = await ExamBuilder.build(JSZip, blocks, examHeader(), {}).generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -255,21 +286,36 @@
   });
 
   /* PDF: the browser's own print engine lays out Arabic perfectly; the person picks «Save as PDF». */
-  $('pdfBtn').addEventListener('click', function () {
-    var root = $('printRoot'), h = EXAM ? examHeader() : null;
+  $('pdfBtn').addEventListener('click', async function () {
+    var root = $('printRoot'), h = EXAM ? examHeader() : null, key = tplKey();
+    if (key) {
+      try {
+        marks().forEach(function (m) { m.classList.remove('cur'); });
+        var ph = await Office.printHtml(allParas(), key, { lawyer: lawyer() });
+        root.className = 'office'; root.dir = 'rtl'; root.innerHTML = ph.html;
+        var st = $('tplPage') || document.head.appendChild(Object.assign(document.createElement('style'), { id: 'tplPage' }));
+        st.textContent = ph.pageCss;
+        printNow();
+        return;
+      } catch (e) { /* fall back to the plain layout below */ }
+    }
+    if ($('tplPage')) $('tplPage').textContent = '';
     marks().forEach(function (m) { m.classList.remove('cur'); });
     var head = h ? '<table class="xhead"><tbody>' + [[h.line1, 'Subject: ' + (h.subject || '')], [h.line2, 'Grade: ' + (h.grade || '')], [h.line3, 'Time: ' + (h.time || '')]].map(function (r) {
       return '<tr><td>' + escH(r[0] || '') + '</td><td>' + escH(r[1]) + '</td></tr>'; }).join('') + '</tbody></table>' + (h.title ? '<p class="xtitle">' + escH(h.title) + '</p>' : '') : '';
     root.className = 'sheet doc' + (EXAM ? ' exam' : ''); root.dir = EXAM ? 'ltr' : 'rtl';
     root.innerHTML = head + sheets().map(function (s) { return s.innerHTML; }).join('');
     Array.prototype.forEach.call(root.querySelectorAll('[contenteditable]'), function (el) { el.removeAttribute('contenteditable'); });
+    printNow();
+  });
+  function printNow(after) {
     var title = document.title; document.title = baseName();
     setTimeout(function () {
       try { window.print(); } catch (e) {}
-      document.title = title;
+      document.title = title; if (after) after();
       $('savedNote').hidden = false; $('savedNote').textContent = 'في نافذة الطباعة اختر «حفظ كملف PDF» (Save as PDF).' + leftNote();
     }, 60);
-  });
+  }
 
   /* legal: edited sheet → blocks (paragraphs and tables) */
   function walkRuns(node) {
@@ -363,6 +409,7 @@
     "- One paragraph per line, in reading order. Join lines that are one paragraph in the source into a single line.\n" +
     "- Start a line with [H] for a centered bold title, [S] for a bold side heading (e.g. «الوقائع», «الطلبات», «أولاً: …»), [C] for centered text, [L] for a block on the left side (e.g. a signature block in an Arabic paper), [R] for a short line on the right. Normal paragraphs get no tag.\n" +
     "- Numbered or bulleted items: one item per line starting with [N] followed by the item's own number or mark exactly as written (e.g. [N] ١- …, [N] (أ) …, [N] - …).\n" +
+    "- Court papers and contracts: the document's name is [H] (e.g. [H] دعوى صحة توقيع, [H] إعادة إعلان في الدعوى, [H] عقد بيع ابتدائي) and a case-number line right under it is [H] too; centered phrases such as «وأعلنته بالآتي», «بناء عليه», «الموضوع», «لذلك», «موقع العقار …» are [C]; every person served or every party is its own line starting with its number (1. / 1- ) and with the name in **bold**; contract clauses start with their ordinal as written («أولاً :», «بند تمهيدي :»); the property table «موقع العقار» is a [TABLE]; keep «ولأجل العلم ،،» as its own line. Do not write decorative marks.\n" +
     "- A table or a ruled list in columns: one line [TABLE] cell | cell | cell || cell | cell | cell (| between cells, || between rows, first row = the header as written).\n" +
     "- **text** = bold, __text__ = underlined, as in the source. Use a TAB between two items on one line far apart (e.g. a name and the word بصفته).\n" +
     "- Wrap any word or number you are not fully sure of in ⟦ ⟧ like ⟦كلمة⟧; truly unreadable → ⟦؟⟧. Never silently guess names, numbers, dates or case numbers: mark them.\n" +

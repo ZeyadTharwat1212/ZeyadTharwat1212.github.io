@@ -25,6 +25,18 @@ Share → «إضافة إلى الشاشة الرئيسية» hint. The app open
 An iPhone home-screen app has its own storage, so the first time it asks to paste the link once (then the password).
 When you bump `?v=N`, bump it in `sw.js` too (the `CACHE` name and the `SHELL` list).
 
+## Office templates (legal page)
+`kateb/templates/<key>.docx` are the office's own Word files with the body emptied (styles, fonts, page setup, stamp
+texture kept) and `templates.json` holds the exact paragraph/run formatting of every line role in each original
+(title, date, party, body, heading, clause, closing, table …) plus the stamp box, vertical rule and subject box with
+placeholders. `kateb/office.js` detects the paper type from its title, finds the lawyer in «ومحله المختار مكتب الأستاذ /»,
+and pours the reviewed text into the skeleton; the PDF path renders the same plan as HTML with the same fonts, sizes,
+spacing, margins and shapes. No client text is stored in the repo (a unit test checks).
+
+To rebuild after changing the chosen originals (kept outside the repo):
+
+    python tests/tools/build_templates.py <folder with sihha.docx, sale.docx, …> kateb/templates
+
 ## How a page is read
 1. Rotation check, then the page is sent whole + as 2–3 sharper strips.
 2. **Read 1** and **read 2** are made independently (different instructions and temperature).

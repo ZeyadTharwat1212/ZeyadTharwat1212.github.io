@@ -1,9 +1,11 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v3';
+var CACHE = 'kateb-v4';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=3', 'kateb/engine.js?v=3', 'kateb/verify.js?v=3', 'kateb/docx.js?v=3', 'kateb/exam.js?v=3', 'kateb/app.js?v=3',
+  'kateb/style.css?v=4', 'kateb/engine.js?v=4', 'kateb/verify.js?v=4', 'kateb/docx.js?v=4', 'kateb/exam.js?v=4', 'kateb/app.js?v=4',
+  'kateb/office.js?v=4', 'kateb/templates/templates.json?v=4',
+  'kateb/templates/announce.docx?v=4', 'kateb/templates/gift.docx?v=4', 'kateb/templates/inherit_announce.docx?v=4', 'kateb/templates/inherit_request.docx?v=4', 'kateb/templates/iqrar.docx?v=4', 'kateb/templates/memo.docx?v=4', 'kateb/templates/price.docx?v=4', 'kateb/templates/reannounce.docx?v=4', 'kateb/templates/sahifa.docx?v=4', 'kateb/templates/sale.docx?v=4', 'kateb/templates/sihha.docx?v=4', 'kateb/templates/warning.docx?v=4',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
