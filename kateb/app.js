@@ -150,6 +150,7 @@
     var g = Verify.guard(final, a, b || a, !EXAM), text = g.text, snapped = 0;
     var numbers = await numbersP;
     if (numbers) { var nc = Verify.checkNumbers(text, numbers); text = nc.text; }
+    if (!EXAM) text = Verify.houseDigits(text);                 // the office types 10/1/2020, never ١٠/١/٢٠٢٠
     if (bank) { var sn = Bank.snap(text, bank); text = sn.text; snapped = sn.fixed; }
     var r = await toResult(text);
     r.img = Engine.scaled(p.canvas, 1600).toDataURL('image/jpeg', 0.8);
@@ -303,21 +304,11 @@
     var o = e.target.closest && e.target.closest('.orig'); if (o) { $('zoomImg').src = o.querySelector('img').src; $('zoom').hidden = false; $('zoomClose').focus(); }
   });
   $('pagesBox').addEventListener('input', function () { refreshDoubts(); queueSave(); });
-  /* digits follow the words around the caret: inside Arabic text a typed 0-9 becomes ٠-٩ (and stays ASCII next to
-     Latin text or ASCII digits), so a number typed into an Arabic line looks like the rest of the paper */
+  /* house style: numbers in the office's papers are always Western digits, so a ٠-٩ keystroke becomes 0-9 */
   if (!EXAM) $('pagesBox').addEventListener('beforeinput', function (e) {
-    if (e.inputType !== 'insertText' || !e.data || !/^[0-9]$/.test(e.data)) return;
-    var sel = window.getSelection(); if (!sel || !sel.rangeCount) return;
-    var rg = sel.getRangeAt(0), node = rg.startContainer, off = rg.startOffset, before = '', after = '';
-    if (node.nodeType === 3) { before = node.nodeValue.slice(0, off); after = node.nodeValue.slice(off); }
-    else { var p = node.closest ? node.closest('p,td,div') : null; before = p ? p.textContent : ''; }
-    var ctx = (before.replace(/[\s\/\-.,:،]+$/, '').slice(-12) + ' ' + after.slice(0, 12));
-    var lastLetter = (before.match(/[A-Za-z\u0600-\u06FF0-9٠-٩](?=[^A-Za-z\u0600-\u06FF0-9٠-٩]*$)/) || [''])[0];
-    var arabic = /[\u0600-\u06FF]/.test(lastLetter) || (!lastLetter && /[\u0600-\u06FF]/.test(after)) || (/[٠-٩]/.test(lastLetter));
-    if (/[0-9A-Za-z]/.test(lastLetter)) arabic = false;
-    if (!arabic) return;
+    if (e.inputType !== 'insertText' || !e.data || !/^[٠-٩۰-۹]$/.test(e.data)) return;
     e.preventDefault();
-    document.execCommand('insertText', false, '٠١٢٣٤٥٦٧٨٩'[+e.data]);
+    document.execCommand('insertText', false, Verify.west(e.data));
   });
   $('zoomClose').addEventListener('click', function () { $('zoom').hidden = true; });
   var zoomW = 100;
@@ -540,7 +531,8 @@
     "- **text** = bold, __text__ = underlined, as in the source. Use a TAB between two items on one line far apart (e.g. a name and the word بصفته).\n" +
     "- Wrap any word or number you are not fully sure of in ⟦ ⟧ like ⟦كلمة⟧; truly unreadable → ⟦؟⟧. Never silently guess names, numbers, dates or case numbers: mark them.\n" +
     "- Leave out: words crossed out or scribbled over (if they hid a name or field, write ........ in their place), stamps, seals, signatures, page numbers, handwritten court notes in the margins.\n" +
-    "- Keep the source's spelling, punctuation and digit style (١٢٣ stays ١٢٣, 123 stays 123). Write each date or number with its digits in the order a typist would type them so it looks identical to the paper. Copy EVERY digit: a year has four digits (٢٠٢٢, not ٢٠٢), an amount keeps all its zeros; read numbers from the strips, never from memory.\n" +
+    "- HOUSE STYLE OF THIS OFFICE (measured on 1,740 of its typed papers): ALL numbers and dates use Western digits 0-9, even when the hand wrote ٠-٩. Dates are day/month/year like 10/1/2020 or 7/10/2025 (never year first). Amounts like 250000 ج ( مائتان وخمسون ألف جنيه مصري لا غير ). Case references like رقم 2537 لسنة 2025. Keep the source's spelling and punctuation otherwise.\n" +
+    "- Copy EVERY digit: a year has four digits (2022, not 202), an amount keeps all its zeros; read numbers from the strips digit by digit, never from memory.\n" +
     "- Do not add, remove, summarize, translate or correct the wording.";
   var EXAM_FORMAT =
     "OUTPUT FORMAT (plain text lines, no code fences, no commentary):\n" +
