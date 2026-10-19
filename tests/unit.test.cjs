@@ -246,3 +246,58 @@ test('office spelling dictionary fixes دعوه → دعوى and ه/ة slips, ne
   assert.ok(r.fixed >= 3);
   assert.strictEqual(Arabic.spell('[FIG] <svg>دعوه</svg>', dict).text, '[FIG] <svg>دعوه</svg>');
 });
+
+/* ---------- KATEB15: learning + store ---------- */
+const Learn = require('../kateb/learn.js');
+const Store = require('../kateb/store.js');
+
+test('learn: wordDiff finds one-for-one replaced Arabic words and ignores numbers, markup and moved text', () => {
+  const first = '[H] مذكرة بدفاع\nالسيد / ⟦احمد⟧ محمد علي\nرقم ١٢٣٤ لسنة ٢٠٢٤\nدعوه صحة توقيع';
+  const now = 'مذكرة بدفاع\nالسيد / أحمد محمود علي\nرقم ١٢٣٥ لسنة ٢٠٢٤\nدعوى صحة توقيع';
+  assert.deepStrictEqual(Learn.wordDiff(first, now), [{ from: 'احمد', to: 'أحمد' }, { from: 'محمد', to: 'محمود' }, { from: 'دعوه', to: 'دعوى' }]);
+  assert.deepStrictEqual(Learn.wordDiff('أ ب ج', 'أ ب ج'), []);
+  assert.deepStrictEqual(Learn.wordDiff('الاسم هنا', 'الاسم'), [], 'a deleted word is not a correction');
+  assert.deepStrictEqual(Learn.wordDiff('x y', 'z w'), [], 'latin words are not learned');
+});
+
+test('learn: records merge per profile, prompt block lists them, lexicon unmarks confirmed words, fixes swap repeated corrections', () => {
+  const items = [];
+  Learn.record(items, 'baba', 'fix', 'محمد', 'محمود', 1); Learn.record(items, 'baba', 'fix', 'محمد', 'محمود', 2);
+  Learn.record(items, 'baba', 'word', 'الأهلية', '', 3); Learn.record(items, 'mama', 'word', 'الكسر', '', 4);
+  assert.strictEqual(Learn.record(items, 'baba', 'fix', '1234', '1235'), null, 'numbers are never learned');
+  assert.strictEqual(items.length, 3); assert.strictEqual(items[0].n, 2);
+  assert.deepStrictEqual(Learn.stats(items, 'baba'), { fixes: 1, words: 1, total: 2, last: 3 });
+  const p = Learn.promptText(items, 'baba');
+  assert.match(p, /«محمد» → «محمود»/); assert.match(p, /الأهلية/); assert.doesNotMatch(p, /الكسر/, 'another profile\'s words stay out');
+  assert.strictEqual(Learn.promptText(items, 'general'), '');
+  assert.deepStrictEqual(Learn.applyFixes('السيد ⟦محمد⟧ و ⟦علي⟧', items, 'baba'), { text: 'السيد ⟦محمود⟧ و ⟦علي⟧', fixed: 1 });
+  Learn.record(items, 'baba', 'word', 'الأهلية', '', 5);
+  assert.deepStrictEqual(Learn.applyLexicon('المحكمة ⟦الأهلية⟧ ⟦الكسر⟧ ⟦١٢٣⟧', items, 'baba'), { text: 'المحكمة الأهلية ⟦الكسر⟧ ⟦١٢٣⟧', cleared: 1 });
+  assert.strictEqual(Learn.applyLexicon('⟦محمود⟧', items, 'baba').cleared, 1, 'a correction applied twice is a known word');
+});
+
+test('store: documents, trash with 30-day purge, versions capped with the first kept (memory backend)', async () => {
+  Store._reset();
+  const d = Store.newDoc('legal', 'ورقة', [{ html: '<p>أ</p>', img: 'data:x' }]);
+  await Store.saveDoc(d);
+  assert.strictEqual(Store.which(), 'ls');
+  assert.strictEqual((await Store.listDocs('legal')).length, 1); assert.strictEqual((await Store.listDocs('exam')).length, 0);
+  await Store.renameDoc(d.id, 'عقد'); assert.strictEqual((await Store.getDoc(d.id)).name, 'عقد');
+  await Store.trashDoc(d.id);
+  assert.strictEqual((await Store.listDocs('legal')).length, 0); assert.strictEqual((await Store.listTrash('legal')).length, 1);
+  await Store.restoreDoc(d.id); assert.strictEqual((await Store.listDocs('legal')).length, 1);
+  await Store.trashDoc(d.id);
+  assert.strictEqual(await Store.purgeOld(Date.now() + 29 * 864e5), 0, 'kept for 30 days');
+  assert.strictEqual(await Store.purgeOld(Date.now() + 31 * 864e5), 1, 'gone after 30 days');
+  assert.strictEqual(await Store.getDoc(d.id), null);
+  const v = Store.newDoc('legal', 'x', [{ html: '<p>0</p>' }]);
+  assert.strictEqual(Store.addVersion(v, [{ html: '<p>0</p>' }], 'auto'), false, 'unchanged text adds nothing');
+  for (let i = 1; i <= 30; i++) Store.addVersion(v, [{ html: '<p>' + i + '</p>' }], 'auto', 0, i * 1000);
+  assert.strictEqual(v.versions.length, Store.MAX_VERSIONS);
+  assert.strictEqual(v.versions[0].label, 'first'); assert.strictEqual(v.versions[0].pages[0].html, '<p>0</p>');
+  assert.strictEqual(v.versions[v.versions.length - 1].pages[0].html, '<p>30</p>');
+  const w = Store.newDoc('legal', 'y', [{ html: '<p>0</p>' }]);
+  Store.addVersion(w, [{ html: '<p>1</p>' }], 'auto', 60000, 1000); Store.addVersion(w, [{ html: '<p>2</p>' }], 'auto', 60000, 2000);
+  assert.strictEqual(w.versions.length, 2, 'within the gap the last auto version is updated, not added');
+  assert.strictEqual(w.versions[1].pages[0].html, '<p>2</p>');
+});

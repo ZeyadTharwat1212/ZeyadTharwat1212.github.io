@@ -18,6 +18,8 @@ Both pages are thin shells over the shared code in this folder:
 | `docx.js` | legal Word builder: titles, side headings, numbered items, tables, bold/underline, yellow doubts, page numbers |
 | `exam.js` | exam Word builder |
 | `app.js` | screens, the reading pipeline, the review screen, Word/PDF export, saved draft |
+| `store.js` | on-device documents (IndexedDB, localStorage fallback): pages + photos, versions, recently deleted (30 days), learning records |
+| `learn.js` | handwriting learning: corrections and confirmations per writer profile → prompt block for the reader, on-device lexicon |
 | `style.css` | screen + print (PDF) styles |
 
 ## Installable app (web + phone)
@@ -60,8 +62,30 @@ To rebuild the bank after adding office files or web formulas (kept outside the 
 
     python tests/tools/build_bank.py <txt folder from the .doc files> <folder of .docx> <web formulas folder or -> kateb/bank
 
+## Documents, autosave, undo, versions
+- Every converted paper becomes a document on the device (`store.js`): name (editable at the top of the review
+  screen), pages with their photos, status (مسودة / تم التصدير). «📁 ملفاتي السابقة» lists them (open / rename /
+  delete); deleted files wait 30 days in «🗑️ المحذوفات» (restore or permanent delete, each confirmed).
+- Autosave writes 0.8 s after the last change and says so («جارٍ الحفظ...» → «✅ تم الحفظ تلقائيًا», or
+  «تعذر الحفظ» with a tap to retry). A closed tab or a switched app flushes a pending save.
+- «↩️ تراجع» / «↪️ إعادة» (Ctrl+Z / Ctrl+Y, 100 steps) cover typing, confirmations and restores.
+- «🕘 نسخ سابقة»: the first reading, every export, every re-read and autosaves at most every 10 minutes (20 kept,
+  the first always). «استرجاع النص الأول» restores the reading; «🔄 إعادة التحويل» reads the stored photos again.
+- «⬅️ رجوع» walks a screen stack (also the phone's back button); the review screen keeps its state.
+
+## Handwriting learning (opt-in, real, on the device)
+Off until switched on in «🧠 تحسين خط اليد». When on, per writer profile (👩 ماما / 👨 بابا / عام):
+- a word the reviewer replaces since the first reading is recorded as *misread → correct* (`Learn.wordDiff`:
+  one-for-one Arabic word replacements only, never numbers);
+- a yellow word confirmed as read is recorded as a known word.
+Next page of the same profile: the records go into the reader's system prompt («this hand writes X as Y»), a
+doubtful word corrected the same way twice before is swapped (still yellow), and a word confirmed twice is no longer
+marked when the model doubted it (the two reads must still agree). The learn screen shows every record with its
+count and a delete per row; «حذف بيانات التعلم» clears all. Nothing leaves the device except, during a read, the
+learned words inside the prompt. Measure the effect with `tests/eval` (same pages with learning on and off).
+
 ## Changing the code
-Bump `?v=N` on the script/style tags in both HTML pages and in `sw.js` (`CACHE` + `SHELL`) so phones load the new files. Then run the tests:
+Bump the version everywhere (`python tests/tools/bump.py N`: `?v=N`, `sw.js`, `APP_VER`, `version.json`) so every open phone updates itself. Then run the tests:
 
     cd tests && npm install && npm test        # unit + browser (fake Gemini)
     GEMINI_KEY=... npm run eval                # real accuracy on your own sample pages (tests/eval/samples)
