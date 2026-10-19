@@ -106,7 +106,7 @@ To rebuild the bank after adding office files or web formulas (kept outside the 
 - **Transcription**: Claude does not hear, so audio goes to Gemini with a second key («مفتاح الصوت»: `&g=` in the
   link from setup.html, or pasted in ⚙️ الإعدادات; a Gemini main key doubles as it). The recording is decoded in
   the browser to 16 kHz mono WAV, normalised if quiet, cut at quiet moments into ≤8-minute chunks with 3 s overlap;
-  each chunk is transcribed (Gemini 2.5 Pro first) with a legal-context prompt that marks unsure words `⟦…⟧` and
+  chunks are transcribed three at a time (Gemini 2.5 Flash first: seconds per minute of speech; Pro only as fallback, it is 5-10× slower) with a legal-context prompt that marks unsure words `⟦…⟧` and
   never completes formulas; chunks are merged with the overlap removed. Without an audio key the live text is the
   transcript (dictation only; uploads say what is missing).
 - **Layout**: Claude lays the transcript out as the written paper (LEGAL_FORMAT markup, punctuation, digits for

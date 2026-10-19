@@ -1128,13 +1128,20 @@
         var chunks;
         try { var cd = await Speech.toChunks(blob); chunks = cd.chunks; seconds = cd.seconds || seconds; }
         catch (e) { if (GEMINI_AUDIO.test(blob.type || '') && blob.size < 19 * 1048576) chunks = [{ from: 0, to: seconds, blob: blob }]; else throw { code: 'audio_decode' }; }
-        var models = await Engine.audioModels(aKey), parts = [];
-        for (var i = 0; i < chunks.length; i++) {
-          setStage(1); setProgress(1 + i / chunks.length, 3, 'جارٍ تفريغ الكلام' + (chunks.length > 1 ? ' (الجزء ' + (i + 1) + ' من ' + chunks.length + ')' : '') + '…');
-          var r = await Engine.generate(aKey, PROMPTS.transcribe(i + 1, chunks.length, $('cmdChk') ? $('cmdChk').checked : true), [chunks[i].blob], { models: models, temperature: 0.1, maxTokens: 16384, signal: sig(), onWait: onWait });
-          if (r.model) usedModels[r.model] = 1;
-          parts.push(Engine.clean(r.text).replace(/^\s*(لا يوجد كلام|لا شيء)\.?\s*$/m, ''));
+        var models = await Engine.audioModels(aKey), parts = new Array(chunks.length), done = 0;
+        setStage(1); setProgress(1, 3, 'جارٍ تفريغ الكلام' + (chunks.length > 1 ? ' (' + chunks.length + ' أجزاء معًا)' : '') + '…');
+        /* the parts go out together (three at a time), each keeps its place */
+        var queue = chunks.map(function (c, i) { return i; });
+        async function worker() {
+          while (queue.length) {
+            var i = queue.shift();
+            var r = await Engine.generate(aKey, PROMPTS.transcribe(i + 1, chunks.length, $('cmdChk') ? $('cmdChk').checked : true), [chunks[i].blob], { models: models, temperature: 0.1, maxTokens: 16384, signal: sig(), onWait: onWait });
+            if (r.model) usedModels[r.model] = 1;
+            parts[i] = Engine.clean(r.text).replace(/^\s*(لا يوجد كلام|لا شيء)\.?\s*$/m, '');
+            done++; setProgress(1 + done / chunks.length, 3, 'جارٍ تفريغ الكلام (' + done + ' من ' + chunks.length + ')…');
+          }
         }
+        await Promise.all([worker(), worker(), worker()]);
         transcript = Speech.merge(parts);
       } else if (o.live) transcript = o.live;
       else throw { code: 'no_audio_key' };
