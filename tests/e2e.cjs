@@ -87,17 +87,24 @@ async function runMode(browser, base, file, answers, check, key) {
     assert.deepStrictEqual(calls.sort(), ['judge', 'read', 'read2'], 'both reads + one judge, no separate rotation call');
     assert.strictEqual(await page.locator('.pg .orig img').count(), 1, 'original photo beside the text');
     const marked = await page.locator('#pagesBox mark').allTextContents();
-    assert.deepStrictEqual(marked.sort(), ['1234', 'محمد', 'مدني'].sort(), 'disputed name + number + reader-1 doubt are marked');
+    assert.deepStrictEqual(marked.sort(), ['1234', 'محمد'].sort(), 'disputed name + number are marked; a word the judge confirmed is not');
     assert.strictEqual(await page.locator('#pagesBox table td').count(), 4);
     assert.strictEqual(await page.locator('#pagesBox p.sub').count(), 1);
     assert.strictEqual(await page.locator('#pagesBox p.li').count(), 1);
     assert.ok(await page.locator('#doubtBar').isVisible());
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'legal-review.png'), fullPage: true });
+    /* a digit typed inside an Arabic line becomes an Arabic-Indic digit; next to Latin letters it stays ASCII */
+    await page.evaluate(() => { const p = document.querySelector('#pagesBox .sheet p.sub'); const r = document.createRange(); r.selectNodeContents(p); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); p.focus(); });
+    await page.keyboard.type(' 5');
+    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /٥$/, 'Arabic-Indic digit after Arabic text');
+    await page.keyboard.type(' ab7');
+    assert.match(await page.textContent('#pagesBox .sheet p.sub'), /ab7$/, 'ASCII digit after Latin letters');
+    await page.keyboard.press('Shift+Home'); await page.keyboard.press('End');
     await page.click('#nextDoubt');
     assert.strictEqual(await page.locator('#pagesBox mark.cur').count(), 1);
     await page.click('#okDoubt');
-    assert.strictEqual(await page.locator('#pagesBox mark').count(), 2, 'confirm removes one mark');
-    assert.match(await page.textContent('#doubtCount'), /2/);
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'confirm removes one mark');
+    assert.match(await page.textContent('#doubtCount'), /1/);
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
     /* headless Chromium reports Arabic download names as "download"; real browsers keep «مستند 2026-…docx» */
     assert.match(dl.suggestedFilename(), /\.docx$|^download$/);
@@ -111,7 +118,7 @@ async function runMode(browser, base, file, answers, check, key) {
     await page.waitForTimeout(900);                      // draft is saved 0.8 s after the last edit
     await page.reload(); await page.waitForSelector('#resumeBtn:not([hidden])');
     await page.click('#resumeBtn'); await page.waitForSelector('#done:not([hidden])');
-    assert.strictEqual(await page.locator('#pagesBox mark').count(), 2, 'draft keeps the reviewed state');
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'draft keeps the reviewed state');
     assert.strictEqual(await page.locator('.pg .orig img').count(), 1, 'draft keeps the photo');
   }));
 
@@ -171,7 +178,7 @@ async function runMode(browser, base, file, answers, check, key) {
     assert.ok(!doc2.includes('Zokrofi'), 'plain layout when no template is chosen');
   }));
 
-  const SIHHA_B = SIHHA_READ.replace('مينا سامي', 'مينا سامى').replace('باع المعلن', 'باع ⟦المعلز⟧');
+  const SIHHA_B = SIHHA_READ.replace('مينا سامي', 'مينا سامح').replace('باع المعلن', 'باع ⟦المعلز⟧');
   await step('Claude: two parallel Sonnet reads, Opus judge with the صحة توقيع formula bank, rotation from the read, snap fixes a formula word', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_B, J: SIHHA_B, ROT: 0 }, async (page, calls) => {
     assert.deepStrictEqual(calls.slice().sort(), ['judge', 'read', 'read2']);
     const c = calls.claude, reads = c.filter(x => x.kind !== 'judge'), judge = c.find(x => x.kind === 'judge');

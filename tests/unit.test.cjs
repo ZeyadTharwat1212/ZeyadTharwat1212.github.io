@@ -12,8 +12,8 @@ const A = '[H] **مذكرة بدفاع**\nالسيد / أحمد محمد علي\
 const B = '[H] **مذكرة بدفاع**\nالسيد / أحمد محمود علي\tبصفته\nفي القضية رقم 1284 لسنة ٢٠٢٤';
 
 test('tokens ignore markup, tashkeel and punctuation', () => {
-  assert.deepStrictEqual(Verify.tokens('[H] **مُذَكِّرة** ⟦بدفاع⟧، __نعم__'), ['مذكرة', 'بدفاع', 'نعم']);
-  assert.deepStrictEqual(Verify.tokens('[TABLE] الاسم | العدد || أحمد | {3/4}'), ['الاسم', 'العدد', 'أحمد', '3/4']);
+  assert.deepStrictEqual(Verify.tokens('[H] **مُذَكِّرة** ⟦بدفاع⟧، __نعم__'), ['مذكره', 'بدفاع', 'نعم']);   // ة→ه, hamza and ى folded
+  assert.deepStrictEqual(Verify.tokens('[TABLE] الاسم | العدد || أحمد | {3/4}'), ['الاسم', 'العدد', 'احمد', '3/4']);
   assert.deepStrictEqual(Verify.tokens('[FIG] <svg><text>9</text></svg>\nok'), ['ok']);
 });
 
@@ -26,8 +26,8 @@ test('compare finds the words two readings disagree on', () => {
 });
 
 test('guard marks invented words, disputed numbers and (strict) disputed names', () => {
-  const loose = Verify.guard(A.replace('السيد', 'الاستاذ'), A, B, false).text;
-  assert.match(loose, /⟦الاستاذ⟧/);          // in neither reading
+  const loose = Verify.guard(A.replace('القضية', 'المحكمة'), A, B, false).text;
+  assert.match(loose, /⟦المحكمة⟧/);          // in neither reading and unlike anything they saw
   assert.match(loose, /⟦1234⟧/);             // number the readings disagreed on
   assert.doesNotMatch(loose, /⟦محمد⟧/);      // name: only in strict mode
   const strict = Verify.guard(A, A, B, true).text;
@@ -36,9 +36,10 @@ test('guard marks invented words, disputed numbers and (strict) disputed names',
   assert.strictEqual(Verify.guard(A, A, A, true).added, 0, 'agreeing readings add nothing');
 });
 
-test('guard keeps a word marked when either reader doubted it', () => {
+test('guard keeps a number marked when either reader doubted it; a confirmed word is not re-marked', () => {
   const g = Verify.guard('رقم 55 لسنة', 'رقم ⟦55⟧ لسنة', 'رقم 55 لسنة', false);
   assert.strictEqual(g.text, 'رقم ⟦55⟧ لسنة');
+  assert.strictEqual(Verify.guard('وأعلنته بالآتي', 'وأعلنته ⟦بالآتي⟧', 'واعلنته بالاتي', true).text, 'وأعلنته بالآتي', 'spelling variants + reader doubt on a plain word: the judge confirmed it');
   assert.strictEqual(Verify.guard('رقم ⟦55⟧ لسنة', 'رقم 55 لسنة', 'رقم 55 لسنة').text, 'رقم ⟦55⟧ لسنة', 'no double brackets');
 });
 

@@ -281,6 +281,22 @@
     var o = e.target.closest && e.target.closest('.orig'); if (o) { $('zoomImg').src = o.querySelector('img').src; $('zoom').hidden = false; $('zoomClose').focus(); }
   });
   $('pagesBox').addEventListener('input', function () { refreshDoubts(); queueSave(); });
+  /* digits follow the words around the caret: inside Arabic text a typed 0-9 becomes ٠-٩ (and stays ASCII next to
+     Latin text or ASCII digits), so a number typed into an Arabic line looks like the rest of the paper */
+  if (!EXAM) $('pagesBox').addEventListener('beforeinput', function (e) {
+    if (e.inputType !== 'insertText' || !e.data || !/^[0-9]$/.test(e.data)) return;
+    var sel = window.getSelection(); if (!sel || !sel.rangeCount) return;
+    var rg = sel.getRangeAt(0), node = rg.startContainer, off = rg.startOffset, before = '', after = '';
+    if (node.nodeType === 3) { before = node.nodeValue.slice(0, off); after = node.nodeValue.slice(off); }
+    else { var p = node.closest ? node.closest('p,td,div') : null; before = p ? p.textContent : ''; }
+    var ctx = (before.replace(/[\s\/\-.,:،]+$/, '').slice(-12) + ' ' + after.slice(0, 12));
+    var lastLetter = (before.match(/[A-Za-z\u0600-\u06FF0-9٠-٩](?=[^A-Za-z\u0600-\u06FF0-9٠-٩]*$)/) || [''])[0];
+    var arabic = /[\u0600-\u06FF]/.test(lastLetter) || (!lastLetter && /[\u0600-\u06FF]/.test(after)) || (/[٠-٩]/.test(lastLetter));
+    if (/[0-9A-Za-z]/.test(lastLetter)) arabic = false;
+    if (!arabic) return;
+    e.preventDefault();
+    document.execCommand('insertText', false, '٠١٢٣٤٥٦٧٨٩'[+e.data]);
+  });
   $('zoomClose').addEventListener('click', function () { $('zoom').hidden = true; });
   var zoomW = 100;
   function setZoom(w) { zoomW = Math.max(60, Math.min(400, w)); $('zoom').style.setProperty('--zw', zoomW + '%'); }
