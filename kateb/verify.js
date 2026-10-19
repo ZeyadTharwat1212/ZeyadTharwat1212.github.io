@@ -126,6 +126,37 @@ var Verify = (function () {
     return { text: text, added: added };
   }
 
+  /* numbers pass: «<number> | <words before>» lines from a dedicated read of the strips.
+     A number in the text that the pass did not see is marked; a truncated one (prefix of a pass number) is
+     completed with the pass's digits and marked for the eye. Numbers the pass saw exactly are left alone. */
+  var AR_DIG = '٠١٢٣٤٥٦٧٨٩', FA_DIG = '۰۱۲۳۴۵۶۷۸۹';
+  function west(t) { return String(t || '').replace(/[٠-٩]/g, function (c) { return String(AR_DIG.indexOf(c)); }).replace(/[۰-۹]/g, function (c) { return String(FA_DIG.indexOf(c)); }); }
+  function digitsOnly(t) { return west(t).replace(/[^0-9]/g, ''); }
+  function sameScript(sample, digits) { return /[٠-٩]/.test(sample) ? digits.replace(/[0-9]/g, function (c) { return AR_DIG[+c]; }) : digits; }
+  function checkNumbers(text, list) {
+    var seen = String(list || '').split('\n').map(function (l) { return west(l.split('|')[0]).trim(); }).filter(function (x) { return /[0-9]/.test(x) && x.indexOf('?') < 0; });
+    var exact = {}; seen.forEach(function (n) { exact[n.replace(/\s+/g, '')] = 1; exact[digitsOnly(n)] = 1; });
+    var changed = 0, marked = 0;
+    var out = String(text || '').replace(/\r/g, '').split('\n').map(function (line) {
+      if (isFig(line)) return line;
+      return segments(line).map(function (s) {
+        if (!s.word || !hasDigit(s.t) || s.doubt) return s.t;
+        var core = s.t.replace(/[*_⟦⟧]/g, ''), w = west(core).replace(/[^0-9\/.,:\-]/g, ''), d = digitsOnly(core);
+        if (!d) return s.t;
+        if (/^[(]?[0-9٠-٩]{1,2}[).\-–:]$/.test(core)) return s.t;       // item numbering «1.» «٢-» is not data
+        if (exact[w] || exact[d]) return s.t;
+        /* truncated: a pass number starts with this one and has 1–2 more digits (٢٠٢ → ٢٠٢٢) */
+        var longer = seen.filter(function (n) { var nd = digitsOnly(n); return nd !== d && nd.indexOf(d) === 0 && nd.length - d.length <= 2 && (n.replace(/\s+/g, '').indexOf(w) === 0); });
+        if (longer.length === 1) {
+          var fixed = sameScript(core, longer[0].replace(/\s+/g, ''));
+          changed++; return s.t.replace(core, '⟦' + fixed + '⟧');
+        }
+        marked++; return '⟦' + s.t + '⟧';
+      }).join('');
+    }).join('\n');
+    return { text: out, changed: changed, marked: marked };
+  }
+
   function stripMarkup(text) {
     return String(text || '').replace(/\r/g, '').split('\n').filter(function (l) { return !isFig(l); }).map(function (line) {
       return segments(line).filter(function (s) { return s.word; }).map(function (s) { return s.t.replace(/[⟦⟧]/g, ''); }).join(' ');
@@ -159,6 +190,6 @@ var Verify = (function () {
   }
   function doubtRecall(ref, hypMarked) { var a = audit(ref, hypMarked); return a.wrong ? a.caught / a.wrong : 1; }
 
-  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall };
+  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Verify;
