@@ -54,6 +54,35 @@
   /* ---------- pick ---------- */
   $('pickBtn').addEventListener('click', function () { $('file').click(); });
   $('file').addEventListener('change', function () { var f = Array.prototype.slice.call(this.files || []); this.value = ''; if (f.length) start(f); });
+
+  /* ---------- camera: one page per shot, cleaned, collected in a tray, read together ---------- */
+  var shots = [];
+  function enhanceOn() { var c = $('enhanceChk'); return !c || c.checked; }
+  function cleaned(c) { try { return enhanceOn() && typeof Scan !== 'undefined' ? Scan.enhance(c) : c; } catch (e) { return c; } }
+  function renderTray() {
+    var box = $('shots'); if (!box) return;
+    box.innerHTML = shots.map(function (c, i) { return '<div class="shot"><img alt="صفحة ' + (i + 1) + '" src="' + Engine.scaled(c, 260).toDataURL('image/jpeg', 0.7) + '"><span class="n">' + (i + 1) + '</span><button class="x" type="button" data-rm="' + i + '" aria-label="حذف الصفحة">✕</button></div>'; }).join('');
+    $('trayCount').textContent = shots.length === 1 ? 'صفحة واحدة جاهزة' : shots.length + ' صفحات جاهزة';
+    $('tray').hidden = !shots.length;
+    $('goBtn').querySelector('span').textContent = 'ابدأ القراءة' + (shots.length > 1 ? ' (' + shots.length + ' صفحات)' : '');
+  }
+  if ($('camBtn')) {
+    $('camBtn').addEventListener('click', function () { $('camFile').click(); });
+    $('moreBtn').addEventListener('click', function () { $('camFile').click(); });
+    $('camFile').addEventListener('change', async function () {
+      var f = this.files && this.files[0]; this.value = ''; if (!f) return;
+      try { var cs = await Engine.fileToCanvases(f); cs.forEach(function (c) { shots.push(cleaned(c)); }); renderTray(); $('tray').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      catch (e) { fail(e); }
+    });
+    $('shots').addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (!b) return; shots.splice(+b.dataset.rm, 1); renderTray(); });
+    $('goBtn').addEventListener('click', function () { if (!shots.length) return; startCanvases(shots.slice()); shots = []; renderTray(); });
+  }
+  function startCanvases(cs) {
+    show('work'); setProgress(0, 1, 'جارٍ تجهيز الصفحات…'); setStage(0); $('waitText').hidden = true; $('thumbs').innerHTML = '';
+    pages = cs.map(function (c) { return { base: c }; });
+    pages.forEach(function (p) { var im = document.createElement('img'); im.alt = ''; im.src = Engine.scaled(p.base, 200).toDataURL('image/jpeg', 0.7); $('thumbs').appendChild(im); });
+    run();
+  }
   $('againBtn').addEventListener('click', toStart);
   $('retryBtn').addEventListener('click', function () { if (pages.length) run(); else toStart(); });
   $('homeBtn').addEventListener('click', toStart);
@@ -73,7 +102,10 @@
     show('work'); setProgress(0, 1, 'جارٍ فتح الصور…'); setStage(0); $('waitText').hidden = true; $('thumbs').innerHTML = '';
     pages = [];
     try {
-      for (var i = 0; i < files.length; i++) { var cs = await Engine.fileToCanvases(files[i]); cs.forEach(function (c) { pages.push({ base: c }); }); }
+      for (var i = 0; i < files.length; i++) {
+        var isPdf = files[i].type === 'application/pdf' || /\.pdf$/i.test(files[i].name), cs = await Engine.fileToCanvases(files[i]);
+        cs.forEach(function (c) { pages.push({ base: isPdf ? c : cleaned(c) }); });   // photos are cleaned, PDF pages are already clean
+      }
     } catch (e) { fail(e); return; }
     pages.forEach(function (p) { var im = document.createElement('img'); im.alt = ''; im.src = Engine.scaled(p.base, 200).toDataURL('image/jpeg', 0.7); $('thumbs').appendChild(im); });
     run();

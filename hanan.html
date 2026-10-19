@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=9">
+<link rel="stylesheet" href="kateb/style.css?v=10">
 </head>
 <body>
 <main>
@@ -52,9 +52,21 @@
     <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
     <h3>صوّري الامتحان</h3>
     <p class="hint">اختاري كل صفحات الامتحان مرة واحدة بالترتيب، أو اسحبيها هنا.</p>
-    <button class="huge" id="pickBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg><span>صوّري الامتحان</span></button>
-    <div class="chips"><span class="chip">JPG</span><span class="chip">PNG</span><span class="chip">PDF</span><span class="chip">عدة صفحات</span></div>
+    <div class="pickrow">
+      <button class="huge" id="camBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg><span>صوّري الامتحان</span></button>
+      <button class="btn" id="pickBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>اختيار من الملفات</span></button>
+    </div>
+    <label class="chk"><input type="checkbox" id="enhanceChk" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label>
+    <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
     <input type="file" id="file" multiple accept="image/*,application/pdf" hidden>
+  </div>
+  <div class="card tray" id="tray" hidden>
+    <div class="trayhead"><b id="trayCount"></b><span class="small">الصفحات بالترتيب. صوّر الصفحة التالية أو ابدأ القراءة.</span></div>
+    <div class="shots" id="shots"></div>
+    <div class="actions">
+      <button class="btn" id="moreBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg><span>صوّر صفحة أخرى</span></button>
+      <button class="btn go" id="goBtn" type="button"><span>ابدأ القراءة</span></button>
+    </div>
   </div>
   <button class="btn resume" id="resumeBtn" type="button" hidden><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></span><span>استكمال آخر مستند<small id="resumeWhen"></small></span></button>
   <details class="more card">
@@ -141,13 +153,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=9"></script>
-<script src="kateb/verify.js?v=9"></script>
-<script src="kateb/arabic.js?v=9"></script>
-<script src="kateb/bank.js?v=9"></script>
-<script src="kateb/docx.js?v=9"></script>
-<script src="kateb/exam.js?v=9"></script>
+<script src="kateb/engine.js?v=10"></script>
+<script src="kateb/scan.js?v=10"></script>
+<script src="kateb/verify.js?v=10"></script>
+<script src="kateb/arabic.js?v=10"></script>
+<script src="kateb/bank.js?v=10"></script>
+<script src="kateb/docx.js?v=10"></script>
+<script src="kateb/exam.js?v=10"></script>
 
-<script src="kateb/app.js?v=9"></script>
+<script src="kateb/app.js?v=10"></script>
 </body>
 </html>

@@ -307,3 +307,17 @@ body.wide{padding-bottom:110px}
 #printRoot.office .otbl td{border:1px solid #000;padding:2pt 5pt;vertical-align:top}
 #printRoot.office .oshape span{white-space:normal}
 @media print{#printRoot.office{font-size:inherit;line-height:normal;overflow:visible}}
+
+/* ---------- camera tray ---------- */
+.pickrow{display:flex;flex-direction:column;gap:10px;width:100%;max-width:460px;align-items:stretch}
+.pickrow .btn{min-height:56px;font-size:18px}
+.chk{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--muted);cursor:pointer}
+.chk input{width:22px;height:22px;accent-color:var(--primary)}
+.tray{padding:16px;display:flex;flex-direction:column;gap:12px}
+.trayhead{display:flex;flex-direction:column;gap:2px}
+.trayhead b{font-size:18px}
+.shots{display:flex;gap:10px;overflow-x:auto;padding:4px 2px;scroll-snap-type:x mandatory}
+.shot{position:relative;flex:0 0 auto;width:96px;scroll-snap-align:start;animation:pop var(--t-slow) var(--ease) both}
+.shot img{display:block;width:96px;height:128px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#fff;box-shadow:var(--shadow-1)}
+.shot .n{position:absolute;top:6px;inset-inline-start:6px;background:var(--primary);color:var(--primary-ink);font-size:12px;font-weight:800;border-radius:99px;padding:1px 8px}
+.shot .x{position:absolute;top:4px;inset-inline-end:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(15,23,42,.75);color:#fff;font-size:14px;display:grid;place-items:center;cursor:pointer}
