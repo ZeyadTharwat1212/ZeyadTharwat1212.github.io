@@ -230,9 +230,10 @@ test('check flags a contradicting amount or weekday and leaves a consistent pape
 });
 test('snap applies the office spelling inside a recognised formula', () => {
   const bank = { lines: [{ t: 'بالغ سن الرشد كامل الأهلية القانونية مقيم {{PLACE}}', n: 50, o: 'بالغ سن الرشد كامل الأهلية القانونية مقيم {{PLACE}}'.split(/\s+/) }] };
-  const r = Bank.snap('بالغ سن الرشد كامل الاهليه القانونيه مقيم أسيوط', bank);
-  assert.strictEqual(r.text, 'بالغ سن الرشد كامل الاهلية القانونية مقيم أسيوط', 'ة/ه slips take the office form; the hamza habit of the hand stays');
+  const r = Bank.snap('بالغ سن الرشد كامل الأهليه القانونيه مقيم أسيوط', bank);
+  assert.strictEqual(r.text, 'بالغ سن الرشد كامل الأهلية القانونية مقيم أسيوط', 'ة/ه slips take the office form');
   assert.strictEqual(r.styled, 2);
+  assert.strictEqual(Bank.snap('بالغ سن الرشد كامل الاهلية القانونية مقيم أسيوط', bank).styled, 0, 'a hamza habit is not touched');
 });
 
 test('office spelling dictionary fixes دعوه → دعوى and ه/ة slips, never a different word', () => {
