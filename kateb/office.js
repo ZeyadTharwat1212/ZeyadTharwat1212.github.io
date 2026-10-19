@@ -271,7 +271,8 @@ var Office = (function () {
     return css;
   }
   function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-  function spanHtml(text, rpr, r) { return '<span style="' + rCss(rpr, r) + '">' + escH(text).replace(/\t/g, '<span style="display:inline-block;width:3em"></span>') + '</span>'; }
+  /* PDF shows ٠-٩ like the office's Word display (Numeral: Context); the Word file itself keeps 0-9 */
+  function spanHtml(text, rpr, r) { return '<span style="' + rCss(rpr, r) + '">' + escH(String(text).replace(/[0-9]/g, function (c) { return '٠١٢٣٤٥٦٧٨٩'[+c]; })).replace(/\t/g, '<span style="display:inline-block;width:3em"></span>') + '</span>'; }
 
   /* a Word shape (stamp box, rule, text box) → absolutely positioned HTML with the same geometry */
   function cm(emu) { return (emu / 360000).toFixed(3) + 'cm'; }

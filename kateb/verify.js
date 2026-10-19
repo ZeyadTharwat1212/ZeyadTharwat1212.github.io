@@ -159,6 +159,8 @@ var Verify = (function () {
 
   /* house style of the office (measured on its 1,740 documents): Western digits always (114,386 vs 157), dates as
      day/month/year (4,836 vs 1). Applied after reading, so the hand's ٠-٩ never reach the file. */
+  /* display form: the office's Word shows 0-9 as ٠-٩ (Numeral: Context), so the screen and the PDF do the same */
+  function arabicDigits(text) { return String(text || '').replace(/[0-9]/g, function (c) { return AR_DIG[+c]; }); }
   function houseDigits(text) {
     return String(text || '').split('\n').map(function (line) {
       if (isFig(line)) return line;
@@ -202,6 +204,6 @@ var Verify = (function () {
   }
   function doubtRecall(ref, hypMarked) { var a = audit(ref, hypMarked); return a.wrong ? a.caught / a.wrong : 1; }
 
-  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers, houseDigits: houseDigits, west: west };
+  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers, houseDigits: houseDigits, arabicDigits: arabicDigits, west: west };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Verify;
