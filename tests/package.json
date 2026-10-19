@@ -1,0 +1,16 @@
+{
+  "name": "kateb-tests",
+  "private": true,
+  "description": "Tests for kateb.html / hanan.html. Nothing here is loaded by the site.",
+  "scripts": {
+    "unit": "node --test unit.test.cjs",
+    "e2e": "node e2e.cjs",
+    "eval": "node eval/run_eval.cjs",
+    "test": "node --test unit.test.cjs && node e2e.cjs"
+  },
+  "devDependencies": {
+    "jszip": "3.10.1",
+    "playwright": "1.56.1",
+    "xml-js": "1.6.11"
+  }
+}
