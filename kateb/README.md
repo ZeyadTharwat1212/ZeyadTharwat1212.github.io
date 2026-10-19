@@ -18,6 +18,13 @@ Both pages are thin shells over the shared code in this folder:
 | `app.js` | screens, the reading pipeline, the review screen, Word/PDF export, saved draft |
 | `style.css` | screen + print (PDF) styles |
 
+## Installable app (web + phone)
+`kateb.webmanifest` / `hanan.webmanifest` + `sw.js` make each page an app with its own icon (`kateb/icons/`):
+Android / desktop Chrome show «ثبّت التطبيق على الشاشة الرئيسية» on the start screen; iPhone shows the
+Share → «إضافة إلى الشاشة الرئيسية» hint. The app opens full screen and loads offline (reading still needs internet).
+An iPhone home-screen app has its own storage, so the first time it asks to paste the link once (then the password).
+When you bump `?v=N`, bump it in `sw.js` too (the `CACHE` name and the `SHELL` list).
+
 ## How a page is read
 1. Rotation check, then the page is sent whole + as 2–3 sharper strips.
 2. **Read 1** and **read 2** are made independently (different instructions and temperature).
@@ -31,7 +38,7 @@ Both pages are thin shells over the shared code in this folder:
 If the second read fails (daily quota), the old single proofreading pass is used instead.
 
 ## Changing the code
-Bump `?v=N` on the script/style tags in both HTML pages so phones load the new files. Then run the tests:
+Bump `?v=N` on the script/style tags in both HTML pages and in `sw.js` (`CACHE` + `SHELL`) so phones load the new files. Then run the tests:
 
     cd tests && npm install && npm test        # unit + browser (fake Gemini)
     GEMINI_KEY=... npm run eval                # real accuracy on your own sample pages (tests/eval/samples)

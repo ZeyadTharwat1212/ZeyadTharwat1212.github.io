@@ -17,12 +17,20 @@
 
   /* ---------- unlock ---------- */
   (function boot() {
-    if (!window.crypto || !crypto.subtle) { $('nokeyMsg').textContent = 'افتح الرابط من متصفح كروم أو سفاري الحديث.'; show('nokey'); return; }
+    if (!window.crypto || !crypto.subtle) { $('nokeyMsg').textContent = 'افتح الرابط من متصفح كروم أو سفاري الحديث.'; $('linkForm').hidden = true; show('nokey'); return; }
     KEY = Engine.savedKey();
     if (KEY) { toStart(); return; }
     if (Engine.blobFromHash()) { show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
     show('nokey');
   })();
+  /* opened from the home-screen icon without a saved key (iPhone keeps a separate storage): paste the link once */
+  $('linkForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var m = ($('linkIn').value || '').match(/k=([A-Za-z0-9_-]{40,})/);
+    if (!m) { $('linkErr').hidden = false; return; }
+    $('linkErr').hidden = true; history.replaceState(null, '', location.pathname + '#k=' + m[1]);
+    show('lock'); setTimeout(function () { $('pw').focus(); }, 50);
+  });
   $('lockForm').addEventListener('submit', async function (e) {
     e.preventDefault(); $('pwErr').hidden = true; $('pwBtn').disabled = true; $('pwBtn').textContent = 'جارٍ الفتح…';
     try { KEY = await Engine.unlock(Engine.blobFromHash(), $('pw').value.trim()); Engine.saveKey(KEY); toStart(); }
@@ -326,6 +334,21 @@
       } catch (e) { res(null); }
     });
   }
+  /* ---------- installable app: home-screen icon, opens full screen ---------- */
+  var installEvt = null;
+  function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installEvt = e; if (!standalone()) $('installBtn').hidden = false; });
+  window.addEventListener('appinstalled', function () { installEvt = null; $('installBtn').hidden = true; });
+  $('installBtn').addEventListener('click', async function () {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch (e) {}
+    installEvt = null; $('installBtn').hidden = true;
+  });
+  /* iPhone / iPad Safari has no install prompt: show the two taps instead */
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream && !standalone()) $('iosHint').hidden = false;
+
   window.__test = { finish: finish, toResult: toResult, setResults: function (r) { results = r; }, show: show, sheetToParas: sheetToParas, domBlocks: domBlocks, results: function () { return results; } };
 
   /* ---------- exam header fields (remembered on this device) ---------- */

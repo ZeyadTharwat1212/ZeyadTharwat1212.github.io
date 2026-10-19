@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<rect width="512" height="512" fill="#1d4fbf"/>
+<path d="M150 104h158l64 64v240a20 20 0 0 1-20 20H150a20 20 0 0 1-20-20V124a20 20 0 0 1 20-20z" fill="#fff"/>
+<path d="M308 104v44a20 20 0 0 0 20 20h44" fill="#dfe6ef"/><rect x="170" y="200" width="172" height="16" rx="8" fill="#9fb3c8"/><rect x="170" y="244" width="172" height="16" rx="8" fill="#9fb3c8"/><rect x="230" y="288" width="0" height="0"/><rect x="178" y="318" width="70" height="14" rx="7" fill="#1d4fbf"/><rect x="206" y="290" width="14" height="70" rx="7" fill="#1d4fbf"/><rect x="270" y="306" width="70" height="14" rx="7" fill="#1d4fbf"/><rect x="270" y="332" width="70" height="14" rx="7" fill="#1d4fbf"/></svg>
