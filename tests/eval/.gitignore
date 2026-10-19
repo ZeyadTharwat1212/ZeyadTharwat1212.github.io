@@ -1,0 +1,4 @@
+# Real papers are private: keep samples and reports on the PC only.
+samples/**
+!samples/README.md
+report-*.json
