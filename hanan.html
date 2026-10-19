@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=14">
+<link rel="stylesheet" href="kateb/style.css?v=15">
 </head>
 <body>
 <main>
@@ -169,6 +169,7 @@
   <h2 class="h2">⚙️ الإعدادات</h2>
   <div class="card setrow"><b>🧠 تحسين التعرف على خط اليد</b><p class="small" id="setLearnState"></p><button class="btn" id="setLearnBtn" type="button">فتح إعدادات التعلم</button></div>
   <div class="card setrow"><label class="chk"><input type="checkbox" id="setEnhance" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label></div>
+  <div class="card setrow"><label class="switch"><input type="checkbox" id="setFast" checked><span>⚡ وضع السرعة (Claude)</span></label><p class="small">نفس موديل Opus 5.5 ونفس القراءتين والمراجعة، لكن الرد يخرج أسرع حتى ٢٫٥ مرة، والقراءة تتم بتركيز أعلى في نفس الوقت. التكلفة ضعف السعر العادي (حوالي ٠٫٥ إلى ٠٫٧ دولار للصفحة بدل ٠٫٢٥ إلى ٠٫٣٥). لو خط السرعة مشغول، يرجع للعادي تلقائيًا.</p></div>
   <div class="card setrow"><b>💳 استهلاك Claude (على هذا الجهاز)</b><div id="usageBox"></div><button class="btn sm" id="usageResetBtn" type="button">تصفير العداد</button></div>
   <div class="card setrow"><b>💾 التخزين على هذا الجهاز</b><p class="small" id="setDocsInfo"></p><p class="small" id="storageInfo"></p><button class="btn" id="deleteLearnBtn" type="button">حذف بيانات التعلم</button><button class="btn danger" id="deleteAllBtn" type="button">حذف كل الملفات المحفوظة</button></div>
   <div class="card setrow"><b>🔒 الخصوصية</b><p class="small">الملفات والنسخ السابقة وبيانات التعلم كلها محفوظة داخل هذا المتصفح على هذا الجهاز فقط، ولا تُرفع إلى أي خادم. أثناء القراءة تُرسل صورة الورقة إلى خدمة القراءة (Claude من Anthropic أو Gemini من Google حسب المفتاح)، ومعها، إذا كان التعلم مفعّلًا، قائمة الكلمات التي تعلّمها من تصحيحاتك لتحسين القراءة. حذف بيانات التطبيق من المتصفح يحذف كل شيء.</p></div>
@@ -219,16 +220,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=14"></script>
-<script src="kateb/scan.js?v=14"></script>
-<script src="kateb/verify.js?v=14"></script>
-<script src="kateb/arabic.js?v=14"></script>
-<script src="kateb/bank.js?v=14"></script>
-<script src="kateb/store.js?v=14"></script>
-<script src="kateb/learn.js?v=14"></script>
-<script src="kateb/docx.js?v=14"></script>
-<script src="kateb/exam.js?v=14"></script>
+<script src="kateb/engine.js?v=15"></script>
+<script src="kateb/scan.js?v=15"></script>
+<script src="kateb/verify.js?v=15"></script>
+<script src="kateb/arabic.js?v=15"></script>
+<script src="kateb/bank.js?v=15"></script>
+<script src="kateb/store.js?v=15"></script>
+<script src="kateb/learn.js?v=15"></script>
+<script src="kateb/docx.js?v=15"></script>
+<script src="kateb/exam.js?v=15"></script>
 
-<script src="kateb/app.js?v=14"></script>
+<script src="kateb/app.js?v=15"></script>
 </body>
 </html>

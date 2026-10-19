@@ -333,3 +333,10 @@ test('office: the client name for the file name, like the office names its files
   assert.strictEqual(Office.partyName('[H] مذكرة بدفاع\nالسيد / أحمد محمد علي\tبصفته'), 'أحمد محمد علي');
   assert.strictEqual(Office.partyName('لا اسم هنا'), '');
 });
+
+test('engine: fast-mode usage is priced at twice the list price; the switch defaults to on', () => {
+  const Engine = require('../kateb/engine.js');
+  assert.deepStrictEqual(Engine.priceOf('claude-opus-5-5 ⚡'), [8, 40, 10, 0.4]);
+  assert.deepStrictEqual(Engine.priceOf('claude-opus-5-5'), [4, 20, 5, 0.2]);
+  assert.strictEqual(Engine.fastOn(), true); Engine.setFast(false); assert.strictEqual(Engine.fastOn(), false); Engine.setFast(true);
+});

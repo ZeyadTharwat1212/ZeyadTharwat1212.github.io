@@ -68,15 +68,19 @@ var Engine = (function () {
     var body = { model: opt.model || (opt.fast ? CLAUDE_FAST : opt.best ? CLAUDE_BEST : CLAUDE_MODEL), max_tokens: opt.maxTokens || 8192, messages: [{ role: 'user', content: content }],
       output_config: { effort: opt.effort || 'medium' } };
     if (opt.system) body.system = [{ type: 'text', text: opt.system, cache_control: { type: 'ephemeral' } }];
+    /* ⚡ fast mode (Opus only): the same model answering up to 2.5× faster at twice the price; when its own rate limit
+       is hit the call falls back to the standard lane instead of waiting */
+    var fastLane = fastOn() && /claude-opus/.test(body.model) && opt.fast !== true;
     var lastErr = null;
     for (var attempt = 0; attempt < 4; attempt++) {
-      var r;
+      var r, headers = { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
+      if (fastLane) { body.speed = 'fast'; headers['anthropic-beta'] = 'fast-mode-2026-02-01'; } else delete body.speed;
       try {
-        r = await fetch(CLAUDE_API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify(body), signal: opt.signal });
+        r = await fetch(CLAUDE_API, { method: 'POST', headers: headers, body: JSON.stringify(body), signal: opt.signal });
       } catch (e) { if (e && e.name === 'AbortError') throw { code: 'cancelled' }; lastErr = { code: 'network' }; await sleep(2500); continue; }
       if (r.ok) {
         var j = await r.json();
-        if (j.usage) recordUsage(j.model || body.model, j.usage);
+        if (j.usage) recordUsage((j.model || body.model) + ((j.usage.speed === 'fast' || body.speed === 'fast') ? ' ⚡' : ''), j.usage);
         var text = (j.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text; }).join('');
         if (j.stop_reason === 'refusal') throw { code: 'SAFETY' };
         if (!text) { lastErr = { code: j.stop_reason || 'empty' }; break; }
@@ -85,9 +89,11 @@ var Engine = (function () {
       var t = await r.text().catch(function () { return ''; });
       if (r.status === 401 || (r.status === 400 && /api key|authentication/i.test(t))) throw { code: 'bad_key' };
       if (r.status === 400 && /credit|billing|balance/i.test(t)) throw { code: 'credit' };
+      if (r.status === 429 && fastLane) { fastLane = false; lastErr = { code: 'rate' }; continue; }       // fast lane busy → standard lane at once
       if (r.status === 429) { var ra = +(r.headers.get('retry-after') || 0) || 8; if (opt.onWait) opt.onWait(ra); await sleep(ra * 1000); lastErr = { code: 'rate' }; continue; }
       if (r.status === 529 || r.status >= 500) { await sleep(3000 * (attempt + 1)); lastErr = { code: 'server' }; continue; }
       if (r.status === 404 && body.model !== CLAUDE_MODEL) { body.model = CLAUDE_MODEL; continue; }
+      if (r.status === 400 && fastLane && /speed|fast/i.test(t)) { fastLane = false; continue; }      // fast mode not available for this account → standard
       lastErr = { code: 'model_' + r.status }; break;
     }
     throw lastErr || { code: 'unknown' };
@@ -211,7 +217,14 @@ var Engine = (function () {
      The real bill is on console.anthropic.com; this is an estimate from the usage field of every reply. */
   var LS_USAGE = 'kateb.usage';
   var PRICE = { 'claude-opus-5-5': [4, 20, 5, 0.2], 'claude-sonnet-5-5': [2, 10, 2.5, 0.2], 'claude-haiku-5-5': [0.1, 0.5, 0.125, 0.01] };
-  function priceOf(model) { var ks = Object.keys(PRICE); for (var i = 0; i < ks.length; i++) if (String(model || '').indexOf(ks[i]) === 0) return PRICE[ks[i]]; return PRICE['claude-opus-5-5']; }
+  function priceOf(model) {
+    var m = String(model || ''), fast = /⚡/.test(m), ks = Object.keys(PRICE), p = PRICE['claude-opus-5-5'];
+    for (var i = 0; i < ks.length; i++) if (m.indexOf(ks[i]) === 0) { p = PRICE[ks[i]]; break; }
+    return fast ? p.map(function (x) { return x * 2; }) : p;                 // fast mode: twice the list price
+  }
+  var LS_FAST = 'kateb.fast';
+  function fastOn() { var v = lsGet(LS_FAST); return v === null ? true : v === '1'; }   // on unless switched off in the settings
+  function setFast(on) { lsSet(LS_FAST, on ? '1' : '0'); }
   function usd(model, u) { var p = priceOf(model); return ((u.i || 0) * p[0] + (u.o || 0) * p[1] + (u.w || 0) * p[2] + (u.r || 0) * p[3]) / 1e6; }
   function day(t) { var d = t ? new Date(t) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function usageLoad() { try { var u = JSON.parse(lsGet(LS_USAGE) || 'null'); return u && u.d ? u : { d: {} }; } catch (e) { return { d: {} }; } }
@@ -243,7 +256,7 @@ var Engine = (function () {
   return { provider: provider, lock: lock, unlock: unlock, blobFromHash: blobFromHash, savedKey: savedKey, saveKey: saveKey, forget: forget,
     listModels: listModels, rank: rank, generate: generate, fileToCanvases: fileToCanvases, scaled: scaled, rotated: rotated,
     pageImages: pageImages, detectRotation: detectRotation, clean: clean, download: download, errText: errText, lsGet: lsGet, lsSet: lsSet,
-    recordUsage: recordUsage, onUsage: onUsage, usageSummary: usageSummary, usageReset: usageReset, usd: usd, priceOf: priceOf };
+    recordUsage: recordUsage, onUsage: onUsage, usageSummary: usageSummary, usageReset: usageReset, usd: usd, priceOf: priceOf, fastOn: fastOn, setFast: setFast };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = Engine;

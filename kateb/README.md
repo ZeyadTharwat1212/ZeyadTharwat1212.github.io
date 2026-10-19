@@ -73,6 +73,13 @@ To rebuild the bank after adding office files or web formulas (kept outside the 
   the first always). «استرجاع النص الأول» restores the reading; «🔄 إعادة التحويل» reads the stored photos again.
 - «⬅️ رجوع» walks a screen stack (also the phone's back button); the review screen keeps its state.
 
+## Speed: ⚡ fast mode (default on, ⚙️ الإعدادات)
+Every Opus call (the two reads, the judge, the numbers pass) goes through Claude's fast mode (`speed: "fast"`, beta
+`fast-mode-2026-02-01`): the same model answering up to 2.5× faster at twice the list price (about $0.5-0.7 a page).
+The two reads then run at effort `high` instead of `medium` in about the same wall time. A 429 on the fast lane or a
+400 for an account without it falls back to the standard lane at once (no wait); Haiku stays standard. The usage
+ledger prices fast-lane calls at $8 / $40 (model key `… ⚡`). The review screen shows the lane and the read time.
+
 ## Paper kind, cancel, usage, scans
 - The first Word / PDF of a document asks «ما نوع هذه الورقة؟» (once per document; «🗂️ / 📝 … ▾» next to the name
   re-opens it). Legal: every office template with the detected one pre-selected, lawyer name for stamp templates.

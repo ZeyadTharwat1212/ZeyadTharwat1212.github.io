@@ -80,7 +80,7 @@
     CLAUDE = Engine.provider(KEY) === 'claude';
     var name = Engine.provider(KEY) === 'claude' ? 'Claude' : 'Gemini';
     var b = $('providerBadge'); if (b) { b.textContent = name; b.hidden = false; }
-    var w = $('readerNote'); if (w) w.textContent = 'القارئ: ' + name + (name === 'Claude' ? ' (Opus 5.5 — قراءتان + مراجعة + فحص الأرقام)' : ' (المجاني — أبطأ)') + '. اترك الصفحة مفتوحة.';
+    var w = $('readerNote'); if (w) w.textContent = 'القارئ: ' + name + (name === 'Claude' ? ' (Opus 5.5' + (Engine.fastOn() ? ' ⚡ وضع السرعة' : '') + ' — قراءتان + مراجعة + فحص الأرقام)' : ' (المجاني — أبطأ)') + '. اترك الصفحة مفتوحة.';
     var d = loadDraft();
     $('resumeBtn').hidden = !d;
     if (d) $('resumeWhen').textContent = new Date(d.t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
@@ -204,8 +204,9 @@
   function rotOf(t) { var m = /^\s*ROT:\s*(0|90|180|270)/.exec(t || ''); return m ? +m[1] : 0; }
   function stripRot(t) { return String(t || '').replace(/^\s*ROT:\s*\d+\s*\n?/, ''); }
   async function readTwice(imgs, system) {
-    var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: 'medium', best: true, system: system });
-    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: 'medium', best: true, system: system })
+    var eff = CLAUDE && Engine.fastOn() ? 'high' : 'medium';      // ⚡ fast mode buys the time for a deeper read
+    var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: eff, best: true, system: system });
+    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: eff, best: true, system: system })
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return r.truncated ? null : Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     var ra = await pa, b = await pb;
     if (ra.model) usedModels[ra.model] = 1;
@@ -221,6 +222,7 @@
   var usedModels = {};
   var TYPE_LABEL = { sihha: 'دعوى صحة توقيع', reannounce: 'إعادة إعلان', announce: 'إعلان بأصل الصحيفة', warning: 'إنذار', sahifa: 'صحيفة دعوى / استئناف', inherit_announce: 'إعلان في مادة الوراثة', inherit_request: 'طلب وراثة', sale: 'عقد بيع', gift: 'عقد هبة', price: 'إقرار سعر', iqrar: 'إقرار', memo: 'مذكرة' };
   async function readPage(p, label, step) {
+    var t0 = Date.now();
     step(0, 'جارٍ تجهيز ' + label + '…');
     var side = CLAUDE ? 1568 : 3072;                       // Claude reads at 1568px; bigger only slows the upload
     p.canvas = p.base;
@@ -284,7 +286,7 @@
     var r = await toResult(text);
     r.img = Engine.scaled(p.canvas, 1600).toDataURL('image/jpeg', 0.8);
     r.agree = d ? Math.round(d.agreement * 100) : null;
-    r.text = text; r.type = type; r.snapped = snapped; r.learned = learned;
+    r.text = text; r.type = type; r.snapped = snapped; r.learned = learned; r.secs = Math.round((Date.now() - t0) / 1000);
     return r;
   }
 
@@ -366,8 +368,8 @@
     $('savedNote').hidden = true; cur = -1;
     $('restoredNote').hidden = !restored;
     var ri = $('readerInfo'), ms = Object.keys(usedModels), nl = results.reduce(function (t, r) { return t + (r.learned || 0); }, 0);
-    var cost = restored ? (curDoc && curDoc.cost) || 0 : docCost;
-    if (ri) { ri.hidden = !ms.length && !cost; ri.textContent = (ms.length ? 'قُرئت الصفحات فعلياً بـ: ' + ms.join(' + ') : 'محفوظ على هذا الجهاز') + (nl ? ' — ' + nl + ' كلمة عُرفت من خط ' + profileLabel() : '') + (cost ? ' — تكلفة القراءة ≈ $' + cost.toFixed(2) : ''); }
+    var cost = restored ? (curDoc && curDoc.cost) || 0 : docCost, secs = restored ? 0 : results.reduce(function (t, r) { return t + (r.secs || 0); }, 0);
+    if (ri) { ri.hidden = !ms.length && !cost; ri.textContent = (ms.length ? 'قُرئت الصفحات فعلياً بـ: ' + ms.join(' + ') + (CLAUDE && Engine.fastOn() ? ' ⚡' : '') : 'محفوظ على هذا الجهاز') + (secs ? ' في ' + secs + ' ثانية' : '') + (nl ? ' — ' + nl + ' كلمة عُرفت من خط ' + profileLabel() : '') + (cost ? ' — تكلفة القراءة ≈ $' + cost.toFixed(2) : ''); }
     if (!restored) {
       var ps = results.map(function (r) { return { html: r.html, img: r.img, text: r.text }; });
       if (reconvertDoc) { curDoc = reconvertDoc; reconvertDoc = null; Store.addVersion(curDoc, ps, 'reread'); curDoc.pages = ps; curDoc.learned = []; }
@@ -731,6 +733,7 @@
     show('settings');
     $('setLearnState').textContent = learnOn() ? 'مفعّل — ' + profileLabel() : 'غير مفعّل';
     $('setEnhance').checked = enhanceOn();
+    if ($('setFast')) $('setFast').checked = Engine.fastOn();
     $('storageInfo').textContent = Store.which() === 'ls' ? 'هذا المتصفح لا يسمح بقاعدة بيانات محلية: تُحفظ النصوص فقط بدون صور الورق.' : '';
     Store.usage().then(function (u) { if (u && u.usage) $('storageInfo').textContent = 'المساحة المستخدمة على هذا الجهاز: ' + (u.usage / 1048576).toFixed(1) + ' MB' + (u.quota ? ' من ' + Math.round(u.quota / 1048576) + ' MB' : ''); }).catch(function () {});
     Store.listDocs(MODE).then(function (ds) { return Store.listTrash(MODE).then(function (ts) { $('setDocsInfo').textContent = ds.length + ' ملفات محفوظة، ' + ts.length + ' في المحذوفات.'; }); }).catch(function () {});
@@ -746,12 +749,13 @@
     box.innerHTML = '<table class="utable"><thead><tr><th></th><th>طلبات</th><th>رموز (tokens)</th><th>التكلفة التقديرية</th></tr></thead><tbody>' +
       rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + r[1].calls + '</td><td>' + tok(r[1].tokens) + '</td><td><b>' + money(r[1].usd) + '</b></td></tr>'; }).join('') + '</tbody></table>' +
       '<p class="small">حسب الموديل: ' + Object.keys(u.models).map(function (m) { var x = u.models[m]; return m.replace('claude-', '') + ' ' + money(x.usd) + ' (' + x.calls + ' طلب)'; }).join(' · ') + '</p>' +
-      '<p class="small">التكلفة محسوبة من عدد الرموز في كل رد على أسعار Anthropic المعلنة (Opus 5.5: $4 / $20 للمليون، Sonnet 5.5: $2 / $10، Haiku 5.5: $0.10 / $0.50؛ الذاكرة المؤقتة أرخص). الرقم الرسمي والرصيد المتبقي في console.anthropic.com → Usage. هذا الجهاز فقط: كل جهاز يحسب استهلاكه.</p>';
+      '<p class="small">التكلفة محسوبة من عدد الرموز في كل رد على أسعار Anthropic المعلنة (Opus 5.5: $4 / $20 للمليون، ومع ⚡ وضع السرعة $8 / $40؛ Sonnet 5.5: $2 / $10؛ Haiku 5.5: $0.10 / $0.50؛ الذاكرة المؤقتة أرخص). الرقم الرسمي والرصيد المتبقي في console.anthropic.com → Usage. هذا الجهاز فقط: كل جهاز يحسب استهلاكه.</p>';
   }
   if ($('usageResetBtn')) $('usageResetBtn').addEventListener('click', function () { if (window.confirm('تصفير عداد الاستهلاك على هذا الجهاز؟')) { Engine.usageReset(); renderUsage(); } });
   if ($('settings')) {
     $('setLearnBtn').addEventListener('click', renderLearn);
     $('setEnhance').addEventListener('change', function () { if ($('enhanceChk')) $('enhanceChk').checked = this.checked; });
+    if ($('setFast')) $('setFast').addEventListener('change', function () { Engine.setFast(this.checked); });
     $('deleteAllBtn').addEventListener('click', function () {
       if (!window.confirm('حذف كل الملفات المحفوظة على هذا الجهاز نهائيًا (بما فيها المحذوفات)؟ لا يمكن التراجع عن هذا.')) return;
       Store.listDocs(MODE).then(function (ds) { return Store.listTrash(MODE).then(function (ts) { return Promise.all(ds.concat(ts).map(function (d) { return Store.purgeDoc(d.id); })); }); })
@@ -998,7 +1002,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '14';
+  var APP_VER = '15';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

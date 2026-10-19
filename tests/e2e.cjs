@@ -40,10 +40,12 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
     const kind = /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
-    calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort });
+    const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
+    calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta });
+    if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
     const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, numbers: answers.N || '', kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
-    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0 }, content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
   });
   await context.route(/generativelanguage\.googleapis\.com/, async r => {
     const url = r.request().url();
@@ -544,7 +546,9 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(u.today.tokens, calls.length * 1700);
     /* 1000 in + 200 out + 500 cache write: opus 0.004+0.004+0.0025, haiku (kind) 0.0001+0.0001+0.0000625 */
     const opus = calls.filter(c => c !== 'kind').length, haiku = calls.length - opus;
-    const expect = opus * 0.0105 + haiku * 0.0002625;
+    assert.ok(calls.claude.filter(c => c.kind !== 'kind').every(c => c.fast && c.beta === 'fast-mode-2026-02-01' && c.effort === 'high'), 'Opus calls go through fast mode at high effort');
+    assert.ok(calls.claude.filter(c => c.kind === 'kind').every(c => !c.fast), 'Haiku stays on the standard lane');
+    const expect = opus * 0.021 + haiku * 0.0002625;
     assert.ok(Math.abs(u.today.usd - expect) < 1e-6, 'cost ' + u.today.usd + ' vs ' + expect);
     assert.match(await page.textContent('#readerInfo'), /تكلفة القراءة ≈ \$0\.0\d/);
     await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
@@ -553,6 +557,24 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(/اليوم/.test(box) && /opus-5-5/.test(box) && /haiku-5-5/.test(box) && /console\.anthropic\.com/.test(box), box);
     await page.click('#usageResetBtn');
     await page.waitForFunction(() => /لم تُسجَّل/.test(document.getElementById('usageBox').textContent));
+  }));
+
+  await step('fast mode: a 429 on the fast lane falls back to the standard lane at once; switched off in the settings → standard, medium effort', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, FAST429: true }, null, 'sk-ant-test', async (page, calls) => {
+    const t0 = Date.now(); await convert(page);
+    assert.ok(calls.fastRejected, 'the fast lane answered 429 once');
+    assert.ok(Date.now() - t0 < 20000, 'no 30 s wait: fell back immediately');
+    const std = calls.claude.filter(c => c.kind !== 'kind' && !c.fast);
+    assert.ok(std.length >= 1, 'the rejected call was re-sent on the standard lane');
+    assert.match(await page.textContent('#readerInfo'), /⚡/, 'review screen shows the fast lane');
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#settingsBtn'); await page.waitForSelector('#settings:not([hidden])');
+    await page.uncheck('#setFast');
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    assert.doesNotMatch(await page.textContent('#readerNote'), /⚡/);
+    calls.length = 0; calls.claude = [];
+    await convert(page);
+    assert.ok(calls.claude.every(c => !c.fast && !c.beta), 'standard lane only');
+    assert.ok(calls.claude.filter(c => /read/.test(c.kind)).every(c => c.effort === 'medium'));
   }));
 
   await browser.close(); server.close();
