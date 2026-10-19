@@ -25,8 +25,12 @@ var Bank = (function () {
   /* the formulas as text for the prompt: most frequent first, capped so the cached system block stays small */
   function promptText(bank, max) {
     if (!bank || !bank.lines) return '';
-    var lines = bank.lines.slice(0, max || 160).map(function (l) { return '- ' + l.t; });
-    return lines.join('\n');
+    var office = bank.lines.filter(function (l) { return l.src !== 'web'; }), web = bank.lines.filter(function (l) { return l.src === 'web'; });
+    var pick = office.slice(0, max || 160);
+    if (pick.length < (max || 160)) pick = pick.concat(web.slice(0, (max || 160) - pick.length));
+    var out = pick.filter(function (l) { return l.src !== 'web'; }).map(function (l) { return '- ' + l.t; });
+    var extra = pick.filter(function (l) { return l.src === 'web'; }).map(function (l) { return '- ' + l.t; });
+    return out.join('\n') + (extra.length ? '\n\nALSO COMMON IN PUBLISHED EGYPTIAN FORMULAS (secondary; the office wording above wins when they differ):\n' + extra.join('\n') : '');
   }
 
   function lev(a, b) {
@@ -66,7 +70,9 @@ var Bank = (function () {
       if (span > bw.length * 1.6 + 2) continue;
       out.push({ line: bl, score: cover, pairs: pairs, bw: bw, span: span });
     }
-    out.sort(function (a, b) { return b.score - a.score || b.pairs.length - a.pairs.length; });
+    /* the office's own wording comes first; a published formula only fills in where the office has none */
+    var rank = function (h) { return h.score - (h.line.src === 'web' ? 0.1 : 0); };
+    out.sort(function (a, b) { return rank(b) - rank(a) || b.pairs.length - a.pairs.length; });
     return out;
   }
   function match(bank, line) { var h = hits(bank, line, 0.6); return h.length ? h[0] : null; }
