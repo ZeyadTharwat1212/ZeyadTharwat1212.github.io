@@ -1,0 +1,10 @@
+# Cloudflare Pages headers (GitHub Pages ignores this file). The app updates itself by re-fetching these past every
+# cache, so they must never be served stale.
+/sw.js
+  Cache-Control: no-cache
+/kateb/version.json
+  Cache-Control: no-cache, no-store
+/*.html
+  Cache-Control: no-cache
+/*.webmanifest
+  Cache-Control: no-cache
