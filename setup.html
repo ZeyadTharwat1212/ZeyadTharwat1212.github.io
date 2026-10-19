@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=6">
+<link rel="stylesheet" href="kateb/style.css?v=7">
 </head>
 <body>
 <main>
@@ -50,11 +50,11 @@
   </div>
 </section>
 </main>
-<script src="kateb/engine.js?v=6"></script>
+<script src="kateb/engine.js?v=7"></script>
 <script>
 (function(){
   var $ = function(id){ return document.getElementById(id); };
-  var base = location.href.replace(/setup(\.html)?\/?(#.*)?$/, '');
+  var base = location.origin + location.pathname.replace(/[^\/]*$/, '');   // folder of this page, no query/hash
   $('f').addEventListener('submit', async function(e){
     e.preventDefault(); $('err').hidden = true; $('out').hidden = true;
     var key = $('key').value.trim(), p1 = $('pw1').value.trim(), p2 = $('pw2').value.trim();
