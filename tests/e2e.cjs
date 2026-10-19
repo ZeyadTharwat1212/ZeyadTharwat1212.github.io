@@ -201,7 +201,8 @@ async function runMode(browser, base, file, answers, check, key) {
     assert.strictEqual(await page.getAttribute('link[rel=manifest]', 'href'), 'kateb.webmanifest');
     await page.waitForSelector('#nokey:not([hidden])');
     await page.waitForFunction(() => navigator.serviceWorker.controller || navigator.serviceWorker.ready.then(() => true), null, { timeout: 10000 });
-    await page.reload(); await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await page.waitForTimeout(1200); await page.waitForSelector('#nokey:not([hidden])');   // the app reloads itself once when the worker takes over
     /* paste-link unlock (home-screen app without a saved key) */
     const blob = await page.evaluate(() => Engine.lock('test-key', 'pass123'));
     await page.fill('#linkIn', 'https://example.com/x'); await page.click('#linkForm button');
@@ -211,13 +212,13 @@ async function runMode(browser, base, file, answers, check, key) {
     await page.fill('#pw', 'pass123'); await page.click('#pwBtn');
     await page.waitForSelector('#start:not([hidden])');
     assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.apikey')), 'test-key');
-    assert.strictEqual(await page.textContent('#providerBadge'), 'Gemini');
+    assert.strictEqual((await page.textContent('#providerBadge')).trim(), 'Gemini');
     /* a new link (another key) on the same device asks for the password again and replaces the key */
     const blob2 = await page.evaluate(() => Engine.lock('sk-ant-new', 'pass456'));
     await page.goto('about:blank'); await page.goto(base + '/kateb.html#k=' + blob2); await page.waitForSelector('#lock:not([hidden])');
     await page.fill('#pw', 'pass456'); await page.click('#pwBtn'); await page.waitForSelector('#start:not([hidden])');
     assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.apikey')), 'sk-ant-new');
-    assert.strictEqual(await page.textContent('#providerBadge'), 'Claude');
+    assert.strictEqual((await page.textContent('#providerBadge')).trim(), 'Claude');
     await page.goto('about:blank'); await page.goto(base + '/kateb.html#k=' + blob2); await page.waitForSelector('#start:not([hidden])', { timeout: 5000 });   // same link again: no password
     /* offline: the app still opens from the cache */
     await context.setOffline(true);
