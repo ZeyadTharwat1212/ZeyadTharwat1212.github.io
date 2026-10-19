@@ -221,6 +221,21 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(await page.locator('#pagesBox .pg').count(), 2, 'two pages read together');
   }));
 
+  await step('self-update: a newer version.json reloads the app once (caches cleared); the same version never reloads', async () => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
+    await context.route(/cdnjs/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.pdfjsLib={};' }));
+    let served = 0; await context.route(/version\.json/, r => { served++; r.fulfill({ contentType: 'application/json', body: JSON.stringify({ v: served === 1 ? '999' : '999' }) }); });
+    await context.addInitScript(() => { try { localStorage.setItem('kateb.apikey', 'sk-ant-test'); } catch (e) {} });
+    const page = await context.newPage();
+    await page.goto(base + '/kateb.html'); await page.waitForURL(/\?r=\d+/, { timeout: 10000 });
+    await page.waitForSelector('#start:not([hidden])');
+    assert.ok(served >= 2, 'version checked again after the reload');
+    assert.strictEqual(await page.evaluate(() => sessionStorage.getItem('kateb.reloadedFor')), '999', 'reloaded once for 999, not in a loop');
+    await page.waitForTimeout(800); assert.match(page.url(), /\?r=\d+/);
+    await context.close();
+  });
+
   await step('installable app: manifest, icons, offline shell; paste-link unlock', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const calls = []; await fakeWorld(context, LEGAL, calls);
