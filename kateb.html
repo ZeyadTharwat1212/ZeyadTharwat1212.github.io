@@ -5,9 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>الكاتب</title>
+<link rel="manifest" href="kateb.webmanifest">
+<meta name="theme-color" content="#14804a">
+<link rel="icon" type="image/svg+xml" href="kateb/icons/kateb.svg">
+<link rel="apple-touch-icon" href="kateb/icons/kateb-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="الكاتب">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&display=swap">
-<link rel="stylesheet" href="kateb/style.css?v=2">
+<link rel="stylesheet" href="kateb/style.css?v=3">
 </head>
 <body>
 <main>
@@ -15,6 +22,12 @@
 
 <section id="nokey" class="card center" hidden>
   <p class="lead" id="nokeyMsg">افتح الرابط الذي وصلك من زياد.</p>
+  <form id="linkForm" class="row" style="margin-top:14px">
+    <p class="small">أو انسخ الرابط والصقه هنا (مرة واحدة على هذا الجهاز):</p>
+    <input class="pw" id="linkIn" type="url" inputmode="url" autocomplete="off" dir="ltr" aria-label="الرابط" placeholder="https://…#k=…">
+    <p class="err" id="linkErr" hidden>هذا ليس الرابط الصحيح. انسخ الرابط كاملاً من رسالة زياد.</p>
+    <button class="btn go" type="submit">متابعة</button>
+  </form>
 </section>
 
 <section id="lock" class="card center" hidden>
@@ -32,6 +45,8 @@
   <input type="file" id="file" multiple accept="image/*,application/pdf" hidden>
   <p class="small center">يمكنك اختيار كل الصفحات مرة واحدة بالترتيب، أو ملف PDF.</p>
   
+  <button class="btn" id="installBtn" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7m-3-3 3 3 3-3"/></svg><span>ثبّت التطبيق على الشاشة الرئيسية</span></button>
+  <p class="small center" id="iosHint" hidden>لتثبيته على الآيفون: اضغط زر المشاركة <b>⬆︎</b> ثم «إضافة إلى الشاشة الرئيسية».</p>
   <button class="btn" id="resumeBtn" type="button" hidden>استكمال آخر مستند (<span id="resumeWhen"></span>)</button>
 </section>
 
@@ -79,10 +94,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"legal"};</script>
-<script src="kateb/engine.js?v=2"></script>
-<script src="kateb/verify.js?v=2"></script>
-<script src="kateb/docx.js?v=2"></script>
-<script src="kateb/exam.js?v=2"></script>
-<script src="kateb/app.js?v=2"></script>
+<script src="kateb/engine.js?v=3"></script>
+<script src="kateb/verify.js?v=3"></script>
+<script src="kateb/docx.js?v=3"></script>
+<script src="kateb/exam.js?v=3"></script>
+<script src="kateb/app.js?v=3"></script>
 </body>
 </html>

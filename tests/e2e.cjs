@@ -55,7 +55,7 @@ async function pagePhoto(browser) {
 }
 
 async function runMode(browser, base, file, answers, check) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, serviceWorkers: 'block' });
   const calls = [];
   await fakeWorld(context, answers, calls);
   await context.addInitScript(() => { try { localStorage.setItem('kateb.apikey', 'test-key'); } catch (e) {} window.__printed = 0; window.print = () => { window.__printed++; }; });
@@ -130,7 +130,7 @@ async function runMode(browser, base, file, answers, check) {
   }));
 
   await step('phone width: review screen has no sideways scroll', async () => {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
     const calls = []; await fakeWorld(context, LEGAL, calls);
     await context.addInitScript(() => { try { localStorage.setItem('kateb.apikey', 'k'); } catch (e) {} });
     const page = await context.newPage(); await page.goto(base + '/kateb.html');
@@ -139,6 +139,37 @@ async function runMode(browser, base, file, answers, check) {
     const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     assert.ok(over <= 0, 'overflow ' + over + 'px');
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'phone-review.png'), fullPage: true });
+    await context.close();
+  });
+
+  await step('installable app: manifest, icons, offline shell; paste-link unlock', async () => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const calls = []; await fakeWorld(context, LEGAL, calls);
+    const page = await context.newPage();
+    for (const f of ['kateb', 'hanan']) {
+      const m = await (await page.request.get(base + '/' + f + '.webmanifest')).json();
+      assert.strictEqual(m.start_url, f + '.html'); assert.strictEqual(m.display, 'standalone');
+      for (const ic of m.icons) assert.strictEqual((await page.request.get(base + '/' + ic.src)).status(), 200, ic.src);
+    }
+    await page.goto(base + '/kateb.html');
+    assert.strictEqual(await page.getAttribute('link[rel=manifest]', 'href'), 'kateb.webmanifest');
+    await page.waitForSelector('#nokey:not([hidden])');
+    await page.waitForFunction(() => navigator.serviceWorker.controller || navigator.serviceWorker.ready.then(() => true), null, { timeout: 10000 });
+    await page.reload(); await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    /* paste-link unlock (home-screen app without a saved key) */
+    const blob = await page.evaluate(() => Engine.lock('test-key', 'pass123'));
+    await page.fill('#linkIn', 'https://example.com/x'); await page.click('#linkForm button');
+    assert.ok(await page.isVisible('#linkErr'));
+    await page.fill('#linkIn', base + '/kateb.html#k=' + blob); await page.click('#linkForm button');
+    await page.waitForSelector('#lock:not([hidden])');
+    await page.fill('#pw', 'pass123'); await page.click('#pwBtn');
+    await page.waitForSelector('#start:not([hidden])');
+    assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.apikey')), 'test-key');
+    /* offline: the app still opens from the cache */
+    await context.setOffline(true);
+    await page.reload(); await page.waitForSelector('#start:not([hidden])', { timeout: 10000 });
+    await context.setOffline(false);
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'start-phone.png') });
     await context.close();
   });
 
