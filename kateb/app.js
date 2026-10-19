@@ -53,29 +53,48 @@
 
   /* ---------- pick ---------- */
   $('pickBtn').addEventListener('click', function () { $('file').click(); });
-  $('file').addEventListener('change', function () { var f = Array.prototype.slice.call(this.files || []); this.value = ''; if (f.length) start(f); });
+  $('file').addEventListener('change', function () { var f = Array.prototype.slice.call(this.files || []); this.value = ''; if (f.length) addFiles(f); });
 
   /* ---------- camera: one page per shot, cleaned, collected in a tray, read together ---------- */
-  var shots = [];
+  var shots = [], blur = [];
   function enhanceOn() { var c = $('enhanceChk'); return !c || c.checked; }
-  function cleaned(c) { try { return enhanceOn() && typeof Scan !== 'undefined' ? Scan.enhance(c) : c; } catch (e) { return c; } }
+  function cleaned(c) { try { return enhanceOn() && typeof Scan !== 'undefined' ? Scan.clean(c) : c; } catch (e) { return c; } }
+  var BLUR = 18;                                               // strongest-edge strength below this (crisp text ≈ 140, 2px blur ≈ 10): warn
+  function sharp(c) { try { return typeof Scan !== 'undefined' ? Scan.sharpness(c) : 99; } catch (e) { return 99; } }
+  /* photos and PDFs chosen from files: same tray, same single «تحويل» button (photos cleaned, PDF pages left as they are) */
+  async function addFiles(files) {
+    files.sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { numeric: true }); });
+    try {
+      for (var i = 0; i < files.length; i++) {
+        var isPdf = files[i].type === 'application/pdf' || /\.pdf$/i.test(files[i].name), cs = await Engine.fileToCanvases(files[i]);
+        cs.forEach(function (c) { shots.push(isPdf ? c : cleaned(c)); blur.push(isPdf ? false : sharp(c) < BLUR); });
+      }
+    } catch (e) { fail(e); return; }
+    renderTray(); $('tray').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
   function renderTray() {
     var box = $('shots'); if (!box) return;
-    box.innerHTML = shots.map(function (c, i) { return '<div class="shot"><img alt="صفحة ' + (i + 1) + '" src="' + Engine.scaled(c, 260).toDataURL('image/jpeg', 0.7) + '"><span class="n">' + (i + 1) + '</span><button class="x" type="button" data-rm="' + i + '" aria-label="حذف الصفحة">✕</button></div>'; }).join('');
+    box.innerHTML = shots.map(function (c, i) { return '<div class="shot' + (blur[i] ? ' blur' : '') + '"><img alt="صفحة ' + (i + 1) + '" src="' + Engine.scaled(c, 260).toDataURL('image/jpeg', 0.7) + '"><span class="n">' + (i + 1) + '</span>' + (blur[i] ? '<span class="warn">غير واضحة</span>' : '') + '<button class="x" type="button" data-rm="' + i + '" aria-label="حذف الصفحة">✕</button></div>'; }).join('');
+    var nb = blur.filter(Boolean).length;
     $('trayCount').textContent = shots.length === 1 ? 'صفحة واحدة جاهزة' : shots.length + ' صفحات جاهزة';
+    $('blurNote').hidden = !nb; $('blurNote').textContent = nb ? 'الصورة غير واضحة. من فضلك التقط صورة أوضح (الصفحة ' + blur.map(function (b, i) { return b ? i + 1 : null; }).filter(Boolean).join('، ') + '). يمكنك حذفها وتصويرها مرة أخرى.' : '';
     $('tray').hidden = !shots.length;
-    $('goBtn').querySelector('span').textContent = 'ابدأ القراءة' + (shots.length > 1 ? ' (' + shots.length + ' صفحات)' : '');
+    $('goBtn').querySelector('span').textContent = '✨ تحويل إلى نص' + (shots.length > 1 ? ' (' + shots.length + ' صفحات)' : '');
   }
   if ($('camBtn')) {
     $('camBtn').addEventListener('click', function () { $('camFile').click(); });
     $('moreBtn').addEventListener('click', function () { $('camFile').click(); });
     $('camFile').addEventListener('change', async function () {
       var f = this.files && this.files[0]; this.value = ''; if (!f) return;
-      try { var cs = await Engine.fileToCanvases(f); cs.forEach(function (c) { shots.push(cleaned(c)); }); renderTray(); $('tray').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      try { var cs = await Engine.fileToCanvases(f); cs.forEach(function (c) { shots.push(cleaned(c)); blur.push(sharp(c) < BLUR); }); renderTray(); $('tray').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
       catch (e) { fail(e); }
     });
-    $('shots').addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (!b) return; shots.splice(+b.dataset.rm, 1); renderTray(); });
-    $('goBtn').addEventListener('click', function () { if (!shots.length) return; startCanvases(shots.slice()); shots = []; renderTray(); });
+    $('shots').addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (!b) return; shots.splice(+b.dataset.rm, 1); blur.splice(+b.dataset.rm, 1); renderTray(); });
+    $('goBtn').addEventListener('click', function () {
+      if (!shots.length || running) return;
+      if (blur.some(Boolean) && !window.confirm('فيه صورة غير واضحة وقد تُقرأ بأخطاء. هل تريد المتابعة؟')) return;
+      startCanvases(shots.slice()); shots = []; blur = []; renderTray();
+    });
   }
   function startCanvases(cs) {
     show('work'); setProgress(0, 1, 'جارٍ تجهيز الصفحات…'); setStage(0); $('waitText').hidden = true; $('thumbs').innerHTML = '';
@@ -304,10 +323,12 @@
   function refreshDoubts() {
     var n = marks().length;
     $('doubtNote').hidden = false;
-    $('doubtNote').className = n ? 'note' : 'note ok';
-    $('doubtNote').textContent = n
+    var low = results.some(function (r) { return r.agree !== null && r.agree !== undefined && r.agree < 55; });
+    $('doubtNote').textContent = (n
       ? 'راجع الكلام الأصفر (' + n + ') مع صورة الأصل: اضغط «التالي»، صحّح الكلمة لو فيها غلط، ثم اضغط «صحيح».'
-      : 'تمت مراجعة كل الكلمات غير الواضحة. الملف جاهز.';
+      : 'لا توجد كلمات مشكوك فيها. راجع النص مع الصورة مرة قبل الحفظ.')
+      + (low ? ' ⚠️ القراءتان اختلفتا كثيراً في هذه الورقة: الصورة قد تكون غير واضحة، راجع بعناية أو صوّرها مرة أخرى.' : '');
+    $('doubtNote').className = n || low ? 'note' : 'note ok';
     $('doubtCount').textContent = n ? n + ' غير مؤكدة' : 'لا يوجد';
     $('doubtBar').hidden = !n || $('done').hidden;
   }
@@ -373,7 +394,7 @@
     ['dragleave', 'drop'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('over'); }); });
     dz.addEventListener('drop', function (e) {
       var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []).filter(function (f) { return /^image\//.test(f.type) || /\.(pdf|jpe?g|png|webp|heic|heif)$/i.test(f.name); });
-      if (files.length) start(files);
+      if (files.length) addFiles(files);
     });
     dz.addEventListener('click', function (e) { if (e.target === dz || e.target.closest('.ico,h3,.hint,.chips')) $('file').click(); });
     document.addEventListener('dragover', function (e) { e.preventDefault(); });
@@ -413,8 +434,14 @@
   function baseName() { if (!EXAM) { var t = tplOf(tplKey()); return (t ? t.label.replace(/[\\\/:*?"<>|]/g, '-') : 'مستند') + ' ' + stamp(); } var h = examHeader(); return ((h.grade || '') + ' ' + (h.title || 'Exam')).replace(/[\\\/:*?"<>|]/g, '-').trim(); }
   function leftNote() { var n = marks().length; return n ? ' ما زال فيه ' + n + ' كلمة صفراء غير مؤكدة، وستظهر بالأصفر في الملف.' : ''; }
 
+  function nothingToExport() {
+    var t = sheets().map(function (s) { return s.textContent; }).join('').replace(/\s+/g, '');
+    if (t.length > 0) return false;
+    $('savedNote').hidden = false; $('savedNote').textContent = 'لا يوجد نص للحفظ: لم تُقرأ أي كلمات من الصورة. صوّر الورقة مرة أخرى.';
+    return true;
+  }
   $('wordBtn').addEventListener('click', async function () {
-    var btn = this; btn.disabled = true;
+    var btn = this; if (nothingToExport()) return; btn.disabled = true;
     try {
       var blob, all = sheets();
       marks().forEach(function (m) { m.classList.remove('cur'); });
@@ -434,6 +461,7 @@
 
   /* PDF: the browser's own print engine lays out Arabic perfectly; the person picks «Save as PDF». */
   $('pdfBtn').addEventListener('click', async function () {
+    if (nothingToExport()) return;
     var root = $('printRoot'), h = EXAM ? examHeader() : null, key = tplKey();
     if (key) {
       try {
@@ -530,7 +558,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '11';
+  var APP_VER = '12';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -596,7 +624,8 @@
     "- Leave out: words crossed out or scribbled over (if they hid a name or field, write ........ in their place), stamps, seals, signatures, page numbers, handwritten court notes in the margins.\n" +
     "- HOUSE STYLE OF THIS OFFICE (measured on 1,740 of its typed papers): ALL numbers and dates use Western digits 0-9, even when the hand wrote ٠-٩. Dates are day/month/year like 10/1/2020 or 7/10/2025 (never year first). Amounts like 250000 ج ( مائتان وخمسون ألف جنيه مصري لا غير ). Case references like رقم 2537 لسنة 2025. Keep the source's spelling and punctuation otherwise.\n" +
     "- Copy EVERY digit: a year has four digits (2022, not 202), an amount keeps all its zeros; read numbers from the strips digit by digit, never from memory.\n" +    "- Spelling is standard Egyptian legal Arabic as the office types it: دعوى (never دعوه or دعوة), إلى، على، بالآتي، صحة توقيع، محكمة، الأهلية القانونية، أسيوط. Final ة and ى are never written as ه or ي by mistake.\n" +
-    "- Do not add, remove, summarize, translate or correct the wording.";
+    "- Do not add, remove, summarize, translate or correct the wording.\n" +
+    "- Letters are read from the ink, not from what the sentence expects: count the dots and their position for ب ت ث ن ي، ج ح خ، د ذ، ر ز، س ش، ص ض، ط ظ، ع غ، ف ق; ه vs ة and ي vs ى as written; hamza (أ إ آ ا) as written. A faint or missing dot is still a doubt: mark the word rather than resolve it from context.";
   var EXAM_FORMAT =
     "OUTPUT FORMAT (plain text lines, no code fences, no commentary):\n" +
     "GRADE: <grade>   (first line, only if the paper names the grade, e.g. GRADE: Primary 4)\n" +

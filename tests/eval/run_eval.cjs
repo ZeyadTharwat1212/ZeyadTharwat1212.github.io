@@ -58,7 +58,7 @@ function serve() {
     try {
       await page.goto(base + '/' + (s.mode === 'exam' ? 'hanan.html' : 'kateb.html'));
       await page.waitForSelector('#start:not([hidden])');
-      await page.setInputFiles('#file', s.file);
+      await page.setInputFiles('#file', s.file); await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
       await page.waitForSelector('#done:not([hidden]), #fail:not([hidden])', { timeout: 15 * 60 * 1000 });
       if (await page.isVisible('#fail')) throw new Error(await page.textContent('#failMsg'));
       const out = (await page.evaluate(() => window.__test.results().map(r => r.text))).join('\n');

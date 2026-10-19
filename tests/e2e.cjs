@@ -68,10 +68,12 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   await context.addInitScript(k => { try { localStorage.setItem('kateb.apikey', k); } catch (e) {} window.__printed = 0; window.print = () => { window.__printed++; }; }, key || 'test-key');
   const page = await context.newPage();
   const errors = []; page.on('pageerror', e => errors.push(String(e)));
+  page.on('dialog', d => d.accept());
   await page.goto(base + '/' + file);
   await page.waitForSelector('#start:not([hidden])');
   if (drive) { await drive(page); assert.deepStrictEqual(errors, [], 'no page errors'); await context.close(); return; }
   await page.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: await pagePhoto(browser) });
+  await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
   await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
   assert.deepStrictEqual(errors, [], 'no page errors');
   await check(page, calls, context);
@@ -127,7 +129,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.deepStrictEqual(calls.sort(), ['numbers', 'read', 'read2']);
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 0);
     assert.ok(await page.locator('#doubtBar').isHidden());
-    assert.match(await page.textContent('#doubtNote'), /جاهز/);
+    assert.match(await page.textContent('#doubtNote'), /لا توجد كلمات مشكوك/);
   }));
 
   await step('exam: figure, fraction, options → Word with header + PDF', () => runMode(browser, base, 'hanan.html', EXAM, async (page, calls) => {
@@ -150,6 +152,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await context.addInitScript(() => { try { localStorage.setItem('kateb.apikey', 'k'); } catch (e) {} });
     const page = await context.newPage(); await page.goto(base + '/kateb.html');
     await page.setInputFiles('#file', { name: 'p.png', mimeType: 'image/png', buffer: await pagePhoto(browser) });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
     await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
     const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     assert.ok(over <= 0, 'overflow ' + over + 'px');
@@ -208,8 +211,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   await step('camera tray: two shots cleaned to white pages, removed/kept, read together as two pages', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ }, async (page, calls) => {}, 'sk-ant-test', async (page) => {
     const dark = await (async () => { const p = await browser.newPage({ viewport: { width: 500, height: 700 } }); await p.setContent('<body style="margin:0;background:#8a8070;font:34px serif;padding:40px;color:#222">دعوى صحة توقيع<br>بناء علي طلب السيد</body>'); const b = await p.screenshot(); await p.close(); return b; })();
     for (let i = 0; i < 3; i++) await page.setInputFiles('#camFile', { name: 'shot' + i + '.png', mimeType: 'image/png', buffer: dark });
-    await page.waitForSelector('#tray:not([hidden])');
-    assert.strictEqual(await page.locator('#shots .shot').count(), 3);
+    await page.waitForFunction(() => document.querySelectorAll('#shots .shot').length === 3, null, { timeout: 30000 });   // each shot is straightened and cleaned first
     await page.click('#shots [data-rm="1"]');
     assert.strictEqual(await page.locator('#shots .shot').count(), 2);
     assert.match(await page.textContent('#goBtn'), /2/);
