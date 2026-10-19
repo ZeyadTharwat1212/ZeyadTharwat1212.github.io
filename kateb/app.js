@@ -18,9 +18,12 @@
   /* ---------- unlock ---------- */
   (function boot() {
     if (!window.crypto || !crypto.subtle) { $('nokeyMsg').textContent = 'افتح الرابط من متصفح كروم أو سفاري الحديث.'; $('linkForm').hidden = true; show('nokey'); return; }
+    var blob = Engine.blobFromHash();
+    /* a link with a key this device has not unlocked yet (a new key) always asks for the password and replaces the old key */
+    if (blob && blob !== Engine.lsGet('kateb.blob')) { KEY = null; show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
     KEY = Engine.savedKey();
     if (KEY) { toStart(); return; }
-    if (Engine.blobFromHash()) { show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
+    if (blob) { show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
     show('nokey');
   })();
   /* opened from the home-screen icon without a saved key (iPhone keeps a separate storage): paste the link once */
@@ -33,11 +36,13 @@
   });
   $('lockForm').addEventListener('submit', async function (e) {
     e.preventDefault(); $('pwErr').hidden = true; $('pwBtn').disabled = true; $('pwBtn').textContent = 'جارٍ الفتح…';
-    try { KEY = await Engine.unlock(Engine.blobFromHash(), $('pw').value.trim()); Engine.saveKey(KEY); toStart(); }
+    try { KEY = await Engine.unlock(Engine.blobFromHash(), $('pw').value.trim()); Engine.saveKey(KEY); Engine.lsSet('kateb.blob', Engine.blobFromHash()); Engine.lsSet('kateb.model', ''); CLAUDE = Engine.provider(KEY) === 'claude'; toStart(); }
     catch (err) { $('pwErr').hidden = false; $('pw').select(); }
     finally { $('pwBtn').disabled = false; $('pwBtn').textContent = 'دخول'; }
   });
   function toStart() {
+    CLAUDE = Engine.provider(KEY) === 'claude';
+    var b = $('providerBadge'); if (b) { b.textContent = Engine.provider(KEY) === 'claude' ? 'Claude' : 'Gemini'; b.hidden = false; }
     var d = loadDraft();
     $('resumeBtn').hidden = !d;
     if (d) $('resumeWhen').textContent = new Date(d.t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });

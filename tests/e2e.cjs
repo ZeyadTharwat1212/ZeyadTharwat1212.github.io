@@ -211,6 +211,14 @@ async function runMode(browser, base, file, answers, check, key) {
     await page.fill('#pw', 'pass123'); await page.click('#pwBtn');
     await page.waitForSelector('#start:not([hidden])');
     assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.apikey')), 'test-key');
+    assert.strictEqual(await page.textContent('#providerBadge'), 'Gemini');
+    /* a new link (another key) on the same device asks for the password again and replaces the key */
+    const blob2 = await page.evaluate(() => Engine.lock('sk-ant-new', 'pass456'));
+    await page.goto('about:blank'); await page.goto(base + '/kateb.html#k=' + blob2); await page.waitForSelector('#lock:not([hidden])');
+    await page.fill('#pw', 'pass456'); await page.click('#pwBtn'); await page.waitForSelector('#start:not([hidden])');
+    assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.apikey')), 'sk-ant-new');
+    assert.strictEqual(await page.textContent('#providerBadge'), 'Claude');
+    await page.goto('about:blank'); await page.goto(base + '/kateb.html#k=' + blob2); await page.waitForSelector('#start:not([hidden])', { timeout: 5000 });   // same link again: no password
     /* offline: the app still opens from the cache */
     await context.setOffline(true);
     await page.reload(); await page.waitForSelector('#start:not([hidden])', { timeout: 10000 });
