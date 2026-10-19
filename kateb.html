@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-title" content="الكاتب">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&display=swap">
-<link rel="stylesheet" href="kateb/style.css?v=3">
+<link rel="stylesheet" href="kateb/style.css?v=4">
 </head>
 <body>
 <main>
@@ -66,6 +66,14 @@
       <button class="btn go" id="wordBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg><span>تحميل ملف Word</span></button>
       <button class="btn pdf" id="pdfBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 15h8M8 18h5"/></svg><span>حفظ PDF</span></button>
     </div>
+    <div class="card tpl" id="tplBox" hidden>
+      <label class="tplrow">شكل الملف<select id="tplSel"></select></label>
+      <div class="tplrow2">
+        <label class="tplrow">اسم المحامي في الختم<input id="lawName" autocomplete="off" placeholder="مثال: ألون إبراهيم باشا"></label>
+        <label class="tplrow">الصفة<select id="lawTitle"><option>المحامي</option><option>المحامية</option></select></label>
+      </div>
+      <p class="small" id="tplHint"></p>
+    </div>
     <p class="small center" id="savedNote" hidden></p>
     <p class="small center" id="restoredNote" hidden>هذا آخر مستند كنت تعمل عليه، محفوظ على هذا الجهاز.</p>
     <p class="note" id="doubtNote" hidden></p>
@@ -94,10 +102,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"legal"};</script>
-<script src="kateb/engine.js?v=3"></script>
-<script src="kateb/verify.js?v=3"></script>
-<script src="kateb/docx.js?v=3"></script>
-<script src="kateb/exam.js?v=3"></script>
-<script src="kateb/app.js?v=3"></script>
+<script src="kateb/engine.js?v=4"></script>
+<script src="kateb/verify.js?v=4"></script>
+<script src="kateb/docx.js?v=4"></script>
+<script src="kateb/exam.js?v=4"></script>
+<script src="kateb/office.js?v=4"></script>
+<script src="kateb/app.js?v=4"></script>
 </body>
 </html>

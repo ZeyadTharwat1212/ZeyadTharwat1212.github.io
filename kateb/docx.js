@@ -150,7 +150,7 @@ var DocxBuilder = (function () {
     return paras;
   }
 
-  return { build: build, parseMarkup: parseMarkup, inline: inline, isRtlText: isRtlText };
+  return { build: build, parseMarkup: parseMarkup, inline: inline, isRtlText: isRtlText, tableXml: tableXml };
 })();
 
 

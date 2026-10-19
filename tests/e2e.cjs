@@ -142,6 +142,28 @@ async function runMode(browser, base, file, answers, check) {
     await context.close();
   });
 
+  const SIHHA_READ = '[H] دعوى صحة توقيع\nأنه في يوم       الموافق     /    /2026\nبناء علي طلب السيد / **مينا سامي** - بالغ سن الرشد\nومحله المختار مكتب الأستاذ / ألون إبراهيم باشا المحامي .\nأنا معاون تنفيذ محكمة أول أسيوط قد انتقلت وأعلنت :-\n1. السيد / **كريم عادل**\tمخاطبا مع\n[C] وأعلنته بالأتي\nبموجب عقد بيع مؤرخ في 7/1/2026 باع المعلن إليه .\n[C] بناء عليه\n**ولأجل العلم ،،،**';
+  await step('office template: auto-detected, lawyer prefilled, Word in the office layout, PDF with the margin column', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ }, async (page) => {
+    await page.waitForSelector('#tplBox:not([hidden])');
+    assert.strictEqual(await page.inputValue('#tplSel'), 'sihha', 'template detected from the title');
+    assert.strictEqual(await page.inputValue('#lawName'), 'ألون إبراهيم باشا');
+    assert.strictEqual(await page.inputValue('#lawTitle'), 'المحامي');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
+    const doc = await zip.file('word/document.xml').async('string');
+    assert.ok(doc.includes('Zokrofi') && doc.includes('>دعوى صحة توقيع<') && doc.includes('ألون إبراهيم باشا') && !doc.includes('{{'), 'office Word file');
+    assert.ok(zip.file('word/media/image2.jpeg'), 'stamp texture kept');
+    if (SHOTS) fs.writeFileSync(path.join(SHOTS, 'office-sihha.docx'), fs.readFileSync(await dl.path()));
+    await page.click('#pdfBtn'); await page.waitForFunction(() => window.__printed === 1);
+    const pr = await page.innerHTML('#printRoot');
+    assert.ok((pr.match(/class="oshape"/g) || []).length >= 3 && pr.includes('كطلب الطالب وتحت مسئوليته') && pr.includes('ألون إبراهيم باشا'), 'PDF shapes: stamp, rule, side box');
+    if (SHOTS) { await page.screenshot({ path: path.join(SHOTS, 'office-review.png'), fullPage: true }); await page.emulateMedia({ media: 'print' }); await page.pdf({ path: path.join(SHOTS, 'office-sihha.pdf'), format: 'A4', preferCSSPageSize: true }); await page.emulateMedia({ media: 'screen' }); }
+    await page.selectOption('#tplSel', ''); 
+    const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    const doc2 = await (await JSZip.loadAsync(fs.readFileSync(await dl2.path()))).file('word/document.xml').async('string');
+    assert.ok(!doc2.includes('Zokrofi'), 'plain layout when no template is chosen');
+  }));
+
   await step('installable app: manifest, icons, offline shell; paste-link unlock', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const calls = []; await fakeWorld(context, LEGAL, calls);

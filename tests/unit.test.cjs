@@ -88,3 +88,71 @@ test('exam parse + Word file', async () => {
   const parts = await xmlParts(ExamBuilder.build(JSZip, ex.blocks, { line1: 'A', line2: 'B', line3: 'C', subject: 'Math', grade: '4', time: '1h', title: 'Exam' }, {}));
   assert.match(parts['word/document.xml'], /<m:f><m:num>/);
 });
+
+/* ---------- office templates (kateb/office.js + kateb/templates) ---------- */
+const fs = require('fs');
+const path = require('path');
+const REPO = path.resolve(__dirname, '..');
+global.fetch = async (u) => { const f = path.join(REPO, String(u).split('?')[0]); return { ok: fs.existsSync(f), json: async () => JSON.parse(fs.readFileSync(f, 'utf8')), arrayBuffer: async () => { const b = fs.readFileSync(f); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); } }; };
+global.DocxBuilder = DocxBuilder;
+const Office = require('../kateb/office.js');
+
+const SIHHA = '[H] دعوى صحة توقيع\nأنه في يوم       الموافق     /    /2026\nبناء علي طلب السيدة / **مريم سامي** - بالغة سن الرشد\nومحلها المختار مكتب الأستاذ / ألون إبراهيم باشا المحامي .\nأنا معاون تنفيذ محكمة أول أسيوط قد انتقلت وأعلنت :-\n1. السيد / **كريم عادل**\tمخاطبا مع\n[C] وأعلنته بالأتي\nبموجب عقد بيع مؤرخ في ⟦7/1/2026⟧ باع المعلن إليه .\n[C] بناء عليه\n**ولأجل العلم ،،،**';
+
+test('detects the document type from its title and the lawyer from «مكتب الأستاذ»', () => {
+  assert.strictEqual(Office.detect(SIHHA), 'sihha');
+  assert.strictEqual(Office.detect('[H] إعادة إعلان في الدعوى\n[H] رقم 5'), 'reannounce');
+  assert.strictEqual(Office.detect('بسم الله الرحمن الرحيم\n[H] عقد بيع ابتدائي'), 'sale');
+  assert.strictEqual(Office.detect('[H] عقـــد هبـــه'), 'gift');
+  assert.strictEqual(Office.detect('[H] إنـــذار بالطاعة'), 'warning');
+  assert.strictEqual(Office.detect('[H] مذكـــرة'), 'memo');
+  assert.strictEqual(Office.detect('نص عادي بلا عنوان'), null);
+  assert.deepStrictEqual(Office.lawyerFrom(SIHHA), { name: 'ألون إبراهيم باشا', title: 'المحامي', nakd: false });
+  assert.deepStrictEqual(Office.lawyerFrom('ومحله المختار مكتب الأستاذة / كاترين أسعد قديس المحامية .'), { name: 'كاترين أسعد قديس', title: 'المحامية', nakd: false });
+});
+
+test('templates hold formats and shapes, never client text', () => {
+  const spec = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/templates/templates.json'), 'utf8'));
+  assert.ok(Object.keys(spec).length >= 12);
+  for (const [k, t] of Object.entries(spec)) {
+    assert.ok(t.roles.body || t.roles.party, k + ' has a body format');
+    for (const a of t.anchors) for (const w of (a.xml.match(/<w:t[^>]*>([^<]+)<\/w:t>/g) || []).map(x => x.replace(/<[^>]+>/g, '').trim()).filter(Boolean))
+      assert.match(w, /^(\{\{[A-Z_]+\}\}|مكتب|الموض|وع|الموضوع|ــــ)$/, k + ': unexpected text in a shape: ' + w);
+  }
+  const doc = JSON.stringify(spec);
+  for (const name of ['سميح', 'روماني', 'ممدوح', 'عفاف', 'صباح', 'ميرنا', 'يسى', 'منير']) assert.ok(!doc.includes(name), 'no client name ' + name);
+});
+
+test('fills the صحة توقيع template: ornament, stamp, side box, original fonts', async () => {
+  const blocks = DocxBuilder.parseMarkup(SIHHA);
+  const zip = await Office.build(JSZip, blocks, 'sihha', { lawyer: Office.lawyerFrom(SIHHA) });
+  const parts = await xmlParts(zip);
+  const doc = parts['word/document.xml'];
+  assert.ok(!doc.includes('{{') && !doc.includes('KATEB-BODY'), 'all placeholders filled');
+  assert.match(doc, /Zokrofi/, 'ornament font kept');
+  assert.match(doc, /ألون إبراهيم باشا/);                        // stamp + office line
+  assert.match(doc, />دعوى صحة توقيع</);                          // side-box subject
+  assert.match(doc, /كطلب الطالبة وتحت مسئوليتها/, 'client is female (ومحلها)');
+  assert.match(doc, /Simplified Arabic/);
+  assert.match(doc, /<w:highlight w:val="yellow"\/>/, 'unsure words stay yellow');
+  assert.ok(+/<w:pgMar [^>]*w:left="(\d+)"/.exec(doc)[1] > 2000, 'wide court margin kept');
+});
+
+test('fills a contract: property table in the original table format, clause prefixes', async () => {
+  const text = '[H] عقد بيع ابتدائي\n[C] موقع العقار جدول حرف ( أ )\n[TABLE] المسطح | اسم الحوض | رقم القطعة | الحدود || 120 م2 | حوض 1 | 15 | البحري: شارع\nانه في يوم الأحد الموافق 7/1/2026 م بين كل من :-\nأولاً : باع الطرف الأول للطرف الثاني .\n[C] الطرف الأول البائع\tالطرف الثاني المشتري\n[C] الشهـــود';
+  const zip = await Office.build(JSZip, DocxBuilder.parseMarkup(text), 'sale', {});
+  const doc = (await xmlParts(zip))['word/document.xml'];
+  assert.match(doc, /<w:tbl><w:tblPr>/);
+  assert.match(doc, /AF_Jeddah/, 'title font of the original');
+  assert.match(doc, /AGA Battouta Regular[\s\S]*أولاً :/, 'clause prefix in the original prefix font');
+  assert.strictEqual((doc.match(/<w:p><w:pPr>[^]*?<\/w:pPr><\/w:p>/g) || []).length >= 6, true, 'blank lines before the witnesses');
+});
+
+test('every template builds a well-formed file', async () => {
+  const spec = await Office.spec();
+  for (const k of Object.keys(spec)) {
+    const zip = await Office.build(JSZip, DocxBuilder.parseMarkup('[H] عنوان\nانه في يوم السبت\nنص **عريض** عادي.\n[C] بناء عليه\nولأجل العلم ،،'), k, { lawyer: { name: 'س', title: 'المحامي' } });
+    const doc = (await xmlParts(zip))['word/document.xml'];
+    assert.ok(!doc.includes('{{'), k);
+  }
+});

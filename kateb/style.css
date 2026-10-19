@@ -123,3 +123,18 @@ body.wide{padding-bottom:120px}
   .doubtbar .btn,.doubtbar .btn.go{flex:1;min-width:0;padding:8px 10px;font-size:18px}
   .doubtbar .count{font-size:15px;padding:6px 10px;white-space:nowrap}
 }
+
+/* ---------- office templates ---------- */
+.tpl{padding:16px;display:flex;flex-direction:column;gap:10px}
+.tplrow{display:flex;flex-direction:column;gap:4px;font-size:16px;color:var(--muted);flex:1;min-width:0}
+.tplrow select,.tplrow input{font:inherit;font-size:19px;color:var(--ink);background:var(--card);border:2px solid var(--line);border-radius:12px;padding:10px 12px;width:100%}
+.tplrow2{display:flex;gap:10px;flex-wrap:wrap}
+.tplrow2 .tplrow:last-child{flex:0 0 140px}
+.tpl .small{margin:0}
+#printRoot.office{position:relative;color:#000;background:#fff}
+#printRoot.office p{margin:0;min-height:1em}
+#printRoot.office p.oblank{height:1.2em}
+#printRoot.office .otbl{border-collapse:collapse;width:100%;margin:4pt 0}
+#printRoot.office .otbl td{border:1px solid #000;padding:2pt 5pt;vertical-align:top}
+#printRoot.office .oshape span{white-space:normal}
+@media print{#printRoot.office{font-size:inherit;line-height:normal;overflow:visible}}
