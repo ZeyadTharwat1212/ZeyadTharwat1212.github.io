@@ -42,7 +42,9 @@
   });
   function toStart() {
     CLAUDE = Engine.provider(KEY) === 'claude';
-    var b = $('providerBadge'); if (b) { b.textContent = Engine.provider(KEY) === 'claude' ? 'Claude' : 'Gemini'; b.hidden = false; }
+    var name = Engine.provider(KEY) === 'claude' ? 'Claude' : 'Gemini';
+    var b = $('providerBadge'); if (b) { b.textContent = name; b.hidden = false; }
+    var w = $('readerNote'); if (w) w.textContent = 'القارئ: ' + name + (name === 'Claude' ? ' (Sonnet 5.5 + Opus 5.5)' : ' (المجاني — أبطأ)') + '. اترك الصفحة مفتوحة.';
     var d = loadDraft();
     $('resumeBtn').hidden = !d;
     if (d) $('resumeWhen').textContent = new Date(d.t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
@@ -459,7 +461,17 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
+  var APP_VER = '8';
+  (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').then(function (reg) { try { reg.update(); } catch (e) {} }).catch(function () {});
+    /* a new version took over: reload once so the page and its scripts match (never while a page is being read) */
+    var reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (reloaded || running || !navigator.serviceWorker.controller) return; reloaded = true;
+      if ($('done').hidden) location.reload();
+    });
+  }
   window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installEvt = e; if (!standalone()) $('installBtn').hidden = false; });
   window.addEventListener('appinstalled', function () { installEvt = null; $('installBtn').hidden = true; });
   $('installBtn').addEventListener('click', async function () {

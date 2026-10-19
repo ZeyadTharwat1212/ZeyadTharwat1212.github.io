@@ -1,11 +1,11 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v7';
+var CACHE = 'kateb-v8';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=7', 'kateb/engine.js?v=7', 'kateb/verify.js?v=7', 'kateb/docx.js?v=7', 'kateb/exam.js?v=7', 'kateb/app.js?v=7',
-  'kateb/office.js?v=7', 'kateb/bank.js?v=7', 'kateb/templates/templates.json?v=7',
-  'kateb/templates/announce.docx?v=7', 'kateb/templates/gift.docx?v=7', 'kateb/templates/inherit_announce.docx?v=7', 'kateb/templates/inherit_request.docx?v=7', 'kateb/templates/iqrar.docx?v=7', 'kateb/templates/memo.docx?v=7', 'kateb/templates/price.docx?v=7', 'kateb/templates/reannounce.docx?v=7', 'kateb/templates/sahifa.docx?v=7', 'kateb/templates/sale.docx?v=7', 'kateb/templates/sihha.docx?v=7', 'kateb/templates/warning.docx?v=7',
+  'kateb/style.css?v=8', 'kateb/engine.js?v=8', 'kateb/verify.js?v=8', 'kateb/docx.js?v=8', 'kateb/exam.js?v=8', 'kateb/app.js?v=8',
+  'kateb/office.js?v=8', 'kateb/bank.js?v=8', 'kateb/templates/templates.json?v=8',
+  'kateb/templates/announce.docx?v=8', 'kateb/templates/gift.docx?v=8', 'kateb/templates/inherit_announce.docx?v=8', 'kateb/templates/inherit_request.docx?v=8', 'kateb/templates/iqrar.docx?v=8', 'kateb/templates/memo.docx?v=8', 'kateb/templates/price.docx?v=8', 'kateb/templates/reannounce.docx?v=8', 'kateb/templates/sahifa.docx?v=8', 'kateb/templates/sale.docx?v=8', 'kateb/templates/sihha.docx?v=8', 'kateb/templates/warning.docx?v=8',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
@@ -25,7 +25,8 @@ self.addEventListener('fetch', function (e) {
   var req = e.request, url = new URL(req.url);
   if (req.method !== 'GET' || /generativelanguage\.googleapis\.com$/.test(url.hostname)) return;
   if (url.origin === location.origin) {
-    e.respondWith(fetch(req).then(function (r) {
+    /* pages always revalidate with the server (GitHub Pages caches HTML for 10 min in the browser) */
+    e.respondWith(fetch(req.mode === 'navigate' ? new Request(req, { cache: 'no-cache' }) : req).then(function (r) {
       if (r.ok) { var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
       return r;
     }).catch(function () { return caches.match(req, { ignoreSearch: req.mode === 'navigate' }); }));
