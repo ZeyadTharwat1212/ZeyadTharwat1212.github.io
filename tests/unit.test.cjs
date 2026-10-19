@@ -167,7 +167,7 @@ test('every template builds a well-formed file', async () => {
 /* ---------- formula bank (kateb/bank.js + kateb/bank/*.json) ---------- */
 const Bank = require('../kateb/bank.js');
 test('bank files hold formulas with placeholders, never a client name or number', () => {
-  const files = fs.readdirSync(path.join(REPO, 'kateb/bank')).filter(f => f.endsWith('.json'));
+  const files = fs.readdirSync(path.join(REPO, 'kateb/bank')).filter(f => f.endsWith('.json') && f !== 'spelling.json');
   assert.ok(files.length >= 10);
   for (const f of files) {
     const b = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank', f), 'utf8'));
@@ -206,4 +206,42 @@ test('the real sihha bank recognises its own formulas', async () => {
   const r = Bank.snap('ولما كان ⟦المادة⟧ 45 اثبات ⟦تنض⟧ علي :', b);
   assert.strictEqual(r.text, 'ولما كان المادة 45 اثبات تنص علي :');
   assert.ok(Bank.promptText(b, 20).split('\n').length === 20);
+});
+
+/* ---------- Arabic helpers (kateb/arabic.js) ---------- */
+const Arabic = require('../kateb/arabic.js');
+test('amounts in words (تفقيط) like the office writes them', () => {
+  assert.strictEqual(Arabic.words(250000), 'مائتان وخمسون ألف');
+  assert.strictEqual(Arabic.words(1050000), 'مليون وخمسون ألف');
+  assert.strictEqual(Arabic.words(6300), 'ستة آلاف وثلاثمائة');
+  assert.strictEqual(Arabic.words(3500000), 'ثلاثة ملايين وخمسمائة ألف');
+  assert.strictEqual(Arabic.amount(100000), 'مائة ألف جنيه مصري لا غير');
+  assert.ok(Arabic.sameAmount(250000, 'مئتان و خمسون الف جنيه'), 'spelling and case endings tolerated');
+  assert.ok(Arabic.sameAmount(1050000, 'مليون وخمسين ألف جنيه مصري لا غير'));
+  assert.ok(!Arabic.sameAmount(250000, 'مائتان وخمسة وخمسون ألف جنيه'));
+});
+test('check flags a contradicting amount or weekday and leaves a consistent paper alone', () => {
+  const ok = 'انه في يوم الأحد الموافق 7/9/2025 م\nوقدره 250000 ج ( مائتان وخمسون ألف جنيه مصري لا غير )';
+  assert.strictEqual(Arabic.check(ok).text, ok);
+  const bad = Arabic.check('انه في يوم الاثنين الموافق 7/9/2025 م\nوقدره 250000ج ( مائتان وخمسة وخمسون ألف جنيه مصري لا غير )');
+  assert.match(bad.text, /⟦الاثنين⟧ الموافق ⟦7\/9\/2025⟧/);
+  assert.match(bad.text, /⟦250000⟧ ج \( ⟦مائتان وخمسة وخمسون ألف جنيه مصري لا غير⟧ \)/);
+  assert.deepStrictEqual(bad.notes.map(n => n.kind).sort(), ['amount', 'weekday']);
+});
+test('snap applies the office spelling inside a recognised formula', () => {
+  const bank = { lines: [{ t: 'بالغ سن الرشد كامل الأهلية القانونية مقيم {{PLACE}}', n: 50, o: 'بالغ سن الرشد كامل الأهلية القانونية مقيم {{PLACE}}'.split(/\s+/) }] };
+  const r = Bank.snap('بالغ سن الرشد كامل الاهليه القانونيه مقيم أسيوط', bank);
+  assert.strictEqual(r.text, 'بالغ سن الرشد كامل الاهلية القانونية مقيم أسيوط', 'ة/ه slips take the office form; the hamza habit of the hand stays');
+  assert.strictEqual(r.styled, 2);
+});
+
+test('office spelling dictionary fixes دعوه → دعوى and ه/ة slips, never a different word', () => {
+  const dict = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank/spelling.json'), 'utf8'));
+  assert.ok(Object.keys(dict.words).length > 20);
+  assert.strictEqual(dict.words['دعوه'], 'دعوى'); assert.strictEqual(dict.words['الدعوي'], 'الدعوى');
+  const r = Arabic.spell('دعوه صحه توقيع\nأقام الطالب الدعوه رقم 12 لسنة 2025 محكمه أول أسيوط', dict);
+  assert.match(r.text, /^دعوى صحة توقيع/);
+  assert.match(r.text, /الدعوى رقم 12 لسنة 2025 محكمة/);
+  assert.ok(r.fixed >= 3);
+  assert.strictEqual(Arabic.spell('[FIG] <svg>دعوه</svg>', dict).text, '[FIG] <svg>دعوه</svg>');
 });

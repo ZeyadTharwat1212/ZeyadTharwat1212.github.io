@@ -150,7 +150,14 @@
     var g = Verify.guard(final, a, b || a, !EXAM), text = g.text, snapped = 0;
     var numbers = await numbersP;
     if (numbers) { var nc = Verify.checkNumbers(text, numbers); text = nc.text; }
-    if (!EXAM) text = Verify.houseDigits(text);                 // the office types 10/1/2020, never ١٠/١/٢٠٢٠
+    if (!EXAM) {
+      text = Verify.houseDigits(text);                          // the office types 10/1/2020, never ١٠/١/٢٠٢٠
+      if (typeof Arabic !== 'undefined') {
+        text = Arabic.check(text).text;                         // amount in words = digits; weekday = date
+        var dict = typeof Bank !== 'undefined' ? await Bank.load('spelling') : null;
+        if (dict) text = Arabic.spell(text, dict).text;         // the office's spelling of every word (دعوى، محكمة، الأهلية…)
+      }
+    }
     if (bank) { var sn = Bank.snap(text, bank); text = sn.text; snapped = sn.fixed; }
     var r = await toResult(text);
     r.img = Engine.scaled(p.canvas, 1600).toDataURL('image/jpeg', 0.8);
@@ -533,7 +540,7 @@
     "- Wrap any word or number you are not fully sure of in ⟦ ⟧ like ⟦كلمة⟧; truly unreadable → ⟦؟⟧. Never silently guess names, numbers, dates or case numbers: mark them.\n" +
     "- Leave out: words crossed out or scribbled over (if they hid a name or field, write ........ in their place), stamps, seals, signatures, page numbers, handwritten court notes in the margins.\n" +
     "- HOUSE STYLE OF THIS OFFICE (measured on 1,740 of its typed papers): ALL numbers and dates use Western digits 0-9, even when the hand wrote ٠-٩. Dates are day/month/year like 10/1/2020 or 7/10/2025 (never year first). Amounts like 250000 ج ( مائتان وخمسون ألف جنيه مصري لا غير ). Case references like رقم 2537 لسنة 2025. Keep the source's spelling and punctuation otherwise.\n" +
-    "- Copy EVERY digit: a year has four digits (2022, not 202), an amount keeps all its zeros; read numbers from the strips digit by digit, never from memory.\n" +
+    "- Copy EVERY digit: a year has four digits (2022, not 202), an amount keeps all its zeros; read numbers from the strips digit by digit, never from memory.\n" +    "- Spelling is standard Egyptian legal Arabic as the office types it: دعوى (never دعوه or دعوة), إلى، على، بالآتي، صحة توقيع، محكمة، الأهلية القانونية، أسيوط. Final ة and ى are never written as ه or ي by mistake.\n" +
     "- Do not add, remove, summarize, translate or correct the wording.";
   var EXAM_FORMAT =
     "OUTPUT FORMAT (plain text lines, no code fences, no commentary):\n" +

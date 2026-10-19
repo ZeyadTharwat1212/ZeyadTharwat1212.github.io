@@ -1,11 +1,11 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v8';
+var CACHE = 'kateb-v9';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=8', 'kateb/engine.js?v=8', 'kateb/verify.js?v=8', 'kateb/docx.js?v=8', 'kateb/exam.js?v=8', 'kateb/app.js?v=8',
-  'kateb/office.js?v=8', 'kateb/bank.js?v=8', 'kateb/templates/templates.json?v=8',
-  'kateb/templates/announce.docx?v=8', 'kateb/templates/gift.docx?v=8', 'kateb/templates/inherit_announce.docx?v=8', 'kateb/templates/inherit_request.docx?v=8', 'kateb/templates/iqrar.docx?v=8', 'kateb/templates/memo.docx?v=8', 'kateb/templates/price.docx?v=8', 'kateb/templates/reannounce.docx?v=8', 'kateb/templates/sahifa.docx?v=8', 'kateb/templates/sale.docx?v=8', 'kateb/templates/sihha.docx?v=8', 'kateb/templates/warning.docx?v=8',
+  'kateb/style.css?v=9', 'kateb/engine.js?v=9', 'kateb/verify.js?v=9', 'kateb/docx.js?v=9', 'kateb/exam.js?v=9', 'kateb/app.js?v=9',
+  'kateb/office.js?v=9', 'kateb/bank.js?v=9', 'kateb/arabic.js?v=9', 'kateb/templates/templates.json?v=9',
+  'kateb/templates/announce.docx?v=9', 'kateb/templates/gift.docx?v=9', 'kateb/templates/inherit_announce.docx?v=9', 'kateb/templates/inherit_request.docx?v=9', 'kateb/templates/iqrar.docx?v=9', 'kateb/templates/memo.docx?v=9', 'kateb/templates/price.docx?v=9', 'kateb/templates/reannounce.docx?v=9', 'kateb/templates/sahifa.docx?v=9', 'kateb/templates/sale.docx?v=9', 'kateb/templates/sihha.docx?v=9', 'kateb/templates/warning.docx?v=9',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
