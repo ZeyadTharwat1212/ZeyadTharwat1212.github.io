@@ -54,7 +54,7 @@
 <script>
 (function(){
   var $ = function(id){ return document.getElementById(id); };
-  var base = location.href.replace(/setup(\.html)?\/?(#.*)?$/, '');
+  var base = location.origin + location.pathname.replace(/[^\/]*$/, '');   // folder of this page, no query/hash
   $('f').addEventListener('submit', async function(e){
     e.preventDefault(); $('err').hidden = true; $('out').hidden = true;
     var key = $('key').value.trim(), p1 = $('pw1').value.trim(), p2 = $('pw2').value.trim();
