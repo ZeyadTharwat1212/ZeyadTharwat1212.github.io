@@ -6,7 +6,7 @@ var Bank = (function () {
   'use strict';
   var CACHE = {}, VER = '5';
   var TASHKEEL = /[ً-ْٰـ]/g;
-  function norm(t) { return String(t || '').replace(TASHKEEL, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[0-9٠-٩]+([\/\-.,:][0-9٠-٩]+)*/g, '#').replace(/\s+/g, ' ').trim(); }
+  function norm(t) { return String(t || '').replace(/[\ufeff\u200b-\u200f\u202a-\u202e]/g, '').replace(TASHKEEL, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[0-9٠-٩]+([\/\-.,:][0-9٠-٩]+)*/g, '#').replace(/\s+/g, ' ').trim(); }
   /* same tokens as build_bank.py: whitespace split, tokens that normalise to nothing dropped */
   function words(t) { return String(t || '').split(/\s+/).map(norm).filter(Boolean); }
   function sameWord(x, y) { return x === y || PLACE.test(y) || lev(x, y) <= Math.max(1, Math.floor(Math.max(x.length, y.length) / 3)); }

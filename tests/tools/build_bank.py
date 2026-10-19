@@ -46,6 +46,7 @@ NAME_AFTER = r'(السيد(?:ة|ه)?|الأستاذ(?:ة|ه)?|الاستاذ(?:�
 def mask(t):
     t = re.sub(r'[0-9٠-٩]+([\/\-\.,:][0-9٠-٩]+)*', '#', t)
     t = re.sub(r'#(\s*/\s*#)+', '#', t)
+    t = re.sub(r'\.{3,}|…+|_{3,}', '{{X}}', t)        # dotted blanks of published formulas
     t = re.sub(NAME_AFTER + r'\s*(?:/|:)\s*[^\-–,،.:()\n]{2,60}?(?=\s*(?:[\-–,،.():]|بالغ|كامل|المقيم|مقيم|بصفت|مخاطب|وذلك|عن نفس|$))', r'\1 / {{NAME}}', t)
     t = re.sub(r'(مكتب (?:الأستاذ|الاستاذ)(?:ة|ه)?\s*/?\s*)[^.،,\n]{2,50}?(\s+المحامي(?:ة|ه)?)', r'\1{{NAME}}\2', t)
     # no delimiter found after a title: the next words are the name anyway
@@ -55,7 +56,7 @@ def mask(t):
 
 def split_lines(text):
     for raw in text.replace('\r', '').split('\n'):
-        l = raw.strip()
+        l = re.sub('[\ufeff\u200b-\u200f\u202a-\u202e]', '', raw).strip()
         if not l or len(l) < 8 or len(l) > 600: continue
         if re.fullmatch(r'[\W_#]+', l): continue
         yield l
