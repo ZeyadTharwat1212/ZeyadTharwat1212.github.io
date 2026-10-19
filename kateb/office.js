@@ -28,7 +28,7 @@ var Office = (function () {
   /* which office template fits this text (title lines decide) */
   var TYPES = [
     ['reannounce', /^(ا|ا)?عاده اعلان/], ['announce', /^اعلان (باصل|صحيفه)/], ['inherit_announce', /^اعلان في ماده الوراثه|^اعلان وراثه/],
-    ['inherit_request', /^طلب وراثه/], ['sihha', /^دعوي صحه توقيع|^صحه توقيع/], ['warning', /^انذار/],
+    ['inherit_request', /^طلب وراثه/], ['sihha', /^دعو[يه] صحه توقيع|^صحه توقيع/], ['warning', /^انذار/],
     ['sahifa', /^(صحيفه|عريضه|استئناف)/], ['gift', /^عقد ?هبه/], ['sale', /^عقد/], ['price', /^اقرار سعر/], ['iqrar', /^اقرار/], ['memo', /^مذكره/]
   ];
   function detect(text) {
@@ -262,7 +262,7 @@ var Office = (function () {
   }
   function rCss(rpr, r) {
     var f = attr(rpr, 'rFonts', 'cs') || attr(rpr, 'rFonts', 'ascii'), sz = +attr(rpr, 'szCs', 'val') || +attr(rpr, 'sz', 'val') || 28;
-    var css = 'font-family:' + (f ? '"' + f + '",' : '') + '"Simplified Arabic","Noto Naskh Arabic","Times New Roman",serif;font-size:' + (sz / 2) + 'pt;';
+    var css = 'font-family:' + (f ? '"' + f + '",' : '') + '"Simplified Arabic","Noto Naskh Arabic","Amiri","Times New Roman",serif;font-size:' + (sz / 2) + 'pt;';
     if (has(rpr, 'b') || has(rpr, 'bCs') || r.b) css += 'font-weight:700;';
     var u = attr(rpr, 'u', 'val') || (r.u ? 'single' : null);
     if (u && u !== 'none') css += 'text-decoration:underline;' + (u === 'double' ? 'text-decoration-style:double;' : '');

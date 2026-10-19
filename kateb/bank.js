@@ -82,10 +82,10 @@ var Bank = (function () {
      Only non-placeholder bank words (never names/numbers), and only when the doubtful word already resembles
      the formula word, so a genuine variant is not overwritten. */
   function snap(text, bank, minCover) {
-    var fixed = 0, kept = 0;
+    var fixed = 0, kept = 0, styled = 0;
     var out = String(text || '').replace(/\r/g, '').split('\n').map(function (raw) {
-      if (raw.indexOf('⟦') < 0) return raw;
       var tag = (raw.match(/^\s*\[[A-Z]+\]\s*/) || [''])[0], line = raw.slice(tag.length);
+      if (!/[\u0600-\u06FF]/.test(line)) return raw;
       var hs = hits(bank, line, minCover || 0.6); if (!hs.length) { kept += (line.match(/⟦/g) || []).length; return raw; }
       /* a doubtful word is fixed only when a neighbour of it also matches the same formula */
       var map = {};
@@ -98,7 +98,14 @@ var Bank = (function () {
         if (!tk || /^\s+$/.test(tk)) return tk;
         var core = tk.replace(/[*_⟦⟧]/g, ''); if (!norm(core)) return tk;
         var idx = wi++;
-        if (tk.indexOf('⟦') < 0) return tk;
+        if (tk.indexOf('⟦') < 0) {
+          /* office spelling: inside a recognised formula a word that differs only in hamza / ة / ى takes the office's form */
+          var mm = map[idx]; if (!mm) return tk;
+          var ow = mm.h.line.o ? mm.h.line.o[mm.j] : null, bwx = mm.h.bw[mm.j];
+          var f = function (x) { return x.replace(/ة/g, 'ه'); };     // ة/ه slips only; hamza and ى/ي stay as read
+          if (ow && !PLACE.test(bwx) && norm(core) === bwx && core !== ow && f(core) === f(ow) && !/[0-9٠-٩]/.test(core)) { styled++; return tk.replace(core, ow); }
+          return tk;
+        }
         if (/[0-9٠-٩]/.test(core)) { kept++; return tk; }        // numbers are never settled by a formula
         var m = map[idx]; if (!m) { kept++; return tk; }
         var bw = m.h.bw[m.j]; if (PLACE.test(bw)) { kept++; return tk; }
@@ -109,7 +116,7 @@ var Bank = (function () {
       });
       return tag + res.join('');
     }).join('\n');
-    return { text: out, fixed: fixed, kept: kept };
+    return { text: out, fixed: fixed, kept: kept, styled: styled };
   }
 
   return { load: load, promptText: promptText, hits: hits, match: match, snap: snap, norm: norm, words: words };

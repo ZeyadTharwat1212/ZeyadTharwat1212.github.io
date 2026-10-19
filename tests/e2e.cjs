@@ -61,7 +61,7 @@ async function pagePhoto(browser) {
   const png = await p.screenshot(); await p.close(); return png;
 }
 
-async function runMode(browser, base, file, answers, check, key) {
+async function runMode(browser, base, file, answers, check, key, drive) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, serviceWorkers: 'block' });
   const calls = [];
   await fakeWorld(context, answers, calls);
@@ -70,6 +70,7 @@ async function runMode(browser, base, file, answers, check, key) {
   const errors = []; page.on('pageerror', e => errors.push(String(e)));
   await page.goto(base + '/' + file);
   await page.waitForSelector('#start:not([hidden])');
+  if (drive) { await drive(page); assert.deepStrictEqual(errors, [], 'no page errors'); await context.close(); return; }
   await page.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: await pagePhoto(browser) });
   await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
   assert.deepStrictEqual(errors, [], 'no page errors');
@@ -203,6 +204,22 @@ async function runMode(browser, base, file, answers, check, key) {
     assert.ok(calls.filter(k => k === 'read').length >= 2, 'read again after rotating');
     assert.ok(!(await page.textContent('#pagesBox .sheet')).includes('ROT:'));
   }, 'sk-ant-test'));
+
+  await step('camera tray: two shots cleaned to white pages, removed/kept, read together as two pages', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ }, async (page, calls) => {}, 'sk-ant-test', async (page) => {
+    const dark = await (async () => { const p = await browser.newPage({ viewport: { width: 500, height: 700 } }); await p.setContent('<body style="margin:0;background:#8a8070;font:34px serif;padding:40px;color:#222">دعوى صحة توقيع<br>بناء علي طلب السيد</body>'); const b = await p.screenshot(); await p.close(); return b; })();
+    for (let i = 0; i < 3; i++) await page.setInputFiles('#camFile', { name: 'shot' + i + '.png', mimeType: 'image/png', buffer: dark });
+    await page.waitForSelector('#tray:not([hidden])');
+    assert.strictEqual(await page.locator('#shots .shot').count(), 3);
+    await page.click('#shots [data-rm="1"]');
+    assert.strictEqual(await page.locator('#shots .shot').count(), 2);
+    assert.match(await page.textContent('#goBtn'), /2/);
+    /* the cleaned shot: mostly white paper, some dark ink (the raw photo was a dull grey) */
+    const stats = await page.evaluate(() => { const img = document.querySelector('#shots img'); const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; const x = c.getContext('2d'); x.drawImage(img, 0, 0); const d = x.getImageData(0, 0, c.width, c.height).data; let white = 0, dark = 0, n = 0; for (let i = 0; i < d.length; i += 4) { n++; if (d[i] > 230) white++; if (d[i] < 60) dark++; } return { white: white / n, dark: dark / n }; });
+    assert.ok(stats.white > 0.6 && stats.dark > 0.005, 'cleaned to white paper with dark ink: ' + JSON.stringify(stats));
+    await page.click('#goBtn');
+    await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+    assert.strictEqual(await page.locator('#pagesBox .pg').count(), 2, 'two pages read together');
+  }));
 
   await step('installable app: manifest, icons, offline shell; paste-link unlock', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
