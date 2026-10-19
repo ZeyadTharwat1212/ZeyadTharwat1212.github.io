@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=11">
+<link rel="stylesheet" href="kateb/style.css?v=12">
 </head>
 <body>
 <main>
@@ -54,7 +54,7 @@
     <p class="hint">اختر كل الصفحات مرة واحدة بالترتيب، أو ملف PDF، أو اسحبها هنا.</p>
     <div class="pickrow">
       <button class="huge" id="camBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg><span>صوّر الورقة</span></button>
-      <button class="btn" id="pickBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>اختيار من الملفات</span></button>
+      <button class="btn" id="pickBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>اختر صورة أو ملف</span></button>
     </div>
     <label class="chk"><input type="checkbox" id="enhanceChk" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label>
     <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
@@ -62,10 +62,11 @@
   </div>
   <div class="card tray" id="tray" hidden>
     <div class="trayhead"><b id="trayCount"></b><span class="small">الصفحات بالترتيب. صوّر الصفحة التالية أو ابدأ القراءة.</span></div>
+    <p class="err" id="blurNote" hidden></p>
     <div class="shots" id="shots"></div>
     <div class="actions">
       <button class="btn" id="moreBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg><span>صوّر صفحة أخرى</span></button>
-      <button class="btn go" id="goBtn" type="button"><span>ابدأ القراءة</span></button>
+      <button class="btn go" id="goBtn" type="button"><span>✨ تحويل إلى نص</span></button>
     </div>
   </div>
   <button class="btn resume" id="resumeBtn" type="button" hidden><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></span><span>استكمال آخر مستند<small id="resumeWhen"></small></span></button>
@@ -75,6 +76,7 @@
     <div class="feat"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg> مراجعة بالصورة</b>الأصل بجوار النص، كلمة كلمة، قبل أي حفظ.</div>
     <div class="feat"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m8.5 12 1.3 5 1.7-4 1.7 4 1.3-5"/></svg> بشكل المكتب</b>Word و PDF بنفس خطوط المكتب وختمه وهوامشه.</div>
   </div>
+  <p class="small center privacy">🔒 صور الورق تُرسل إلى خدمة القراءة (Claude من Anthropic أو Gemini من Google حسب المفتاح) للقراءة فقط، ولا تُحفظ على أي خادم خاص بنا. النص والمسودة تبقى على هذا الجهاز.</p>
   <button class="btn" id="installBtn" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7m-3-3 3 3 3-3"/></svg><span>ثبّت التطبيق على الشاشة الرئيسية</span></button>
   <p class="small center" id="iosHint" hidden>لتثبيته على الآيفون: اضغط زر المشاركة <b>⬆︎</b> ثم «إضافة إلى الشاشة الرئيسية».</p>
 </section>
@@ -97,8 +99,8 @@
 <section id="done" hidden>
   <div class="row">
     <div class="actions">
-      <button class="xcard word" id="wordBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m8.5 12 1.3 5 1.7-4 1.7 4 1.3-5"/></svg></span><span><b>تحميل ملف Word</b><small>‎.docx قابل للتعديل</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
-      <button class="xcard pdf" id="pdfBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 17v-5h2a1.5 1.5 0 0 1 0 3H8"/><path d="M13 17v-5h1.5a2.5 2.5 0 0 1 0 5z"/></svg></span><span><b>حفظ PDF</b><small>جاهز للطباعة والإرسال</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+      <button class="xcard word" id="wordBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m8.5 12 1.3 5 1.7-4 1.7 4 1.3-5"/></svg></span><span><b>📘 تحميل Word</b><small>ملف ‎.docx قابل للتعديل</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+      <button class="xcard pdf" id="pdfBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 17v-5h2a1.5 1.5 0 0 1 0 3H8"/><path d="M13 17v-5h1.5a2.5 2.5 0 0 1 0 5z"/></svg></span><span><b>📕 تحميل PDF</b><small>نص حقيقي قابل للتحديد، جاهز للطباعة</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
     </div>
     <div class="card tpl" id="tplBox" hidden>
       <label class="tplrow">شكل الملف<select id="tplSel"></select></label>
@@ -149,14 +151,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"legal"};</script>
-<script src="kateb/engine.js?v=11"></script>
-<script src="kateb/scan.js?v=11"></script>
-<script src="kateb/verify.js?v=11"></script>
-<script src="kateb/arabic.js?v=11"></script>
-<script src="kateb/bank.js?v=11"></script>
-<script src="kateb/docx.js?v=11"></script>
-<script src="kateb/exam.js?v=11"></script>
-<script src="kateb/office.js?v=11"></script>
-<script src="kateb/app.js?v=11"></script>
+<script src="kateb/engine.js?v=12"></script>
+<script src="kateb/scan.js?v=12"></script>
+<script src="kateb/verify.js?v=12"></script>
+<script src="kateb/arabic.js?v=12"></script>
+<script src="kateb/bank.js?v=12"></script>
+<script src="kateb/docx.js?v=12"></script>
+<script src="kateb/exam.js?v=12"></script>
+<script src="kateb/office.js?v=12"></script>
+<script src="kateb/app.js?v=12"></script>
 </body>
 </html>
