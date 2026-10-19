@@ -187,7 +187,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     if (SHOTS) fs.writeFileSync(path.join(SHOTS, 'office-sihha.docx'), fs.readFileSync(await dl.path()));
     await exportPdf(page); await page.waitForFunction(() => window.__printed === 1);
     const pr = await page.innerHTML('#printRoot');
-    assert.ok((pr.match(/class="oshape"/g) || []).length >= 3 && pr.includes('كطلب الطالب وتحت مسئوليته') && pr.includes('ألون إبراهيم باشا'), 'PDF shapes: stamp, rule, side box');
+    assert.ok((pr.match(/class="oshape[^"]*"/g) || []).length >= 3 && pr.includes('كطلب الطالب وتحت مسئوليته') && pr.includes('ألون إبراهيم باشا'), 'PDF shapes: stamp, rule, side box');
     if (SHOTS) { await page.screenshot({ path: path.join(SHOTS, 'office-review.png'), fullPage: true }); await page.emulateMedia({ media: 'print' }); await page.pdf({ path: path.join(SHOTS, 'office-sihha.pdf'), format: 'A4', preferCSSPageSize: true }); await page.emulateMedia({ media: 'screen' }); }
     await page.selectOption('#tplSel', ''); 
     const [dl2] = await Promise.all([page.waitForEvent('download'), exportWord(page)]);

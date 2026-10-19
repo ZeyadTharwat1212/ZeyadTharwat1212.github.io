@@ -144,7 +144,16 @@ var Office = (function () {
     } else {
       b.runs.forEach(function (r) { runs += runXml(r.text, r.b ? rB : rN, r); });
     }
-    return { pPr: ex.pPr || '<w:pPr/>', runs: runs };
+    return { pPr: airy(ex.pPr || '<w:pPr/>'), runs: runs };
+  }
+  /* the office types its running text at 0.8 line spacing in Simplified Arabic, whose glyphs are short; on any
+     machine without that font (phones, most PCs) the lines overlap. Single spacing is the floor. */
+  var LINE_FLOOR = 240;
+  function airy(ppr) {
+    return String(ppr || '').replace(/<w:spacing([^>]*)w:line="(\d+)"([^>]*)\/>/, function (m, a, v, b) {
+      if (/w:lineRule="(exact|atLeast)"/.test(a + b) || +v >= LINE_FLOOR) return m;
+      return '<w:spacing' + a + 'w:line="' + LINE_FLOOR + '"' + b + '/>';
+    });
   }
 
   function tableXml(T, rows) {
@@ -214,7 +223,7 @@ var Office = (function () {
     var S = await spec(), T = S[key]; if (!T) throw { code: 'template' };
     var items = plan(T, blocks), paras = [];
     var lead = T.order[0] === 'ornament' || T.order[0] === 'lead' ? T.order[0] : null;
-    if (lead) { var oex = T.roles[lead][0]; paras.push({ role: lead, pPr: oex.pPr, runs: lead === 'ornament' ? runXml(oex.text || '', oex.rN || oex.rB || oex.rP, {}) : '' }); }
+    if (lead) { var oex = T.roles[lead][0]; paras.push({ role: lead, pPr: oex.pPr, runs: lead === 'ornament' ? runXml(' ', oex.rN || oex.rB || oex.rP, {}) : '' }); }
     var blankBeforeDate = T.order.indexOf('date') > 0 && T.order[T.order.indexOf('date') - 1] === 'blank';
     items.forEach(function (it) {
       if (it.role === 'table') {
@@ -227,11 +236,11 @@ var Office = (function () {
     });
     if (!paras.length) paras.push({ role: 'body', pPr: '<w:pPr/>', runs: '' });
     /* shapes hang from the same line number as in the original (their offsets are measured from that line) */
-    (T.anchors || []).forEach(function (a) {
+    placedAnchors(T).forEach(function (a) {
       var i = Math.min(a.at, paras.length - 1);
       while (i > 0 && paras[i].xml) i--;
       if (paras[i].xml) { paras.unshift({ role: 'lead', pPr: T.blank, runs: '' }); i = 0; }
-      paras[i].anchors = (paras[i].anchors || '') + a.xml;
+      paras[i].anchors = (paras[i].anchors || '') + wrapStamp(a.xml);
     });
     var L = opts.lawyer || {}, title = L.title || 'المحامي', c = client(blocks);
     var fill = {
@@ -251,6 +260,33 @@ var Office = (function () {
     return zip;
   }
 
+  /* the stamp box sits in the left margin but reaches into the text column; in the office files it floats over
+     the text (wrapNone). Here the first lines flow beside it instead (wrapSquare), so nothing is covered. */
+  function intrusion(xml) {
+    var ph = /<wp:positionH relativeFrom="column">\s*<wp:posOffset>(-?\d+)</.exec(xml), ex = /<wp:extent cx="(\d+)"/.exec(xml);
+    return ph && ex ? +ph[1] + +ex[1] : 0;
+  }
+  function wrapStamp(xml) {
+    if (xml.indexOf('{{LAWYER}}') < 0 || intrusion(xml) <= 0) return xml;
+    return xml.replace(/<wp:wrapNone\/>/g, '<wp:wrapSquare wrapText="bothSides"/>').replace(/allowOverlap="1"/g, 'allowOverlap="0"');
+  }
+  /* the side box and the vertical rule hang from a text paragraph in the office files; with a short first text they
+     would ride up into the stamp. When the stamp sits on the first line, they take a fixed place on the page instead:
+     just under the stamp, where the office puts them. */
+  function placedAnchors(T) {
+    var pg = T.page || {}, out = (T.anchors || []).map(function (a) { return { role: a.role, at: a.at, xml: a.xml }; });
+    var st = out.filter(function (a) { return a.xml.indexOf('{{LAWYER}}') >= 0 && a.at === 0; })[0];
+    if (!st) return out;
+    var pv = /<wp:positionV relativeFrom="paragraph">\s*<wp:posOffset>(-?\d+)</.exec(st.xml), cy = /<wp:extent cx="\d+" cy="(\d+)"/.exec(st.xml);
+    if (!pv || !cy) return out;
+    var bottom = (pg.top || 0) * 635 + +pv[1] + +cy[1] + 90000;         // page top → stamp bottom + a small gap (EMU)
+    out.forEach(function (a) {
+      if (a === st || !/relativeFrom="paragraph"/.test(a.xml)) return;
+      a.xml = a.xml.replace(/<wp:positionV relativeFrom="paragraph">\s*<wp:posOffset>-?\d+<\/wp:posOffset>/, '<wp:positionV relativeFrom="page"><wp:posOffset>' + bottom + '</wp:posOffset>');
+      a.at = 0; a.pageRel = true;
+    });
+    return out;
+  }
   function hasStamp(T) { return (T.anchors || []).some(function (a) { return a.xml.indexOf('{{LAWYER}}') >= 0; }); }
   function hasSide(T) { return (T.anchors || []).some(function (a) { return a.xml.indexOf('{{SUBJECT}}') >= 0; }); }
   async function labels() { var S = await spec(); return Object.keys(S).map(function (k) { return { key: k, label: S[k].label, stamp: hasStamp(S[k]) }; }); }
@@ -271,7 +307,7 @@ var Office = (function () {
     var jc = attr(ppr, 'jc', 'val'), css = '';
     css += 'text-align:' + ({ center: 'center', both: 'justify', lowKashida: 'justify', mediumKashida: 'justify', highKashida: 'justify', distribute: 'justify', end: 'left', left: 'left' }[jc] || 'right') + ';';
     var line = +attr(ppr, 'spacing', 'line') || 0, rule = attr(ppr, 'spacing', 'lineRule');
-    if (line && (!rule || rule === 'auto')) css += 'line-height:' + (line / 240 * 1.45).toFixed(2) + ';';
+    if (line && (!rule || rule === 'auto')) css += 'line-height:' + (Math.max(line, LINE_FLOOR) / 240 * 1.45).toFixed(2) + ';';
     var bf = +attr(ppr, 'spacing', 'before') || 0, af = +attr(ppr, 'spacing', 'after') || 0;
     css += 'margin:' + (bf / 20) + 'pt 0 ' + (af / 20) + 'pt 0;';
     var st = +(attr(ppr, 'ind', 'start') || attr(ppr, 'ind', 'right') || 0), fl = +attr(ppr, 'ind', 'firstLine') || 0, hg = +attr(ppr, 'ind', 'hanging') || 0;
@@ -308,7 +344,9 @@ var Office = (function () {
       var prst = (/prst="(\w+)"/.exec(a) || [])[1] || 'rect', ln = /<a:ln\b([^>]*)>([\s\S]*?)<\/a:ln>/.exec(a);
       var lw = ln && /\bw="(\d+)"/.test(ln[1]) ? +/\bw="(\d+)"/.exec(ln[1])[1] / 12700 : (ln && /<a:noFill\/>/.test(ln[2]) ? 0 : 0.75);
       var dbl = ln && /cmpd="dbl"/.test(ln[1]);
-      var css = 'position:absolute;box-sizing:border-box;z-index:2;left:' + cm(x) + ';top:' + cm(y) + ';';
+      var stamp = /\{\{LAWYER\}\}/.test(xml) && ph && ph[1] === 'column' && x + w > 0;
+      var css = stamp ? 'float:left;box-sizing:border-box;z-index:2;margin:' + cm(Math.max(y, 0)) + ' 0.25cm 0.2cm ' + cm(x) + ';'
+                      : 'position:absolute;box-sizing:border-box;z-index:2;left:' + cm(x) + ';top:' + cm(y) + ';';
       if (prst === 'line' || prst === 'straightConnector1') {
         css += 'width:0;height:' + cm(h) + ';border-left:' + lw + 'pt solid #000;';
         out += '<span class="oshape" style="display:block;' + css + '"></span>'; continue;
@@ -329,7 +367,7 @@ var Office = (function () {
           inner += '<span style="display:block;' + pCss(ppr) + 'margin:0;min-height:0.6em;line-height:1.2">' + (runs || '&nbsp;') + '</span>';
         }
       }
-      out += '<span class="oshape" style="display:block;' + css + '">' + inner + '</span>';
+      out += '<span class="oshape' + (stamp ? ' ostamp' : '') + '" style="display:block;' + css + '">' + inner + '</span>';
     }
     return out;
   }
@@ -369,10 +407,11 @@ var Office = (function () {
     };
     var fill = function (t) { return t.replace(/\{\{(LAWYER|LAWYER_TITLE|AGENT|SUBJECT|BYREQ|AGENTOF|CLIENT)\}\}/g, function (m) { return fillMap[m]; }); };
     var pg = T.page || {};
-    (T.anchors || []).forEach(function (a) {
+    placedAnchors(T).forEach(function (a) {
       var i = Math.min(a.at, paras.length - 1); while (i > 0 && paras[i].role === 'table') i--;
       var sh = shapeHtml(a.xml, fill, pg); if (!sh) return;
-      paras[i].html = paras[i].html.replace(/^<p( style=")?/, function (m, q) { return q ? '<p style="position:relative;' : '<p style="position:relative"'; }).replace(/<\/p>$/, sh + '</p>');
+      paras[i].html = paras[i].html.replace(/^<p( style=")?/, function (m, q) { return q ? '<p style="position:relative;' : '<p style="position:relative"'; });
+      if (/ostamp/.test(sh)) paras[i].html = paras[i].html.replace(/^(<p[^>]*>)/, '$1' + sh); else paras[i].html = paras[i].html.replace(/<\/p>$/, sh + '</p>');
     });
     var tw = function (t) { return (t / 567).toFixed(2) + 'cm'; };
     /* Chrome clips whatever crosses into the page margin, so the side margins become padding: the stamp and

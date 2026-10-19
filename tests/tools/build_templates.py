@@ -165,7 +165,41 @@ def table_formats(tbl):
     return {'tblPr': ser(tblpr) if tblpr is not None else '<w:tblPr/>', 'grid': grid,
             'head': row_fmt(rows[0]) if rows else None, 'row': row_fmt(rows[1]) if len(rows) > 1 else (row_fmt(rows[0]) if rows else None)}
 
-def build(src_dir, out_dir):
+CORPUS_PAT = {'sihha': r'صحة توقيع', 'reannounce': r'(إ|ا)عادة (إ|ا)علان', 'announce': r'(إ|ا)علان ب(أ|ا)صل', 'warning': r'(إ|ا)نذار',
+              'sale': r'عقد بيع', 'gift': r'هب[هة]', 'price': r'(إ|ا)قرار سعر', 'iqrar': r'^(إ|ا)قرار(?! سعر)', 'memo': r'مذكر[هة]',
+              'sahifa': r'صحيفة|استئناف', 'inherit_announce': r'(إ|ا)علان.*وراث', 'inherit_request': r'طلب وراث'}
+SIZE_ROLES = ('body', 'party', 'clause', 'request', 'date')
+
+def corpus_body_size(corpus_dir, key):
+    """the font size (half-points) most office files of this type use for their running text"""
+    import glob, collections
+    pat = CORPUS_PAT.get(key)
+    if not corpus_dir or not pat: return None
+    modes = collections.Counter()
+    for f in glob.glob(os.path.join(corpus_dir, '**', '*.docx'), recursive=True):
+        name = os.path.basename(f)
+        if name.startswith('~$') or not re.search(pat, name): continue
+        try: x = zipfile.ZipFile(f).read('word/document.xml').decode('utf8')
+        except Exception: continue
+        body = re.sub(r'<w:txbxContent>.*?</w:txbxContent>', '', x[x.find('<w:body>'):], flags=re.S)
+        szs = []
+        for p in re.findall(r'<w:p\b.*?</w:p>', body, re.S):
+            t = ''.join(re.findall(r'<w:t[^>]*>([^<]*)</w:t>', p)).strip()
+            if len(t) < 15: continue
+            m = re.findall(r'<w:szCs w:val="(\d+)"', p) or re.findall(r'<w:sz w:val="(\d+)"', p)
+            if m: szs.append(collections.Counter(m).most_common(1)[0][0])
+        if szs: modes[collections.Counter(szs).most_common(1)[0][0]] += 1
+    return int(modes.most_common(1)[0][0]) if modes else None
+
+def resize(fmt, sz):
+    out = dict(fmt)
+    for k in ('rN', 'rB', 'rP', 'rR'):
+        if k in out and out[k]:
+            out[k] = re.sub(r'<w:sz w:val="\d+"/>', '<w:sz w:val="%d"/>' % sz, out[k])
+            out[k] = re.sub(r'<w:szCs w:val="\d+"/>', '<w:szCs w:val="%d"/>' % sz, out[k])
+    return out
+
+def build(src_dir, out_dir, corpus_dir=None):
     os.makedirs(out_dir, exist_ok=True)
     spec = {}
     for key, label in CHOICES.items():
@@ -214,6 +248,15 @@ def build(src_dir, out_dir):
                 counts = {}
                 for f in fs: counts[sig(f)] = counts.get(sig(f), 0) + 1
                 out_roles[role] = [max(fs, key=lambda f: (counts[sig(f)], -fs.index(f)))]
+        # the one source file may be an outlier in size: running text takes the size most files of the type use
+        mode = corpus_body_size(corpus_dir, key)
+        if mode:
+            for role in SIZE_ROLES:
+                if role not in out_roles: continue
+                cur = re.search(r'<w:sz w:val="(\d+)"', out_roles[role][0].get('rN', '') or out_roles[role][0].get('rP', '') or '')
+                if cur and abs(int(cur.group(1)) - mode) >= 4:
+                    print('  %s/%s: size %s -> corpus %d' % (key, role, cur.group(1), mode))
+                    out_roles[role] = [resize(fmt, mode) for fmt in out_roles[role]]
         mar = sect.find(q('pgMar')); page = {a: int(mar.get(q(a))) for a in ('top', 'right', 'bottom', 'left')} if mar is not None else {}
         spec[key] = {'label': label, 'roles': out_roles, 'anchors': anchors, 'table': table, 'page': page,
                      'blank': blanks[0] if blanks else '<w:pPr/>', 'order': order,
@@ -265,4 +308,4 @@ def write_skeleton(zin, root, sect, anchors, dst):
             zout.writestr(item, data)
 
 if __name__ == '__main__':
-    build(sys.argv[1], sys.argv[2])
+    build(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)

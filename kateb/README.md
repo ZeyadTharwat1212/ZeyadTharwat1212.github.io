@@ -41,6 +41,20 @@ To rebuild after changing the chosen originals (kept outside the repo):
 
     python tests/tools/build_templates.py <folder with sihha.docx, sale.docx, …> kateb/templates
 
+Layout rules on top of the office formats (v17, `office.js`):
+- the stamp box reaches into the text column; the office files float it over the text (`wrapNone`). The Word file
+  uses `wrapSquare` and the PDF a float, so the first lines flow beside the stamp instead of under it;
+- the side box («الموضوع…») and the vertical rule hang from a text paragraph in the office files and ride up into
+  the stamp when the text is short; when the stamp sits on the first line they are placed on the page instead,
+  just under the stamp (`placedAnchors`);
+- running text takes the size most office files of the type use (the builder's third argument is the office
+  corpus folder; e.g. sihha body 13pt in the one source file → 17pt across 52 files);
+- the office's 0.8 line spacing overlaps glyphs on any machine without Simplified Arabic (phones, most PCs):
+  single spacing is the floor (`LINE_FLOOR`), Word and PDF alike;
+- the ornament glyph line («ههه» in the Zokrofi font) is left blank in the Word file (it is garbage without the font).
+
+    python tests/tools/build_templates.py <folder of one source .docx per type> kateb/templates <office corpus folder>
+
 ## How a page is read
 1. The page is sent whole + as 2–3 sharper strips (1568px on Claude, 3072px on Gemini).
 2. **Read 1** and **read 2** run **at the same time** (Claude Sonnet 5.5, different instructions and temperature).
