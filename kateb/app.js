@@ -55,9 +55,15 @@
   function setProgress(done, total, text) {
     $('stepText').textContent = text; $('barFill').style.width = Math.round(100 * done / Math.max(1, total)) + '%';
   }
+  /* the three real stages of a page: prepare → read → judge (k from readPage's step callback) */
+  function setStage(k) {
+    Array.prototype.forEach.call(document.querySelectorAll('.stage'), function (el) {
+      var i = +el.dataset.stage; el.classList.toggle('done', k > i || k === 'all'); el.classList.toggle('active', k === i);
+    });
+  }
   async function start(files) {
     files.sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { numeric: true }); });
-    show('work'); setProgress(0, 1, 'جارٍ فتح الصور…'); $('waitText').hidden = true; $('thumbs').innerHTML = '';
+    show('work'); setProgress(0, 1, 'جارٍ فتح الصور…'); setStage(0); $('waitText').hidden = true; $('thumbs').innerHTML = '';
     pages = [];
     try {
       for (var i = 0; i < files.length; i++) { var cs = await Engine.fileToCanvases(files[i]); cs.forEach(function (c) { pages.push({ base: c }); }); }
@@ -131,9 +137,9 @@
     try {
       for (var i = 0; i < n; i++) {
         var label = n > 1 ? ('صفحة ' + (i + 1) + ' من ' + n) : 'الورقة';
-        results.push(await readPage(pages[i], label, function (k, text) { setProgress(i * S + k, n * S, text); if (k) $('waitText').hidden = true; }));
+        results.push(await readPage(pages[i], label, function (k, text) { setProgress(i * S + k, n * S, text); setStage(k); if (k) $('waitText').hidden = true; }));
       }
-      setProgress(1, 1, 'تم');
+      setProgress(1, 1, 'تم'); setStage('all');
       finish();
     } catch (e) { fail(e); }
     running = false;
@@ -269,6 +275,46 @@
   });
   $('pagesBox').addEventListener('input', function () { refreshDoubts(); queueSave(); });
   $('zoomClose').addEventListener('click', function () { $('zoom').hidden = true; });
+  var zoomW = 100;
+  function setZoom(w) { zoomW = Math.max(60, Math.min(400, w)); $('zoom').style.setProperty('--zw', zoomW + '%'); }
+  if ($('zoomIn')) { $('zoomIn').addEventListener('click', function () { setZoom(zoomW * 1.25); }); $('zoomOut').addEventListener('click', function () { setZoom(zoomW / 1.25); }); }
+
+  /* ---------- review view: side by side / text / original ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll('.seg [data-view]'), function (b) {
+    b.addEventListener('click', function () {
+      $('pagesBox').dataset.view = b.dataset.view;
+      Array.prototype.forEach.call(document.querySelectorAll('.seg [data-view]'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      try { localStorage.setItem('kateb.view', b.dataset.view); } catch (e) {}
+    });
+  });
+  (function () { var v = Engine.lsGet('kateb.view'), b = v && document.querySelector('.seg [data-view="' + v + '"]'); if (b) b.click(); })();
+
+  /* ---------- drag & drop onto the start screen ---------- */
+  (function () {
+    var dz = $('dropZone'); if (!dz) return;
+    var over = 0;
+    ['dragenter', 'dragover'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('over'); }); });
+    dz.addEventListener('drop', function (e) {
+      var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []).filter(function (f) { return /^image\//.test(f.type) || /\.(pdf|jpe?g|png|webp|heic|heif)$/i.test(f.name); });
+      if (files.length) start(files);
+    });
+    dz.addEventListener('click', function (e) { if (e.target === dz || e.target.closest('.ico,h3,.hint,.chips')) $('file').click(); });
+    document.addEventListener('dragover', function (e) { e.preventDefault(); });
+    document.addEventListener('drop', function (e) { e.preventDefault(); });
+  })();
+
+  /* ---------- light / dark ---------- */
+  (function () {
+    var b = $('themeBtn'); if (!b) return;
+    b.addEventListener('click', function () {
+      var cur = document.documentElement.getAttribute('data-theme') || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      var next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('kateb.theme', next); } catch (e) {}
+      var m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = next === 'dark' ? '#0B1020' : m.dataset.light || m.content;
+    });
+  })();
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') $('zoom').hidden = true; });
 
   /* ---------- draft: survives a refresh or a closed tab on this device ---------- */
