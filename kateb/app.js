@@ -11,8 +11,8 @@
 
   /* KATEB15: screens form a stack so «رجوع» (and the phone's back button) returns to the previous screen with its
      state untouched; «start» is the root. */
-  var SCREENS = ['lock', 'nokey', 'start', 'work', 'done', 'fail', 'files', 'trash', 'settings', 'learn'];
-  var STACKED = ['start', 'done', 'files', 'trash', 'settings', 'learn'];
+  var SCREENS = ['lock', 'nokey', 'start', 'work', 'done', 'fail', 'files', 'trash', 'settings', 'learn', 'voice', 'audioUp'];
+  var STACKED = ['start', 'done', 'files', 'trash', 'settings', 'learn', 'voice', 'audioUp'];
   var nav = [], curScreen = null, backing = false;
   function show(id, noPush) {
     if (id === 'start') nav = [];
@@ -38,6 +38,8 @@
       else if (prev === 'trash') renderTrash();
       else if (prev === 'settings') renderSettings();
       else if (prev === 'learn') renderLearn();
+      else if (prev === 'voice') voiceScreen(true);
+      else if (prev === 'audioUp') audioScreen(true);
       else show(prev, true);
     } finally { backing = false; }
   }
@@ -57,6 +59,8 @@
     var blob = Engine.blobFromHash();
     /* a link with a key this device has not unlocked yet (a new key) always asks for the password and replaces the old key */
     if (blob && blob !== Engine.lsGet('kateb.blob')) { KEY = null; show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
+    var gb = Engine.audioBlobFromHash();
+    if (gb && gb !== Engine.lsGet('kateb.gblob') && Engine.savedKey()) { KEY = Engine.savedKey(); show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
     KEY = Engine.savedKey();
     if (KEY) { toStart(); return; }
     if (blob) { show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
@@ -72,7 +76,13 @@
   });
   $('lockForm').addEventListener('submit', async function (e) {
     e.preventDefault(); $('pwErr').hidden = true; $('pwBtn').disabled = true; $('pwBtn').textContent = 'جارٍ الفتح…';
-    try { KEY = await Engine.unlock(Engine.blobFromHash(), $('pw').value.trim()); Engine.saveKey(KEY); Engine.lsSet('kateb.blob', Engine.blobFromHash()); Engine.lsSet('kateb.model', ''); CLAUDE = Engine.provider(KEY) === 'claude'; toStart(); }
+    try {
+      var pw = $('pw').value.trim();
+      KEY = await Engine.unlock(Engine.blobFromHash(), pw); Engine.saveKey(KEY); Engine.lsSet('kateb.blob', Engine.blobFromHash()); Engine.lsSet('kateb.model', ''); CLAUDE = Engine.provider(KEY) === 'claude';
+      var gb2 = Engine.audioBlobFromHash();
+      if (gb2) { try { Engine.setAudioKey(await Engine.unlock(gb2, pw)); Engine.lsSet('kateb.gblob', gb2); } catch (eg) {} }
+      toStart();
+    }
     catch (err) { $('pwErr').hidden = false; $('pw').select(); }
     finally { $('pwBtn').disabled = false; $('pwBtn').textContent = 'دخول'; }
   });
@@ -99,6 +109,8 @@
   if ($('filesBtn')) $('filesBtn').addEventListener('click', renderFiles);
   if ($('learnBtn')) $('learnBtn').addEventListener('click', renderLearn);
   if ($('settingsBtn')) $('settingsBtn').addEventListener('click', renderSettings);
+  if ($('voiceBtn')) $('voiceBtn').addEventListener('click', voiceScreen);
+  if ($('audioBtn')) $('audioBtn').addEventListener('click', audioScreen);
 
   /* ---------- pick ---------- */
   $('pickBtn').addEventListener('click', function () { $('file').click(); });
@@ -108,6 +120,12 @@
   var shots = [], blur = [];
   function enhanceOn() { var c = $('enhanceChk'); return !c || c.checked; }
   function cleaned(c) { try { return enhanceOn() && typeof Scan !== 'undefined' ? Scan.clean(c) : c; } catch (e) { return c; } }
+  /* a photo → { orig, clean, quad }: the paper found and straightened (Scan.smart), then white paper / dark ink;
+     a PDF page or a photo with enhancement off stays as it is */
+  function shotOf(c, isPdf, quad) {
+    if (isPdf || !enhanceOn() || typeof Scan === 'undefined' || !Scan.smart) return { orig: c, clean: c, quad: null };
+    try { var sm = Scan.smart(c, quad); return { orig: c, clean: sm.canvas, quad: sm.quad }; } catch (e) { return { orig: c, clean: cleaned(c), quad: null }; }
+  }
   var BLUR = 18;                                               // strongest-edge strength below this (crisp text ≈ 140, 2px blur ≈ 10): warn
   function sharp(c) { try { return typeof Scan !== 'undefined' ? Scan.sharpness(c) : 99; } catch (e) { return 99; } }
   /* photos and PDFs chosen from files: same tray, same single «تحويل» button (photos cleaned, PDF pages left as they are) */
@@ -116,14 +134,14 @@
     try {
       for (var i = 0; i < files.length; i++) {
         var isPdf = files[i].type === 'application/pdf' || /\.pdf$/i.test(files[i].name), cs = await Engine.fileToCanvases(files[i]);
-        cs.forEach(function (c) { shots.push(isPdf ? c : cleaned(c)); blur.push(isPdf ? false : sharp(c) < BLUR); });
+        cs.forEach(function (c) { shots.push(shotOf(c, isPdf)); blur.push(isPdf ? false : sharp(c) < BLUR); });
       }
     } catch (e) { fail(e); return; }
     renderTray(); $('tray').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
   function renderTray() {
     var box = $('shots'); if (!box) return;
-    box.innerHTML = shots.map(function (c, i) { return '<div class="shot' + (blur[i] ? ' blur' : '') + '"><img alt="صفحة ' + (i + 1) + '" src="' + Engine.scaled(c, 260).toDataURL('image/jpeg', 0.7) + '"><span class="n">' + (i + 1) + '</span>' + (blur[i] ? '<span class="warn">غير واضحة</span>' : '') + '<button class="x" type="button" data-rm="' + i + '" aria-label="حذف الصفحة">✕</button><button class="view" type="button" data-view="' + i + '" aria-label="عرض الصفحة بعد التحسين">🔍 عرض</button></div>'; }).join('');
+    box.innerHTML = shots.map(function (sh, i) { return '<div class="shot' + (blur[i] ? ' blur' : '') + '"><img alt="صفحة ' + (i + 1) + '" src="' + Engine.scaled(sh.clean, 260).toDataURL('image/jpeg', 0.7) + '"><span class="n">' + (i + 1) + '</span>' + (sh.quad ? '<span class="cut" title="تم قص الورقة وتعديل الميل">✂️</span>' : '') + (blur[i] ? '<span class="warn">غير واضحة</span>' : '') + '<button class="x" type="button" data-rm="' + i + '" aria-label="حذف الصفحة">✕</button><button class="view" type="button" data-view="' + i + '" aria-label="عرض الصفحة بعد التحسين">🔍 عرض</button></div>'; }).join('');
     var nb = blur.filter(Boolean).length;
     $('trayCount').textContent = shots.length === 1 ? 'صفحة واحدة جاهزة' : shots.length + ' صفحات جاهزة';
     $('blurNote').hidden = !nb; $('blurNote').textContent = nb ? 'الصورة غير واضحة. من فضلك التقط صورة أوضح (الصفحة ' + blur.map(function (b, i) { return b ? i + 1 : null; }).filter(Boolean).join('، ') + '). يمكنك حذفها وتصويرها مرة أخرى.' : '';
@@ -135,19 +153,19 @@
     $('moreBtn').addEventListener('click', function () { $('camFile').click(); });
     $('camFile').addEventListener('change', async function () {
       var f = this.files && this.files[0]; this.value = ''; if (!f) return;
-      try { var cs = await Engine.fileToCanvases(f); cs.forEach(function (c) { shots.push(cleaned(c)); blur.push(sharp(c) < BLUR); }); renderTray(); $('tray').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      try { var cs = await Engine.fileToCanvases(f); cs.forEach(function (c) { shots.push(shotOf(c, false)); blur.push(sharp(c) < BLUR); }); renderTray(); $('tray').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
       catch (e) { fail(e); }
     });
     $('shots').addEventListener('click', function (e) {
       var v = e.target.closest('[data-view]') || e.target.closest('img');
-      if (v) { var i = v.dataset.view !== undefined ? +v.dataset.view : +v.parentNode.querySelector('[data-view]').dataset.view; openScan(shots[i], i); return; }
+      if (v) { var i = v.dataset.view !== undefined ? +v.dataset.view : +v.parentNode.querySelector('[data-view]').dataset.view; openScan(i); return; }
       var b = e.target.closest('[data-rm]'); if (!b) return; shots.splice(+b.dataset.rm, 1); blur.splice(+b.dataset.rm, 1); renderTray();
     });
     if ($('clearTrayBtn')) $('clearTrayBtn').addEventListener('click', function () { if (!shots.length || window.confirm('حذف كل الصور من القائمة؟')) { shots = []; blur = []; renderTray(); } });
     $('goBtn').addEventListener('click', function () {
       if (!shots.length || running) return;
       if (blur.some(Boolean) && !window.confirm('فيه صورة غير واضحة وقد تُقرأ بأخطاء. هل تريد المتابعة؟')) return;
-      startCanvases(shots.slice()); shots = []; blur = []; renderTray();
+      startCanvases(shots.map(function (sh) { return sh.clean; })); shots = []; blur = []; renderTray();
     });
   }
   function startCanvases(cs) {
@@ -388,6 +406,12 @@
     if ($('versionsPanel')) $('versionsPanel').hidden = true;
     if ($('learnHint')) $('learnHint').hidden = learnOn() || Engine.lsGet('kateb.learnHint') === '1';
     if ($('doneNote')) $('doneNote').hidden = !!restored;
+    if (!restored && pendingAudio && curDoc) { curDoc.audio = pendingAudio.blob; curDoc.source = pendingAudio.source; curDoc.transcript = pendingAudio.transcript; curDoc.seconds = pendingAudio.seconds; pendingAudio = null; }
+    if ($('audioBox')) {
+      var ab = curDoc && curDoc.audio;
+      $('audioBox').hidden = !ab;
+      if (ab) { try { if (docAudioUrl) URL.revokeObjectURL(docAudioUrl); docAudioUrl = URL.createObjectURL(ab); $('docAudio').src = docAudioUrl; } catch (e) { $('audioBox').hidden = true; } }
+    }
     if ($('fixPanel')) { $('fixPanel').hidden = true; fixes = []; }
     renderFields();
     histReset();
@@ -601,7 +625,7 @@
   });
   $('pagesBox').addEventListener('click', function (e) {
     var m = e.target.closest && e.target.closest('mark'); if (m) { marks().forEach(function (x) { x.classList.toggle('cur', x === m); }); }
-    var o = e.target.closest && e.target.closest('.orig'); if (o) { zoomCanvas = null; zoomName = 'الأصل ' + stamp() + '.jpg'; $('zoomImg').src = o.querySelector('img').src; $('zoom').hidden = false; if ($('zoomSave')) $('zoomSave').hidden = false; $('zoomClose').focus(); }
+    var o = e.target.closest && e.target.closest('.orig'); if (o) { zoomCanvas = null; zoomShot = -1; zoomName = 'الأصل ' + stamp() + '.jpg'; $('zoomImg').src = o.querySelector('img').src; $('zoomImg').hidden = false; if ($('scanBar')) { $('scanBar').hidden = true; $('cropBox').hidden = true; } $('zoom').hidden = false; if ($('zoomSave')) $('zoomSave').hidden = false; $('zoomClose').focus(); }
   });
   $('pagesBox').addEventListener('input', function () { refreshDoubts(); histQueue(); queueSave(); });
   /* the keyboard's own undo (Ctrl+Z, or the phone keyboard's undo) goes through the app's history */
@@ -622,10 +646,61 @@
   });
   $('zoomClose').addEventListener('click', function () { $('zoom').hidden = true; });
   /* a cleaned page from the tray, or the original photo of a reviewed page: full size, downloadable as JPG */
-  var zoomCanvas = null, zoomName = '';
-  function openScan(c, i) {
-    zoomCanvas = c; zoomName = 'صفحة ' + (i + 1) + ' ' + stamp() + '.jpg';
-    $('zoomImg').src = c.toDataURL('image/jpeg', 0.92); $('zoom').hidden = false; if ($('zoomSave')) $('zoomSave').hidden = false; $('zoomClose').focus();
+  var zoomCanvas = null, zoomName = '', zoomShot = -1, zoomSide = 'clean';
+  function openScan(i) {
+    var sh = shots[i]; if (!sh) return;
+    zoomShot = i; zoomSide = 'clean'; zoomName = 'صفحة ' + (i + 1) + ' ' + stamp() + '.jpg';
+    showSide();
+    $('zoom').hidden = false; if ($('zoomSave')) $('zoomSave').hidden = false;
+    if ($('scanBar')) { $('scanBar').hidden = false; $('cropBox').hidden = true; $('zoomImg').hidden = false; }
+    $('zoomClose').focus();
+  }
+  function showSide() {
+    var sh = shots[zoomShot]; if (!sh) return;
+    zoomCanvas = zoomSide === 'orig' ? sh.orig : sh.clean;
+    $('zoomImg').src = zoomCanvas.toDataURL('image/jpeg', 0.92);
+    if ($('sideOrig')) { $('sideOrig').setAttribute('aria-pressed', zoomSide === 'orig'); $('sideClean').setAttribute('aria-pressed', zoomSide === 'clean'); }
+  }
+  /* corner editor: the photo with the four corners of the paper, each one draggable; «✅ استخدام الصورة» straightens again */
+  var cropQ = null, cropK = 1, cropDrag = -1;
+  function openCrop() {
+    var sh = shots[zoomShot]; if (!sh) return;
+    var c = $('cropCanvas'), maxW = Math.min(window.innerWidth - 32, 900), maxH = window.innerHeight - 200;
+    cropK = Math.min(maxW / sh.orig.width, maxH / sh.orig.height, 1);
+    c.width = Math.round(sh.orig.width * cropK); c.height = Math.round(sh.orig.height * cropK);
+    var q = sh.quad || [[0, 0], [sh.orig.width, 0], [sh.orig.width, sh.orig.height], [0, sh.orig.height]];
+    cropQ = q.map(function (p) { return [p[0] * cropK, p[1] * cropK]; });
+    $('cropBox').hidden = false; $('zoomImg').hidden = true; drawCrop();
+  }
+  function drawCrop() {
+    var sh = shots[zoomShot], c = $('cropCanvas'), x = c.getContext('2d');
+    x.drawImage(sh.orig, 0, 0, c.width, c.height);
+    x.fillStyle = 'rgba(0,0,0,0.45)'; x.fillRect(0, 0, c.width, c.height);
+    x.save(); x.beginPath(); x.moveTo(cropQ[0][0], cropQ[0][1]); for (var i = 1; i < 4; i++) x.lineTo(cropQ[i][0], cropQ[i][1]); x.closePath(); x.clip(); x.drawImage(sh.orig, 0, 0, c.width, c.height); x.restore();
+    x.strokeStyle = '#2563EB'; x.lineWidth = 3; x.beginPath(); x.moveTo(cropQ[0][0], cropQ[0][1]); for (i = 1; i < 4; i++) x.lineTo(cropQ[i][0], cropQ[i][1]); x.closePath(); x.stroke();
+    cropQ.forEach(function (p) { x.beginPath(); x.arc(p[0], p[1], 14, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill(); x.strokeStyle = '#2563EB'; x.lineWidth = 4; x.stroke(); });
+  }
+  function cropPoint(e) { var r = $('cropCanvas').getBoundingClientRect(), t = e.touches ? e.touches[0] : e; return [(t.clientX - r.left) * $('cropCanvas').width / r.width, (t.clientY - r.top) * $('cropCanvas').height / r.height]; }
+  if ($('cropCanvas')) {
+    var cc = $('cropCanvas');
+    var down = function (e) { var p = cropPoint(e), best = -1, bd = 40; cropQ.forEach(function (q, i) { var d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; best = i; } }); cropDrag = best; if (best >= 0) e.preventDefault(); };
+    var move = function (e) { if (cropDrag < 0) return; var p = cropPoint(e); cropQ[cropDrag] = [Math.max(0, Math.min(cc.width, p[0])), Math.max(0, Math.min(cc.height, p[1]))]; drawCrop(); e.preventDefault(); };
+    var up = function () { cropDrag = -1; };
+    cc.addEventListener('mousedown', down); cc.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+    cc.addEventListener('touchstart', down, { passive: false }); cc.addEventListener('touchmove', move, { passive: false }); cc.addEventListener('touchend', up);
+    $('cropBtn').addEventListener('click', openCrop);
+    $('cropCancel').addEventListener('click', function () { $('cropBox').hidden = true; $('zoomImg').hidden = false; });
+    $('cropUse').addEventListener('click', function () {
+      var sh = shots[zoomShot]; if (!sh) return;
+      var q = cropQ.map(function (p) { return [p[0] / cropK, p[1] / cropK]; });
+      var full = q.every(function (p, i) { var ref = [[0, 0], [sh.orig.width, 0], [sh.orig.width, sh.orig.height], [0, sh.orig.height]][i]; return Math.hypot(p[0] - ref[0], p[1] - ref[1]) < 3; });
+      shots[zoomShot] = shotOf(sh.orig, false, full ? null : q); renderTray();
+      $('cropBox').hidden = true; $('zoomImg').hidden = false; zoomSide = 'clean'; showSide();
+    });
+    $('cropFull').addEventListener('click', function () { var c2 = $('cropCanvas'); cropQ = [[0, 0], [c2.width, 0], [c2.width, c2.height], [0, c2.height]]; drawCrop(); });
+    $('sideOrig').addEventListener('click', function () { zoomSide = 'orig'; showSide(); });
+    $('sideClean').addEventListener('click', function () { zoomSide = 'clean'; showSide(); });
+    $('useBtn').addEventListener('click', function () { $('zoom').hidden = true; });
   }
   if ($('zoomSave')) $('zoomSave').addEventListener('click', function () {
     var src = zoomCanvas ? zoomCanvas.toDataURL('image/jpeg', 0.92) : $('zoomImg').src; if (!src) return;
@@ -726,6 +801,10 @@
     $('firstTextBtn').addEventListener('click', function () { restoreVersion(0); });
     $('reconvertBtn').addEventListener('click', async function () {
       if (running || !curDoc) return;
+      if (curDoc.audio) {
+        if (!window.confirm('إعادة تفريغ التسجيل من جديد؟ النص الحالي يبقى في «نسخ سابقة».')) return;
+        clearTimeout(saveT); await saveDraft(true); reconvertDoc = curDoc; convertAudio(curDoc.audio, { source: curDoc.source || 'audio', seconds: curDoc.seconds }); return;
+      }
       var imgs = (curDoc.pages || []).map(function (p) { return p.img; }).filter(Boolean);
       if (!imgs.length) { $('savedNote').hidden = false; $('savedNote').textContent = 'صور هذا الملف غير محفوظة على هذا الجهاز، فلا يمكن إعادة قراءته. صوّر الورقة مرة أخرى.'; return; }
       if (!window.confirm('إعادة قراءة الورقة من الصور؟ النص الحالي يبقى في «نسخ سابقة».')) return;
@@ -867,6 +946,7 @@
     $('setLearnState').textContent = learnOn() ? 'مفعّل — ' + profileLabel() : 'غير مفعّل';
     $('setEnhance').checked = enhanceOn();
     if ($('setFast')) $('setFast').checked = Engine.fastOn();
+    audioKeyState();
     $('storageInfo').textContent = Store.which() === 'ls' ? 'هذا المتصفح لا يسمح بقاعدة بيانات محلية: تُحفظ النصوص فقط بدون صور الورق.' : '';
     Store.usage().then(function (u) { if (u && u.usage) $('storageInfo').textContent = 'المساحة المستخدمة على هذا الجهاز: ' + (u.usage / 1048576).toFixed(1) + ' MB' + (u.quota ? ' من ' + Math.round(u.quota / 1048576) + ' MB' : ''); }).catch(function () {});
     Store.listDocs(MODE).then(function (ds) { return Store.listTrash(MODE).then(function (ts) { $('setDocsInfo').textContent = ds.length + ' ملفات محفوظة، ' + ts.length + ' في المحذوفات.'; }); }).catch(function () {});
@@ -889,6 +969,17 @@
     $('setLearnBtn').addEventListener('click', renderLearn);
     $('setEnhance').addEventListener('change', function () { if ($('enhanceChk')) $('enhanceChk').checked = this.checked; });
     if ($('setFast')) $('setFast').addEventListener('change', function () { Engine.setFast(this.checked); });
+    if ($('audioKeySave')) {
+      $('audioKeySave').addEventListener('click', async function () {
+        var k = $('audioKeyIn').value.trim(); if (!k) return;
+        if (Engine.provider(k) !== 'gemini') { $('audioKeyState').textContent = 'هذا ليس مفتاح Gemini (يبدأ بـ AIza).'; return; }
+        this.disabled = true; this.textContent = 'جارٍ الاختبار…';
+        try { await Engine.listModels(k); Engine.setAudioKey(k); $('audioKeyIn').value = ''; audioKeyState(); }
+        catch (e) { $('audioKeyState').textContent = 'المفتاح لا يعمل. انسخه من جديد.'; }
+        this.disabled = false; this.textContent = 'حفظ المفتاح';
+      });
+      $('audioKeyClear').addEventListener('click', function () { if (window.confirm('حذف مفتاح الصوت من هذا الجهاز؟')) { Engine.setAudioKey(''); audioKeyState(); } });
+    }
     $('deleteAllBtn').addEventListener('click', function () {
       if (!window.confirm('حذف كل الملفات المحفوظة على هذا الجهاز نهائيًا (بما فيها المحذوفات)؟ لا يمكن التراجع عن هذا.')) return;
       Store.listDocs(MODE).then(function (ds) { return Store.listTrash(MODE).then(function (ts) { return Promise.all(ds.concat(ts).map(function (d) { return Store.purgeDoc(d.id); })); }); })
@@ -928,6 +1019,151 @@
   }
   /* recently deleted files older than 30 days go for good; runs once per open */
   Store.purgeOld().catch(function () {});
+
+  function audioKeyState() {
+    var el = $('audioKeyState'); if (!el) return;
+    var k = Engine.audioKey(KEY);
+    el.textContent = k ? '✅ مفتاح الصوت موجود (' + k.slice(0, 6) + '…). الإملاء الصوتي ورفع التسجيلات يعملان.' : 'لا يوجد مفتاح صوت: الإملاء الصوتي يعمل بمحرك المتصفح فقط (أقل دقة)، ورفع التسجيلات لا يعمل.';
+  }
+
+  /* ---------- KATEB20: voice dictation and audio files → the same review screen ----------
+     Recording and the live text run in the browser; the final transcript comes from Gemini (the audio key — Claude
+     does not hear) chunk by chunk, then Claude lays the words out as the written paper (no word added or changed). */
+  var rec = null, liveRec = null, recBlob = null, recSecs = 0, liveParts = [], liveHist = [], waveT = null, recAudioUrl = null, docAudioUrl = null, pendingAudio = null, audioSel = null;
+  function voiceScreen(back) {
+    show('voice', back); if (!back) resetRec();
+    $('voiceErr').hidden = true;
+    if (!Speech.recSupported()) { $('voiceErr').hidden = false; $('voiceErr').textContent = 'هذا المتصفح لا يدعم التسجيل. افتح الرابط في كروم أو سفاري.'; $('recStart').disabled = true; }
+    else $('recStart').disabled = false;
+    $('voiceHint').textContent = (Engine.audioKey(KEY) ? '' : 'لا يوجد مفتاح صوت: النص سيأتي من محرك المتصفح فقط. ') + 'اضغط «ابدأ التسجيل» واقرأ الورقة بصوت واضح. النص يظهر أثناء الكلام، وبعد الانتهاء يُحوَّل إلى مستند منسّق.';
+  }
+  function resetRec() {
+    if (rec) { try { rec.stop(); } catch (e) {} } rec = null; if (liveRec) { try { liveRec.stop(); } catch (e) {} } liveRec = null;
+    recBlob = null; recSecs = 0; liveParts = []; liveHist = []; clearInterval(waveT); waveT = null;
+    if (recAudioUrl) { try { URL.revokeObjectURL(recAudioUrl); } catch (e) {} recAudioUrl = null; }
+    $('recStat').className = 'recstat'; $('recState').textContent = 'جاهز للتسجيل'; $('recTime').textContent = '٠:٠٠';
+    $('recStart').hidden = false; $('recPause').hidden = true; $('recResume').hidden = true; $('recStop').hidden = true;
+    $('liveBox').hidden = true; $('liveText').innerHTML = ''; $('recDone').hidden = true; $('recNote').textContent = '';
+    if ($('wave')) Speech.drawWave($('wave'), [], false);
+  }
+  function liveHtml(interim) {
+    var out = '';
+    liveParts.forEach(function (p) {
+      if (p.paragraph) { out += '\n\n'; return; }
+      if (p.newline) { out += '\n'; }
+      if (!p.text) return;
+      out += (p.heading ? '<b>' : '') + escH(p.text) + (p.heading ? '</b>\n' : ' ');
+    });
+    return out + (interim ? '<span class="interim">' + escH(interim) + '</span>' : '');
+  }
+  /* the live text as plain lines (the fallback transcript when there is no audio key) */
+  function liveText() {
+    var out = '';
+    liveParts.forEach(function (p) { if (p.paragraph) out += '\n\n'; else if (p.newline) out += '\n'; if (p.text) out += (p.heading ? '[H] ' : '') + p.text + (p.heading ? '\n' : ' '); });
+    return out.replace(/[ \t]+\n/g, '\n').trim();
+  }
+  if ($('recStart')) {
+    $('recStart').addEventListener('click', async function () {
+      $('voiceErr').hidden = true;
+      try { rec = await Speech.recorder({ onTick: function (sec, lvl) { $('recTime').textContent = Speech.fmtTime(sec); liveHist.push(lvl); if (liveHist.length > 400) liveHist.shift(); }, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } }); }
+      catch (e) { $('voiceErr').hidden = false; $('voiceErr').textContent = Engine.errText({ code: 'mic' }); rec = null; return; }
+      liveParts = []; liveHist = [];
+      liveRec = Speech.live({ lang: 'ar-EG',
+        onInterim: function (t) { $('liveText').innerHTML = liveHtml(t); },
+        onFinal: function (t) { var p = $('cmdChk').checked ? Speech.command(t) : { text: t }; liveParts.push(p); $('liveText').innerHTML = liveHtml(''); $('liveText').scrollTop = $('liveText').scrollHeight; },
+        onError: function (code) { if (code === 'not-allowed' || code === 'service-not-allowed') $('recNote').textContent = 'النص المباشر غير متاح؛ سيُفرَّغ التسجيل بعد الانتهاء.'; } });
+      $('liveBox').hidden = false; $('liveText').innerHTML = liveRec ? '' : '<span class="interim">النص المباشر غير متاح في هذا المتصفح؛ سيُفرَّغ التسجيل بعد الانتهاء.</span>';
+      rec.start(); if (liveRec) liveRec.start();
+      $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…';
+      $('recStart').hidden = true; $('recPause').hidden = false; $('recStop').hidden = false; $('recDone').hidden = true;
+      waveT = setInterval(function () { Speech.drawWave($('wave'), liveHist, rec && rec.state() === 'recording'); }, 100);
+    });
+    $('recPause').addEventListener('click', function () { if (!rec) return; rec.pause(); if (liveRec) liveRec.pause(); $('recStat').className = 'recstat paused'; $('recState').textContent = 'متوقف مؤقتًا'; $('recPause').hidden = true; $('recResume').hidden = false; });
+    $('recResume').addEventListener('click', function () { if (!rec) return; rec.resume(); if (liveRec) liveRec.resume(); $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…'; $('recPause').hidden = false; $('recResume').hidden = true; });
+    $('recStop').addEventListener('click', async function () {
+      if (!rec) return;
+      $('recStop').disabled = true;
+      if (liveRec) liveRec.stop();
+      var r = await rec.stop(); rec = null; clearInterval(waveT); Speech.drawWave($('wave'), liveHist, false);
+      recBlob = r.blob; recSecs = r.seconds;
+      $('recStop').disabled = false; $('recStat').className = 'recstat'; $('recState').textContent = 'انتهى التسجيل (' + Speech.fmtTime(recSecs) + ')';
+      $('recPause').hidden = true; $('recResume').hidden = true; $('recStop').hidden = true; $('recStart').hidden = true;
+      if (!recBlob.size || recSecs < 1) { $('voiceErr').hidden = false; $('voiceErr').textContent = 'لم يُسجَّل شيء. تأكد من الميكروفون وجرّب مرة أخرى.'; $('recStart').hidden = false; return; }
+      recAudioUrl = URL.createObjectURL(recBlob); $('recAudio').src = recAudioUrl; $('recDone').hidden = false;
+      $('recNote').textContent = Engine.audioKey(KEY) ? 'اضغط «تحويل» ليُفرَّغ التسجيل بدقة ثم يُنسَّق كمستند.' : (liveText() ? 'لا يوجد مفتاح صوت: سيُستخدم النص المباشر كما سُمع.' : 'لا يوجد مفتاح صوت ولا نص مباشر: أضف مفتاح الصوت من الإعدادات ثم حوّل.');
+    });
+    $('recConvert').addEventListener('click', function () { if (recBlob) convertAudio(recBlob, { source: 'voice', seconds: recSecs, live: liveText() }); });
+    $('recAgain').addEventListener('click', function () { if (!recBlob || window.confirm('حذف هذا التسجيل والبدء من جديد؟')) resetRec(); });
+  }
+  function audioScreen(back) {
+    show('audioUp', back); $('audioErr').hidden = true;
+    var k = Engine.audioKey(KEY);
+    $('audioKeyNote').hidden = !!k; $('audioKeyNote').textContent = k ? '' : Engine.errText({ code: 'no_audio_key' });
+    if (!back) { audioSel = null; $('audioInfo').hidden = true; }
+  }
+  if ($('audioPick')) {
+    $('audioPick').addEventListener('click', function () { $('audioFile').click(); });
+    $('audioOther').addEventListener('click', function () { $('audioFile').click(); });
+    $('audioFile').addEventListener('change', function () {
+      var f = this.files && this.files[0]; this.value = ''; if (!f) return;
+      audioSel = f; $('audioErr').hidden = true;
+      $('audioName').textContent = f.name; $('audioMeta').textContent = (f.size / 1048576).toFixed(1) + ' MB — جارٍ قراءة المدة…';
+      try { var u = URL.createObjectURL(f); $('audioPlayer').src = u; $('audioPlayer').onloadedmetadata = function () { $('audioMeta').textContent = (f.size / 1048576).toFixed(1) + ' MB — المدة ' + Speech.fmtTime($('audioPlayer').duration || 0); }; $('audioPlayer').onerror = function () { $('audioMeta').textContent = (f.size / 1048576).toFixed(1) + ' MB — المتصفح لا يشغّل هذه الصيغة؛ سنحاول تحويلها على أي حال.'; }; } catch (e) {}
+      $('audioInfo').hidden = false;
+    });
+    $('audioConvert').addEventListener('click', function () { if (audioSel) convertAudio(audioSel, { source: 'audio', seconds: $('audioPlayer').duration || 0 }); });
+  }
+  var STAGE_IMG = ['تجهيز الصور', 'قراءة الخط', 'مراجعة وتدقيق'], STAGE_AUD = ['تجهيز الصوت', 'تفريغ الكلام', 'تنسيق النص'];
+  function stageNames(list) { Array.prototype.forEach.call(document.querySelectorAll('.stage'), function (el, i) { el.innerHTML = '<i>' + (i + 1) + '</i>' + list[i]; }); }
+  var GEMINI_AUDIO = /^audio\/(wav|x-wav|mpeg|mp3|aiff|aac|ogg|flac|opus|webm|mp4|m4a|x-m4a)/;
+  async function convertAudio(blob, o) {
+    if (running) return; running = true; results = []; usedModels = {}; docCost = 0;
+    runAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    show('work'); stageNames(STAGE_AUD); setStage(0); setProgress(0, 3, 'جارٍ تجهيز التسجيل…'); $('waitText').hidden = true; $('thumbs').innerHTML = '';
+    if ($('cancelBtn')) $('cancelBtn').hidden = false;
+    var t0 = Date.now();
+    try {
+      var aKey = Engine.audioKey(KEY), transcript = '', seconds = o.seconds || 0;
+      if (aKey) {
+        var chunks;
+        try { var cd = await Speech.toChunks(blob); chunks = cd.chunks; seconds = cd.seconds || seconds; }
+        catch (e) { if (GEMINI_AUDIO.test(blob.type || '') && blob.size < 19 * 1048576) chunks = [{ from: 0, to: seconds, blob: blob }]; else throw { code: 'audio_decode' }; }
+        var models = await Engine.audioModels(aKey), parts = [];
+        for (var i = 0; i < chunks.length; i++) {
+          setStage(1); setProgress(1 + i / chunks.length, 3, 'جارٍ تفريغ الكلام' + (chunks.length > 1 ? ' (الجزء ' + (i + 1) + ' من ' + chunks.length + ')' : '') + '…');
+          var r = await Engine.generate(aKey, PROMPTS.transcribe(i + 1, chunks.length, $('cmdChk') ? $('cmdChk').checked : true), [chunks[i].blob], { models: models, temperature: 0.1, maxTokens: 16384, signal: sig(), onWait: onWait });
+          if (r.model) usedModels[r.model] = 1;
+          parts.push(Engine.clean(r.text).replace(/^\s*(لا يوجد كلام|لا شيء)\.?\s*$/m, ''));
+        }
+        transcript = Speech.merge(parts);
+      } else if (o.live) transcript = o.live;
+      else throw { code: 'no_audio_key' };
+      if (!transcript.replace(/[\s⟦⟧؟.،]/g, '')) throw { code: 'empty_audio' };
+      setStage(2); setProgress(2, 3, 'جارٍ تنسيق النص كمستند…');
+      var text = transcript, type = null;
+      if (CLAUDE) {
+        type = !EXAM && typeof Office !== 'undefined' ? Office.detect(transcript) : null;
+        var bank = type && typeof Bank !== 'undefined' ? await Bank.load(type) : null;
+        var system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, 300)) : '') + (await glossaryPrompt())) || undefined;
+        var rf = await Engine.generate(KEY, PROMPTS.format(transcript), [], { best: true, effort: 'high', maxTokens: 8192, system: system, signal: sig(), onWait: onWait });
+        if (rf.model) usedModels[rf.model] = 1;
+        var ft = Engine.clean(rf.text);
+        if (ft && Verify.tokens(ft).length >= Verify.tokens(transcript).length * 0.7) text = ft;      // a shortened text is never accepted
+      } else text = transcript.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).join('\n');
+      if (!EXAM) { text = Verify.houseDigits(text); if (typeof Arabic !== 'undefined') { var dict = typeof Bank !== 'undefined' ? await Bank.load('spelling') : null; if (dict) text = Arabic.spell(text, dict).text; } }
+      if (!type && !EXAM && typeof Office !== 'undefined') type = Office.detect(text);
+      curAdded = {};
+      var res = await toResult(text); res.text = text; res.type = type; res.secs = Math.round((Date.now() - t0) / 1000); res.agree = null;
+      results = [res];
+      pendingAudio = { blob: blob, source: o.source, transcript: transcript, seconds: seconds };
+      setProgress(3, 3, 'تم'); setStage('all');
+      finish();
+    } catch (e) {
+      if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; reconvertDoc = null; pendingAudio = null; toStart(); return; }
+      fail(e);
+    }
+    running = false; stageNames(STAGE_IMG);
+  }
 
   /* ---------- download ---------- */
   function stamp() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -1013,6 +1249,42 @@
     return true;
   }
   $('wordBtn').addEventListener('click', function () { if (nothingToExport()) return; withKind(doWord); });
+  /* the actual .docx file goes to the system share sheet (Web Share API with files); WhatsApp is one of its
+     targets on phones. Without file sharing (desktop browsers, older phones) the button stays hidden. */
+  var shareFile = null, shareKey = '';
+  function canShareFiles() {
+    try { var f = new File(['x'], 'x.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }); return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [f] })); } catch (e) { return false; }
+  }
+  async function buildWordBlob() {
+    marks().forEach(function (m) { m.classList.remove('cur'); });
+    var zip;
+    if (!EXAM) { var key = tplKey(); zip = key ? await Office.build(JSZip, allParas(), key, { lawyer: lawyer() }) : DocxBuilder.build(JSZip, allParas(), { pageNumbers: true, title: 'مستند' }); }
+    else { var blocks = []; sheets().forEach(function (s) { blocks = blocks.concat(domBlocks(s)); }); zip = ExamBuilder.build(JSZip, blocks, examHeader(), {}); }
+    return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  }
+  async function doShare() {
+    var btn = $('shareBtn'), note = $('savedNote');
+    var sig = sheets().map(function (s) { return s.innerHTML; }).join('|') + '|' + tplKey() + '|' + baseName();
+    try {
+      if (!shareFile || shareKey !== sig) {
+        btn.disabled = true;
+        var blob = await buildWordBlob();
+        shareFile = new File([blob], baseName() + '.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }); shareKey = sig;
+        btn.disabled = false;
+      }
+      await navigator.share({ files: [shareFile], title: baseName() });
+      note.hidden = false; note.textContent = 'اختر واتساب (أو أي تطبيق) من القائمة التي ظهرت، ثم الشخص الذي تريد إرسال الملف له.';
+      exported();
+    } catch (e) {
+      btn.disabled = false;
+      if (e && e.name === 'AbortError') return;                                   // the person closed the share sheet
+      note.hidden = false; note.textContent = e && e.name === 'NotAllowedError' ? 'الملف جاهز — اضغط «مشاركة الملف» مرة أخرى لفتح قائمة المشاركة.' : 'تعذرت المشاركة من هذا المتصفح. حمّل ملف Word ثم أرسله من واتساب (مرفق ← مستند).';
+    }
+  }
+  if ($('shareBtn')) {
+    $('shareBtn').hidden = !canShareFiles();
+    $('shareBtn').addEventListener('click', function () { if (nothingToExport()) return; withKind(doShare); });
+  }
   $('pdfBtn').addEventListener('click', function () { if (nothingToExport()) return; withKind(doPdf); });
   async function doWord() {
     var btn = $('wordBtn'); btn.disabled = true;
@@ -1135,7 +1407,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '17';
+  var APP_VER = '18';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -1181,7 +1453,7 @@
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream && !standalone()) $('iosHint').hidden = false;
 
   window.__test = { finish: finish, toResult: toResult, setResults: function (r) { results = r; }, show: show, sheetToParas: sheetToParas, domBlocks: domBlocks, results: function () { return results; },
-    doc: function () { return curDoc; }, fields: renderFields, fixes: function () { return fixes; }, usage: function () { return Engine.usageSummary(); }, askKind: askKind, save: function () { return saveDraft(); }, saved: function () { return saveChain.then(function () { return learnChain; }); }, undo: undo, redo: redo, hist: function () { return { n: hist.length, i: hi }; }, nav: function () { return { cur: curScreen, stack: nav.slice() }; } };
+    doc: function () { return curDoc; }, fields: renderFields, convertAudio: convertAudio, shots: function () { return shots; }, liveParts: function () { return liveParts; }, fixes: function () { return fixes; }, usage: function () { return Engine.usageSummary(); }, askKind: askKind, save: function () { return saveDraft(); }, saved: function () { return saveChain.then(function () { return learnChain; }); }, undo: undo, redo: redo, hist: function () { return { n: hist.length, i: hi }; }, nav: function () { return { cur: curScreen, stack: nav.slice() }; } };
 
   /* ---------- exam header fields (remembered on this device) ---------- */
   if (EXAM) ['hLine1', 'hLine2', 'hLine3', 'hSubject', 'hGrade', 'hTime', 'hTitle'].forEach(function (id) {
@@ -1235,13 +1507,22 @@
     return "\n\nCOMMON EXPRESSIONS OF EGYPTIAN COURT PAPERS (all types — pleadings, judgments, notices, contracts, inheritance, family): \n" + lines +
       "\nWhen a hard-to-read word sits inside one of these expressions and the visible letters fit it, read it as the expression says; when the letters do not fit, write what the ink shows and mark it.";
   }
+  function transcribePrompt(i, n, cmds) {
+    return "Transcribe this Arabic audio recording word for word. The speaker is Egyptian: everyday Egyptian Arabic or formal legal Arabic (court papers read aloud: إعلانات، صحة توقيع، إنذارات، عقود، مذكرات، أحكام). Write in Arabic script exactly what is said — do not summarise, translate, add, drop or rephrase anything, and never complete a sentence from what legal papers usually say. " +
+      "Numbers, dates, amounts and case numbers as digits (ألفين وستة وعشرين → 2026, عشرة يناير → 10/1). " +
+      (cmds ? "Spoken punctuation commands — «نقطة» «فاصلة» «علامة استفهام» alone at the end of a phrase, «سطر جديد», «فقرة جديدة», «عنوان» before a title — are written as the punctuation or the break, not as words; when such a word is part of the sentence it stays a word. " : "") +
+      "One line per sentence or pause; an empty line where the speaker clearly starts a new paragraph. A word you cannot make out → ⟦؟⟧; a word you are not sure of → ⟦الكلمة⟧ (two possible hearings → ⟦الأولى|الثانية⟧). Names of people and places, dates, amounts and case numbers must come from the sound only: mark them when unsure. No commentary, no headings, no translation. If there is no speech at all reply exactly: لا يوجد كلام." +
+      (n > 1 ? " (This is part " + i + " of " + n + " of the same recording; the parts overlap by a few seconds — transcribe this part fully.)" : "") +
+      "\n\nCommon expressions of Egyptian court papers, for recognition only (never insert one that was not said): وحيث إن، بناء عليه، لذلك، تلتمس المحكمة، أنا المحضر سالف الذكر، قد انتقلت إلى حيث إقامة المعلن إليه، وأعلنته بالآتي، الطالب، المعلن إليه، المدعي، المدعى عليه، صحيفة الدعوى، مذكرة بدفاع، منطوق الحكم، ولهذه الأسباب، حكمت المحكمة، وكيل الطالب، المحامي، رقم الدعوى، جلسة، استئناف، نقض، ومحله المختار، بصفته، ولأجل العلم.";
+  }
   var FIX_PROMPT = "You are an expert proofreader of Egyptian legal Arabic. Below is a faithful transcription of a handwritten paper, one numbered paragraph per line. List ONLY spelling and grammar corrections that keep the meaning: hamza forms (أ إ آ ا ء ئ ؤ), ة/ه, ى/ي, agreement (gender, number), a word clearly missing or repeated, punctuation. NEVER change names of people or places, dates, numbers, amounts, case numbers, article numbers, court names, or the fixed legal formulas as Egyptian lawyers write them (e.g. «وحيث إن», «بناء عليه», «لذلك», «نصمم على الطلبات»). An unusual but correct legal phrasing is not an error. Reply with one correction per line, nothing else:\n<paragraph number> | <the wrong text exactly as it appears, 1-4 words> | <the corrected text> | <reason in a few Arabic words>\nIf there is nothing to correct reply exactly: لا شيء\n\nTEXT:\n";
   function bankSystem(label, lines) {
     return "You know the standard wording of Egyptian «" + label + "» papers exactly as this law office writes them. STANDARD FORMULAS of this paper type (names, numbers and places are replaced by {{NAME}}, # and {{PLACE}}):\n" + lines +
       "\n\nThese papers are written from the same formulas every time: most lines on the page ARE one of these formulas with the names, numbers and places filled in. Read every line against them: when a word is hard to read but its line clearly follows a formula, read it as the formula says (same spelling as the office) and do not mark it. Never do that for names, numbers, dates, case numbers, amounts, addresses or anything that varies from paper to paper: those come from the ink only, digit by digit and letter by letter, and stay in ⟦ ⟧ when unsure.";
   }
   var PROMPTS = EXAM ? {
-    bankSystem: bankSystem, glossary: glossarySystem,
+    bankSystem: bankSystem, glossary: glossarySystem, transcribe: transcribePrompt,
+    format: function (t) { return "Below is a word-for-word transcript of a teacher dictating a mathematics exam. Lay it out as the exam paper using the OUTPUT FORMAT, keeping every spoken word and number (nothing added, removed, corrected or reordered; ⟦ ⟧ marks kept). Spoken numbers become digits.\n\n" + EXAM_FORMAT + "\n\nTRANSCRIPT:\n" + t + "\n\nReply with the formatted exam only."; },
     fix: function (t) { return FIX_PROMPT.replace('Egyptian legal Arabic', 'English and Arabic exam papers').replace(/NEVER change names[^\n]*?\. /, 'NEVER change numbers, units, answer choices or the mathematics. ') + t; },
     numbers: function (b) { return stripsNote(b) + NUMBERS_PROMPT; },
     kind: function () { return KIND_PROMPT; },
@@ -1250,7 +1531,8 @@
     check: function (b, d) { return "Proofread this transcription of the attached handwritten mathematics exam page against the images. " + stripsNote(b) + "Check every number, symbol, unit, fraction, answer choice and question, that nothing is missing or doubled, and that each [FIG] SVG matches its drawing. Remove ⟦ ⟧ from things you can now confirm; keep it on anything still uncertain. Keep exactly the same format.\n\n" + EXAM_FORMAT + "\n\nDRAFT:\n" + d + "\n\nReply with the full corrected transcription only."; },
     judge: function (b, r1, r2, d) { return "Two transcribers copied the attached handwritten mathematics exam page independently. " + stripsNote(b) + diffNote(d) + "For every disagreement look closely at the images and keep what the page really shows. Also re-check every number, fraction, unit and answer choice. Where the image still does not settle it, wrap it in ⟦ ⟧ — with the plausible readings separated by | (⟦28.8|28.3⟧). Keep each [FIG] SVG from the reading whose drawing matches better.\n\n" + EXAM_FORMAT + "\n\nREADING 1:\n" + r1 + "\n\nREADING 2:\n" + r2 + "\n\nReply with the one correct full transcription only."; }
   } : {
-    bankSystem: bankSystem, glossary: glossarySystem,
+    bankSystem: bankSystem, glossary: glossarySystem, transcribe: transcribePrompt,
+    format: function (t) { return "Below is a word-for-word transcript of an Egyptian legal paper dictated or read aloud. Lay it out as the written paper would be, using the OUTPUT FORMAT: the document's name as [H], side headings [S], each party or numbered item as [N], centered formula lines [C], normal paragraphs otherwise. Keep EVERY spoken word in its order — nothing added, removed, corrected, summarised or reordered; keep every ⟦ ⟧ mark. Add the punctuation of a written paper. Numbers, dates (d/m/yyyy), amounts and case numbers as digits in the house style (spoken «ألفين وستة وعشرين» → 2026). Never fill in a name, number or formula that was not spoken.\n\n" + LEGAL_FORMAT + "\n\nTRANSCRIPT:\n" + t + "\n\nReply with the formatted text only."; },
     fix: function (t) { return FIX_PROMPT + t; },
     numbers: function (b) { return stripsNote(b) + NUMBERS_PROMPT; },
     kind: function () { return KIND_PROMPT; },

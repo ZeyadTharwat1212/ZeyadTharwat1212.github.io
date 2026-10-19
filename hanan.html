@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=17">
+<link rel="stylesheet" href="kateb/style.css?v=18">
 </head>
 <body>
 <main>
@@ -51,11 +51,13 @@
   <div class="hero"><h2>من <em>مسودة الامتحان</em> إلى ملف Word جاهز للطباعة</h2><p>صوّري صفحات الامتحان، والذكاء الاصطناعي يقرأها ويرتّبها بالتنسيق المدرسي، وتراجعينها قبل الحفظ.</p></div>
   <div class="drop" id="dropZone">
     <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
-    <h3>صوّري الامتحان</h3>
-    <p class="hint">اختاري كل صفحات الامتحان مرة واحدة بالترتيب، أو اسحبيها هنا.</p>
-    <div class="pickrow">
-      <button class="huge" id="camBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg><span>صوّري الامتحان</span></button>
-      <button class="btn" id="pickBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>اختر صورة أو ملف</span></button>
+    <h3>كيف تريد إدخال الورقة؟</h3>
+    <p class="hint">صور الصفحات بالترتيب، أو اسحبها هنا.</p>
+    <div class="ways">
+      <button class="way" id="camBtn" type="button"><span class="wi">📷</span><b>تصوير ورقة</b><small>بالكاميرا، تتقص وتتحسّن تلقائيًا</small></button>
+      <button class="way" id="pickBtn" type="button"><span class="wi">🖼️</span><b>رفع صورة أو ملف</b><small>صور أو PDF من الجهاز</small></button>
+      <button class="way" id="voiceBtn" type="button"><span class="wi">🎙️</span><b>إملاء صوتي</b><small>اقرأ الورقة بصوتك وتتحول لنص</small></button>
+      <button class="way" id="audioBtn" type="button"><span class="wi">🎧</span><b>رفع تسجيل صوتي</b><small>تسجيل من واتساب أو الهاتف</small></button>
     </div>
     <label class="chk"><input type="checkbox" id="enhanceChk" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label>
     <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
@@ -100,6 +102,43 @@
   <p class="small center" id="iosHint" hidden>لتثبيته على الآيفون: اضغط زر المشاركة <b>⬆︎</b> ثم «إضافة إلى الشاشة الرئيسية».</p>
 </section>
 
+<section id="voice" class="row" hidden>
+  <h2 class="h2">🎙️ إملاء صوتي</h2>
+  <p class="small center" id="voiceHint">اضغط «ابدأ التسجيل» واقرأي الورقة بصوت واضح. النص يظهر أثناء الكلام، وبعد الانتهاء يُحوَّل إلى مستند منسّق.</p>
+  <p class="err" id="voiceErr" hidden></p>
+  <div class="card recbox">
+    <div class="recstat" id="recStat"><span class="dot" id="recDot"></span><span id="recState">جاهز للتسجيل</span><b id="recTime">٠:٠٠</b></div>
+    <canvas class="wave" id="wave" width="600" height="80"></canvas>
+    <div class="recbtns">
+      <button class="huge rec" id="recStart" type="button">🎙️ ابدأ التسجيل</button>
+      <button class="btn" id="recPause" type="button" hidden>⏸️ إيقاف مؤقت</button>
+      <button class="btn" id="recResume" type="button" hidden>▶️ استكمال التسجيل</button>
+      <button class="btn danger" id="recStop" type="button" hidden>⏹️ إنهاء التسجيل</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="cmdChk" checked> تنفيذ الأوامر المنطوقة («نقطة»، «فاصلة»، «سطر جديد»، «فقرة جديدة»، «عنوان»)</label>
+  </div>
+  <div class="card live" id="liveBox" hidden><div class="small">النص المسموع (الرمادي ما زال يتغير):</div><div class="livetext" id="liveText" dir="rtl"></div></div>
+  <div class="card" id="recDone" hidden>
+    <audio id="recAudio" controls preload="metadata"></audio>
+    <div class="actions2"><button class="btn go" id="recConvert" type="button">✨ تحويل التسجيل إلى Word</button><button class="btn" id="recAgain" type="button">🗑️ تسجيل جديد</button></div>
+    <p class="small" id="recNote"></p>
+  </div>
+</section>
+
+<section id="audioUp" class="row" hidden>
+  <h2 class="h2">🎧 تحويل تسجيل صوتي</h2>
+  <p class="small center">اختر تسجيلًا من واتساب أو من الهاتف (MP3، M4A، AAC، OGG/OPUS، WAV، WebM).</p>
+  <p class="err" id="audioErr" hidden></p>
+  <input type="file" id="audioFile" accept="audio/*,.opus,.ogg,.oga,.m4a,.aac,.mp3,.wav,.webm,.amr,.3gp" hidden>
+  <button class="huge" id="audioPick" type="button">🎧 اختيار تسجيل</button>
+  <div class="card" id="audioInfo" hidden>
+    <b id="audioName"></b><p class="small" id="audioMeta"></p>
+    <audio id="audioPlayer" controls preload="metadata"></audio>
+    <div class="actions2"><button class="btn go" id="audioConvert" type="button">✨ تحويل إلى نص</button><button class="btn" id="audioOther" type="button">اختيار تسجيل آخر</button></div>
+  </div>
+  <p class="small center" id="audioKeyNote" hidden></p>
+</section>
+
 <section id="work" class="card" hidden>
   <div class="row">
     <div class="stages" aria-hidden="true">
@@ -122,11 +161,13 @@
     <div class="actions">
       <button class="xcard word" id="wordBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m8.5 12 1.3 5 1.7-4 1.7 4 1.3-5"/></svg></span><span><b>📘 تحميل Word</b><small>ملف ‎.docx قابل للتعديل</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
       <button class="xcard pdf" id="pdfBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 17v-5h2a1.5 1.5 0 0 1 0 3H8"/><path d="M13 17v-5h1.5a2.5 2.5 0 0 1 0 5z"/></svg></span><span><b>📕 تحميل PDF</b><small>نص حقيقي قابل للتحديد، جاهز للطباعة</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+      <button class="xcard share" id="shareBtn" type="button" hidden><span class="xi">📤</span><span><b>مشاركة الملف</b><small>ملف Word إلى واتساب أو أي تطبيق</small></span></button>
     </div>
     <p class="status" id="savedNote" hidden></p>
     <p class="status info" id="readerInfo" hidden></p>
     <p class="status info" id="restoredNote" hidden>هذا آخر مستند كنت تعمل عليه، محفوظ على هذا الجهاز.</p>
     <p class="status" id="doneNote" hidden>✅ تم تحويل المستند</p>
+    <div class="card vpanel" id="audioBox" hidden><b>🔊 التسجيل الأصلي</b><audio id="docAudio" controls preload="metadata"></audio></div>
     <p class="note" id="doubtNote" hidden></p>
     <button class="btn go" id="reviewBtn" type="button" hidden>مراجعة الكلمات</button>
     <div class="card fields" id="fieldsBox" hidden></div>
@@ -175,9 +216,10 @@
   <div class="card setrow"><b>🧠 تحسين التعرف على خط اليد</b><p class="small" id="setLearnState"></p><button class="btn" id="setLearnBtn" type="button">فتح إعدادات التعلم</button></div>
   <div class="card setrow"><label class="chk"><input type="checkbox" id="setEnhance" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label></div>
   <div class="card setrow"><label class="switch"><input type="checkbox" id="setFast" checked><span>⚡ وضع السرعة (Claude)</span></label><p class="small">نفس موديل Opus 5.5 ونفس القراءتين والمراجعة، لكن الرد يخرج أسرع حتى ٢٫٥ مرة، والقراءة تتم بتركيز أعلى في نفس الوقت. التكلفة ضعف السعر العادي (حوالي ٠٫٥ إلى ٠٫٧ دولار للصفحة بدل ٠٫٢٥ إلى ٠٫٣٥). لو خط السرعة مشغول، يرجع للعادي تلقائيًا.</p></div>
+  <div class="card setrow"><b>🎧 مفتاح الصوت (Gemini)</b><p class="small" id="audioKeyState"></p><p class="small">التسجيلات الصوتية تُفرَّغ بـ Gemini من Google (Claude لا يسمع الصوت). المفتاح يبقى على هذا الجهاز. احصل عليه مجانًا من aistudio.google.com/apikey.</p><input class="pw" id="audioKeyIn" type="password" autocomplete="off" dir="ltr" placeholder="AIza…"><div class="actions2"><button class="btn" id="audioKeySave" type="button">حفظ المفتاح</button><button class="btn danger" id="audioKeyClear" type="button">حذف المفتاح</button></div></div>
   <div class="card setrow"><b>💳 استهلاك Claude (على هذا الجهاز)</b><div id="usageBox"></div><button class="btn sm" id="usageResetBtn" type="button">تصفير العداد</button></div>
   <div class="card setrow"><b>💾 التخزين على هذا الجهاز</b><p class="small" id="setDocsInfo"></p><p class="small" id="storageInfo"></p><button class="btn" id="deleteLearnBtn" type="button">حذف بيانات التعلم</button><button class="btn danger" id="deleteAllBtn" type="button">حذف كل الملفات المحفوظة</button></div>
-  <div class="card setrow"><b>🔒 الخصوصية</b><p class="small">الملفات والنسخ السابقة وبيانات التعلم كلها محفوظة داخل هذا المتصفح على هذا الجهاز فقط، ولا تُرفع إلى أي خادم. أثناء القراءة تُرسل صورة الورقة إلى خدمة القراءة (Claude من Anthropic أو Gemini من Google حسب المفتاح)، ومعها، إذا كان التعلم مفعّلًا، قائمة الكلمات التي تعلّمها من تصحيحاتك لتحسين القراءة. حذف بيانات التطبيق من المتصفح يحذف كل شيء.</p></div>
+  <div class="card setrow"><b>🔒 الخصوصية</b><p class="small">الملفات والنسخ السابقة وبيانات التعلم كلها محفوظة داخل هذا المتصفح على هذا الجهاز فقط، ولا تُرفع إلى أي خادم. أثناء القراءة تُرسل صورة الورقة إلى خدمة القراءة (Claude من Anthropic أو Gemini من Google حسب المفتاح)، والتسجيلات الصوتية تُرسل إلى Gemini من Google لتفريغها ثم إلى Claude لتنسيق النص، ومعها، إذا كان التعلم مفعّلًا، قائمة الكلمات التي تعلّمها من تصحيحاتك لتحسين القراءة. حذف بيانات التطبيق من المتصفح يحذف كل شيء.</p></div>
 </section>
 
 <section id="learn" class="row" hidden>
@@ -212,6 +254,8 @@
 <div class="zoom" id="zoom" hidden>
   <div class="zctl"><button class="iconbtn" id="zoomClose" type="button" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <div class="grp"><button class="iconbtn" id="zoomOut" type="button" aria-label="تصغير"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button class="iconbtn" id="zoomSave" type="button" aria-label="تحميل الصورة" title="تحميل الصورة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button><button class="iconbtn" id="zoomIn" type="button" aria-label="تكبير"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
+  <div class="scanbar" id="scanBar" hidden><div class="seg"><button type="button" id="sideOrig" aria-pressed="false">الصورة الأصلية</button><button type="button" id="sideClean" aria-pressed="true">الصورة المحسّنة</button></div><button class="btn sm" id="cropBtn" type="button">✂️ تعديل القص</button><button class="btn sm go" id="useBtn" type="button">✅ استخدام الصورة</button></div>
+  <div class="cropbox" id="cropBox" hidden><p class="small">اسحب الدوائر الأربع إلى أركان الورقة.</p><canvas id="cropCanvas"></canvas><div class="actions2"><button class="btn go" id="cropUse" type="button">✅ استخدام الصورة</button><button class="btn" id="cropCancel" type="button">إلغاء</button></div><button class="linkbtn" id="cropFull" type="button">الصورة كلها بدون قص</button></div>
   <img id="zoomImg" alt="صورة الأصل">
 </div>
 <div class="modal" id="kindDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="kindQ">
@@ -226,17 +270,18 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=17"></script>
-<script src="kateb/scan.js?v=17"></script>
-<script src="kateb/verify.js?v=17"></script>
-<script src="kateb/arabic.js?v=17"></script>
-<script src="kateb/bank.js?v=17"></script>
-<script src="kateb/store.js?v=17"></script>
-<script src="kateb/learn.js?v=17"></script>
-<script src="kateb/fields.js?v=17"></script>
-<script src="kateb/docx.js?v=17"></script>
-<script src="kateb/exam.js?v=17"></script>
+<script src="kateb/engine.js?v=18"></script>
+<script src="kateb/scan.js?v=18"></script>
+<script src="kateb/verify.js?v=18"></script>
+<script src="kateb/arabic.js?v=18"></script>
+<script src="kateb/bank.js?v=18"></script>
+<script src="kateb/store.js?v=18"></script>
+<script src="kateb/learn.js?v=18"></script>
+<script src="kateb/fields.js?v=18"></script>
+<script src="kateb/speech.js?v=18"></script>
+<script src="kateb/docx.js?v=18"></script>
+<script src="kateb/exam.js?v=18"></script>
 
-<script src="kateb/app.js?v=17"></script>
+<script src="kateb/app.js?v=18"></script>
 </body>
 </html>

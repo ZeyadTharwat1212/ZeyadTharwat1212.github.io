@@ -29,6 +29,17 @@ var Engine = (function () {
     return new TextDecoder().decode(pt);
   }
   function blobFromHash() { var m = (location.hash || '').match(/k=([A-Za-z0-9_-]+)/); return m ? m[1] : null; }
+  /* KATEB20: a second, optional key for audio (Gemini — Claude does not hear): «&g=» in the link, or pasted in the settings */
+  var LS_AUDIO = 'kateb.audiokey';
+  function audioBlobFromHash() { var m = (location.hash || '').match(/[&#]g=([A-Za-z0-9_-]+)/); return m ? m[1] : null; }
+  function audioKey(main) { var k = lsGet(LS_AUDIO); if (k) return k; return main && provider(main) === 'gemini' ? main : null; }
+  function setAudioKey(k) { if (k) lsSet(LS_AUDIO, k); else { try { localStorage.removeItem(LS_AUDIO); } catch (e) {} } }
+  /* the Gemini models for audio: 2.5 Pro first (best Arabic), then Flash, then whatever the key lists */
+  async function audioModels(key) {
+    var all = rank(await listModels(key)), pref = [];
+    ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'].forEach(function (p) { all.forEach(function (m) { if (m.indexOf(p) === 0 && pref.indexOf(m) < 0) pref.push(m); }); });
+    return pref.concat(all.filter(function (m) { return pref.indexOf(m) < 0; }));
+  }
   function savedKey() { return lsGet(LS_KEY); }
   function saveKey(k) { lsSet(LS_KEY, k); }
   function forget() { lsDel(LS_KEY); lsDel(LS_MODEL); }
@@ -198,6 +209,10 @@ var Engine = (function () {
   }
 
   var ERR = {
+    no_audio_key: 'تحويل التسجيلات يحتاج مفتاح الصوت (Gemini). أضفه من ⚙️ الإعدادات أو اطلب رابطًا جديدًا من زياد.',
+    audio_decode: 'تعذر فتح هذا التسجيل على هذا المتصفح. جرّب صيغة أخرى (MP3 أو M4A أو WAV) أو متصفح كروم.',
+    empty_audio: 'لم يُسمع أي كلام في التسجيل. تأكد من الميكروفون وجرّب مرة أخرى.',
+    mic: 'لم يُسمح باستخدام الميكروفون. اسمح به من إعدادات المتصفح ثم حاول مرة أخرى.',
     bad_key: 'مفتاح الذكاء الاصطناعي لا يعمل. كلّم زياد.',
     credit: 'رصيد خدمة القراءة انتهى. كلّم زياد لشحن الرصيد.',
     quota_day: 'انتهى عدد الصفحات المسموح به اليوم. جرّب مرة أخرى بكرة.',
@@ -253,7 +268,7 @@ var Engine = (function () {
   }
   function usageReset() { lsSet(LS_USAGE, JSON.stringify({ d: {} })); }
 
-  return { provider: provider, lock: lock, unlock: unlock, blobFromHash: blobFromHash, savedKey: savedKey, saveKey: saveKey, forget: forget,
+  return { provider: provider, lock: lock, unlock: unlock, blobFromHash: blobFromHash, audioBlobFromHash: audioBlobFromHash, audioKey: audioKey, setAudioKey: setAudioKey, audioModels: audioModels, savedKey: savedKey, saveKey: saveKey, forget: forget,
     listModels: listModels, rank: rank, generate: generate, fileToCanvases: fileToCanvases, scaled: scaled, rotated: rotated,
     pageImages: pageImages, detectRotation: detectRotation, clean: clean, download: download, errText: errText, lsGet: lsGet, lsSet: lsSet,
     recordUsage: recordUsage, onUsage: onUsage, usageSummary: usageSummary, usageReset: usageReset, usd: usd, priceOf: priceOf, fastOn: fastOn, setFast: setFast };

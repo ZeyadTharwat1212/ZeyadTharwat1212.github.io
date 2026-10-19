@@ -381,3 +381,24 @@ test('glossary: the common court expressions are a bank the prompt can carry', (
   const txt = Bank.promptText(g, 500);
   assert.ok(txt.includes('- وحيث إن') && txt.length < 20000);
 });
+
+/* ---------- KATEB20: speech helpers ---------- */
+test('speech: chunk transcripts merge without the overlap, in order; commands turn into punctuation only when clearly meant', () => {
+  const Speech = require('../kateb/speech.js');
+  const a = 'بناء عليه أنا المحضر سالف الذكر قد انتقلت إلى حيث إقامة المعلن إليه', b = 'إلى حيث إقامة المعلن إليه وأعلنته بالآتي';
+  assert.strictEqual(Speech.merge([a, b]), a + '\n' + 'وأعلنته بالآتي');
+  assert.strictEqual(Speech.merge(['كلام أول', 'كلام ثان مختلف تماما']), 'كلام أول\nكلام ثان مختلف تماما', 'no overlap → nothing removed');
+  assert.strictEqual(Speech.merge(['', 'x', '']), 'x');
+  assert.deepStrictEqual(Speech.command('وأعلنته بالآتي نقطة'), { text: 'وأعلنته بالآتي.', newline: false, paragraph: false, heading: false });
+  assert.deepStrictEqual(Speech.command('بناء عليه فاصلة'), { text: 'بناء عليه،', newline: false, paragraph: false, heading: false });
+  assert.deepStrictEqual(Speech.command('فقرة جديدة'), { text: '', newline: false, paragraph: true, heading: false });
+  assert.deepStrictEqual(Speech.command('قد انتقلت سطر جديد'), { text: 'قد انتقلت', newline: true, paragraph: false, heading: false });
+  assert.deepStrictEqual(Speech.command('عنوان دعوى صحة توقيع'), { text: 'دعوى صحة توقيع', newline: false, paragraph: false, heading: true });
+  assert.strictEqual(Speech.command('وصلنا إلى نقطة الشرطة').text, 'وصلنا إلى نقطة الشرطة', '«نقطة» in the middle of a sentence is a word');
+  assert.strictEqual(Speech.command('هل حضر علامة استفهام').text, 'هل حضر؟');
+  const plan = Speech.chunkPlan(1000, new Float32Array(1000 * 100), 100);
+  assert.ok(plan.length >= 2 && plan[0][0] === 0 && plan[plan.length - 1][1] === 1000, 'long audio is split');
+  for (let i = 1; i < plan.length; i++) assert.ok(plan[i][0] < plan[i - 1][1], 'chunks overlap');
+  assert.deepStrictEqual(Speech.chunkPlan(120, new Float32Array(10), 100), [[0, 120]], 'short audio stays whole');
+  assert.strictEqual(Speech.fmtTime(65), '١:٠٥');
+});
