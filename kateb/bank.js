@@ -26,8 +26,9 @@ var Bank = (function () {
   function promptText(bank, max) {
     if (!bank || !bank.lines) return '';
     var office = bank.lines.filter(function (l) { return l.src !== 'web'; }), web = bank.lines.filter(function (l) { return l.src === 'web'; });
-    var pick = office.slice(0, max || 160);
-    if (pick.length < (max || 160)) pick = pick.concat(web.slice(0, (max || 160) - pick.length));
+    max = max || 160;
+    var pick = office.slice(0, max);
+    if (pick.length < max) pick = pick.concat(web.slice(0, Math.min(80, max - pick.length)));
     var out = pick.filter(function (l) { return l.src !== 'web'; }).map(function (l) { return '- ' + l.t; });
     var extra = pick.filter(function (l) { return l.src === 'web'; }).map(function (l) { return '- ' + l.t; });
     return out.join('\n') + (extra.length ? '\n\nALSO COMMON IN PUBLISHED EGYPTIAN FORMULAS (secondary; the office wording above wins when they differ):\n' + extra.join('\n') : '');

@@ -12,10 +12,24 @@ var Verify = (function () {
   var PIECE = new RegExp('(^\\s*\\[(?:' + TAGS + ')\\]|\\*\\*|__|⟦|⟧|\\|\\||\\||_{3,}|\\{[^{}/]{1,20}/[^{}/]{1,20}\\}|\\s+)');
   var MARKUP = new RegExp('^(?:\\s*\\[(?:' + TAGS + ')\\]|\\*\\*|__|\\|\\||\\||_{3,}|\\s+)$');
 
+  /* spelling variants that are not disagreements: hamza forms, ة/ه, ى/ي, tatweel, case */
   function norm(w) {
-    var s = String(w || '').replace(TASHKEEL, '').replace(EDGE, '');
+    var s = String(w || '').replace(TASHKEEL, '').replace(EDGE, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
     return s.toLowerCase();
   }
+  function lev2(a, b) {
+    var prev = [], cur = [];
+    for (var j = 0; j <= b.length; j++) prev[j] = j;
+    for (var i = 1; i <= a.length; i++) {
+      cur[0] = i;
+      for (j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      var t = prev; prev = cur; cur = t;
+    }
+    return prev[b.length];
+  }
+  function similar(a, b) { if (!a || !b) return 0; return 1 - lev2(a, b) / Math.max(a.length, b.length); }
+  /* tokens that follow a person marker are a name: «السيد / فلان الفلاني», «بناء على طلب / …» */
+  var NAME_MARK = /^(السيد|السيده|الاستاذ|الاستاذه|الدكتور|الدكتوره|المرحوم|المرحومه|الطالب|الطالبه|المدعي|المدعيه|المتهم|المتهمه|الموكل|الموكله|ورثه|مورث|مورثه|نجل|كريمه|زوج|زوجه)$/;
   function hasDigit(s) { return /[0-9٠-٩۰-۹]/.test(s); }
 
   /* one line → [{t: text, word: bool, doubt: bool, core}] */
@@ -78,22 +92,69 @@ var Verify = (function () {
     return { a: uniq(r.onlyA).slice(0, max || 80), b: uniq(r.onlyB).slice(0, max || 80), same: r.same, agreement: r.agreement };
   }
 
+  /* Mark ⟦…⟧ in the final text:
+       - a word that is new (neither read has it, nor anything close to it)
+       - a number the reads disagreed on, or a number either read doubted
+       - in a name (after «السيد /» etc.): any word the reads disagreed on (strict mode)
+     Spelling-only differences and words the judge confirmed are not marked: the judge saw the ink. */
   function guard(final, a, b, strict) {
-    var seen = {}, diff = {}, doubted = {}, r = align(tokens(a), tokens(b));
-    tokens(a).concat(tokens(b)).forEach(function (w) { seen[w] = 1; });
-    /* a word either reader was unsure of stays marked, even if the final text dropped the brackets */
-    [a, b].forEach(function (t) { String(t || '').split('\n').forEach(function (l) { if (!isFig(l)) segments(l).forEach(function (s) { if (s.word && s.doubt) doubted[s.core] = 1; }); }); });
+    var ta = tokens(a), tb = tokens(b), seen = {}, diff = {}, doubtedNum = {}, added = 0;
+    var r = align(ta, tb);
+    ta.concat(tb).forEach(function (w) { seen[w] = 1; });
     r.onlyA.concat(r.onlyB).forEach(function (w) { diff[w] = 1; });
-    var added = 0;
+    [a, b].forEach(function (t) { String(t || '').split('\n').forEach(function (l) { if (!isFig(l)) segments(l).forEach(function (s) { if (s.word && s.doubt && hasDigit(s.core)) doubtedNum[s.core] = 1; }); }); });
+    var all = Object.keys(seen);
+    function close(w) { for (var i = 0; i < all.length; i++) if (similar(w, all[i]) >= 0.75) return true; return false; }
     var text = String(final || '').replace(/\r/g, '').split('\n').map(function (line) {
       if (isFig(line)) return line;
-      return segments(line).map(function (s) {
-        if (!s.word || s.doubt) return s.t;
-        if (!seen[s.core] || doubted[s.core] || (diff[s.core] && (strict || hasDigit(s.core)))) { added++; return '⟦' + s.t + '⟧'; }
+      var segs = segments(line), nameLeft = 0, prevCore = '';
+      return segs.map(function (s) {
+        if (!s.word) { if (s.t.indexOf('/') >= 0 && NAME_MARK.test(prevCore)) nameLeft = 4; return s.t; }
+        var core = s.core, inName = nameLeft > 0; if (nameLeft > 0) nameLeft--;
+        if (NAME_MARK.test(core) && !inName) { prevCore = core; return s.t; }
+        if (/^\/$/.test(core)) { prevCore = core; return s.t; }
+        prevCore = core;
+        if (s.doubt) return s.t;
+        var mark = false;
+        if (hasDigit(core)) mark = !!(diff[core] || doubtedNum[core] || !seen[core]);
+        else if (!seen[core]) mark = !close(core);
+        else if (strict && inName && diff[core]) mark = true;
+        if (mark) { added++; return '⟦' + s.t + '⟧'; }
         return s.t;
       }).join('');
     }).join('\n');
     return { text: text, added: added };
+  }
+
+  /* numbers pass: «<number> | <words before>» lines from a dedicated read of the strips.
+     A number in the text that the pass did not see is marked; a truncated one (prefix of a pass number) is
+     completed with the pass's digits and marked for the eye. Numbers the pass saw exactly are left alone. */
+  var AR_DIG = '٠١٢٣٤٥٦٧٨٩', FA_DIG = '۰۱۲۳۴۵۶۷۸۹';
+  function west(t) { return String(t || '').replace(/[٠-٩]/g, function (c) { return String(AR_DIG.indexOf(c)); }).replace(/[۰-۹]/g, function (c) { return String(FA_DIG.indexOf(c)); }); }
+  function digitsOnly(t) { return west(t).replace(/[^0-9]/g, ''); }
+  function sameScript(sample, digits) { return /[٠-٩]/.test(sample) ? digits.replace(/[0-9]/g, function (c) { return AR_DIG[+c]; }) : digits; }
+  function checkNumbers(text, list) {
+    var seen = String(list || '').split('\n').map(function (l) { return west(l.split('|')[0]).trim(); }).filter(function (x) { return /[0-9]/.test(x) && x.indexOf('?') < 0; });
+    var exact = {}; seen.forEach(function (n) { exact[n.replace(/\s+/g, '')] = 1; exact[digitsOnly(n)] = 1; });
+    var changed = 0, marked = 0;
+    var out = String(text || '').replace(/\r/g, '').split('\n').map(function (line) {
+      if (isFig(line)) return line;
+      return segments(line).map(function (s) {
+        if (!s.word || !hasDigit(s.t) || s.doubt) return s.t;
+        var core = s.t.replace(/[*_⟦⟧]/g, ''), w = west(core).replace(/[^0-9\/.,:\-]/g, ''), d = digitsOnly(core);
+        if (!d) return s.t;
+        if (/^[(]?[0-9٠-٩]{1,2}[).\-–:]$/.test(core)) return s.t;       // item numbering «1.» «٢-» is not data
+        if (exact[w] || exact[d]) return s.t;
+        /* truncated: a pass number starts with this one and has 1–2 more digits (٢٠٢ → ٢٠٢٢) */
+        var longer = seen.filter(function (n) { var nd = digitsOnly(n); return nd !== d && nd.indexOf(d) === 0 && nd.length - d.length <= 2 && (n.replace(/\s+/g, '').indexOf(w) === 0); });
+        if (longer.length === 1) {
+          var fixed = sameScript(core, longer[0].replace(/\s+/g, ''));
+          changed++; return s.t.replace(core, '⟦' + fixed + '⟧');
+        }
+        marked++; return '⟦' + s.t + '⟧';
+      }).join('');
+    }).join('\n');
+    return { text: out, changed: changed, marked: marked };
   }
 
   function stripMarkup(text) {
@@ -129,6 +190,6 @@ var Verify = (function () {
   }
   function doubtRecall(ref, hypMarked) { var a = audit(ref, hypMarked); return a.wrong ? a.caught / a.wrong : 1; }
 
-  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall };
+  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Verify;
