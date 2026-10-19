@@ -530,14 +530,37 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '8';
+  var APP_VER = '11';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
+  /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
+     and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
+  var reloading = false;
+  async function hardRefresh() {
+    reloading = true;
+    try { if ('serviceWorker' in navigator) { var regs = await navigator.serviceWorker.getRegistrations(); for (var i = 0; i < regs.length; i++) await regs[i].unregister(); } } catch (e) {}
+    try { if (window.caches) { var ks = await caches.keys(); for (var j = 0; j < ks.length; j++) await caches.delete(ks[j]); } } catch (e) {}
+    location.replace(location.pathname + '?r=' + Date.now() + location.hash);
+  }
+  async function checkVersion() {
+    if (location.protocol === 'file:') return;
+    try {
+      var r = await fetch('kateb/version.json?ts=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return;
+      var v = String((await r.json()).v || '');
+      if (!v || v === APP_VER) return;
+      var tried = sessionStorage.getItem('kateb.reloadedFor');
+      if (tried === v || running || !$('done').hidden) return;
+      sessionStorage.setItem('kateb.reloadedFor', v);
+      hardRefresh();
+    } catch (e) {}
+  }
+  checkVersion();
+  if ($('updateBtn')) $('updateBtn').addEventListener('click', function () { if (running) return; if ($('done').hidden || window.confirm('تحديث التطبيق الآن؟ المستند المفتوح محفوظ على الجهاز.')) hardRefresh(); });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').then(function (reg) { try { reg.update(); } catch (e) {} }).catch(function () {});
     /* a new version took over: reload once so the page and its scripts match (never while a page is being read) */
     var reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', function () {
-      if (reloaded || running || !navigator.serviceWorker.controller) return; reloaded = true;
+      if (reloaded || reloading || running || !navigator.serviceWorker.controller) return; reloaded = true;
       if ($('done').hidden) location.reload();
     });
   }

@@ -1,11 +1,11 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v10';
+var CACHE = 'kateb-v11';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=10', 'kateb/engine.js?v=10', 'kateb/verify.js?v=10', 'kateb/docx.js?v=10', 'kateb/exam.js?v=10', 'kateb/app.js?v=10',
-  'kateb/office.js?v=10', 'kateb/bank.js?v=10', 'kateb/arabic.js?v=10', 'kateb/scan.js?v=10', 'kateb/templates/templates.json?v=10',
-  'kateb/templates/announce.docx?v=10', 'kateb/templates/gift.docx?v=10', 'kateb/templates/inherit_announce.docx?v=10', 'kateb/templates/inherit_request.docx?v=10', 'kateb/templates/iqrar.docx?v=10', 'kateb/templates/memo.docx?v=10', 'kateb/templates/price.docx?v=10', 'kateb/templates/reannounce.docx?v=10', 'kateb/templates/sahifa.docx?v=10', 'kateb/templates/sale.docx?v=10', 'kateb/templates/sihha.docx?v=10', 'kateb/templates/warning.docx?v=10',
+  'kateb/style.css?v=11', 'kateb/engine.js?v=11', 'kateb/verify.js?v=11', 'kateb/docx.js?v=11', 'kateb/exam.js?v=11', 'kateb/app.js?v=11',
+  'kateb/office.js?v=11', 'kateb/bank.js?v=11', 'kateb/arabic.js?v=11', 'kateb/scan.js?v=11', 'kateb/templates/templates.json?v=11',
+  'kateb/templates/announce.docx?v=11', 'kateb/templates/gift.docx?v=11', 'kateb/templates/inherit_announce.docx?v=11', 'kateb/templates/inherit_request.docx?v=11', 'kateb/templates/iqrar.docx?v=11', 'kateb/templates/memo.docx?v=11', 'kateb/templates/price.docx?v=11', 'kateb/templates/reannounce.docx?v=11', 'kateb/templates/sahifa.docx?v=11', 'kateb/templates/sale.docx?v=11', 'kateb/templates/sihha.docx?v=11', 'kateb/templates/warning.docx?v=11',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
@@ -23,7 +23,7 @@ self.addEventListener('activate', function (e) {
 });
 self.addEventListener('fetch', function (e) {
   var req = e.request, url = new URL(req.url);
-  if (req.method !== 'GET' || /generativelanguage\.googleapis\.com$/.test(url.hostname)) return;
+  if (req.method !== 'GET' || /generativelanguage\.googleapis\.com$|api\.anthropic\.com$/.test(url.hostname) || /version\.json/.test(url.pathname)) return;
   if (url.origin === location.origin) {
     /* pages always revalidate with the server (GitHub Pages caches HTML for 10 min in the browser) */
     e.respondWith(fetch(req.mode === 'navigate' ? new Request(req, { cache: 'no-cache' }) : req).then(function (r) {
