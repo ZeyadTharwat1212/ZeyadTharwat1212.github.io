@@ -201,13 +201,15 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.deepStrictEqual(calls.slice().sort(), ['judge', 'kind', 'numbers', 'read', 'read2']);
     const c = calls.claude, reads = c.filter(x => x.kind === 'read' || x.kind === 'read2'), judge = c.find(x => x.kind === 'judge'), nums = c.find(x => x.kind === 'numbers'), kindCall = c.find(x => x.kind === 'kind');
     assert.ok(kindCall.model === 'claude-haiku-5-5' && kindCall.images === 1, 'type detection: one small Haiku call');
-    assert.ok(reads.every(x => x.model === 'claude-opus-5-5' && x.images === 6 && x.effort === 'high' && x.fast), 'reads on Opus with the whole page + 5 strips');
+    assert.ok(reads.every(x => x.model === 'claude-opus-5-5' && x.images === 5 && !x.fast), 'reads on Opus with the whole page + 4 strips (economy mode)');
+    assert.ok(reads.some(x => x.effort === 'medium') && reads.some(x => x.effort === 'low'), 'economy: one medium read, one low');
+    assert.ok(reads.every(x => x.system.includes('STANDARD FORMULAS')), 'the formula bank is the cached system block');
     assert.ok(reads.every(x => x.system.includes('STANDARD FORMULAS') && x.system.includes('دعوى صحة توقيع')), 'both reads get the sihha bank');
-    assert.ok(nums.model === 'claude-opus-5-5' && nums.effort === 'high', 'numbers pass on Opus');
+    assert.ok(nums.model === 'claude-sonnet-5-5' && nums.effort === 'low' && !nums.system, 'economy: numbers pass on Sonnet, low effort, no bank');
     assert.match(await page.textContent('#readerInfo'), /claude-opus-5-5/, 'review screen shows the real model used');
     assert.strictEqual(judge.model, 'claude-opus-5-5');
     assert.ok(judge.system.includes('STANDARD FORMULAS') && judge.system.includes('دعوى صحة توقيع'), 'judge gets the sihha bank');
-    assert.ok(judge.effort === 'high');
+    assert.ok(judge.effort === 'medium', 'economy: judge at medium');
     const txt = await page.textContent('#pagesBox .sheet');
     assert.ok(txt.includes('باع المعلن إليه'), 'snap restored the formula word: ' + txt);
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'only the disputed name stays yellow');
@@ -546,10 +548,11 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(u.today.calls, calls.length, 'one usage record per Claude call');
     assert.strictEqual(u.today.tokens, calls.length * 1700);
     /* 1000 in + 200 out + 500 cache write: opus 0.004+0.004+0.0025, haiku (kind) 0.0001+0.0001+0.0000625 */
-    const opus = calls.filter(c => c !== 'kind').length, haiku = calls.length - opus;
-    assert.ok(calls.claude.filter(c => c.kind !== 'kind').every(c => c.fast && c.beta === 'fast-mode-2026-02-01' && c.effort === 'high'), 'Opus calls go through fast mode at high effort');
-    assert.ok(calls.claude.filter(c => c.kind === 'kind').every(c => !c.fast), 'Haiku stays on the standard lane');
-    const expect = opus * 0.021 + haiku * 0.0002625;
+    assert.ok(calls.claude.every(c => !c.fast), 'economy mode: standard lane');
+    assert.ok(calls.claude.some(c => c.kind === 'numbers' && c.model === 'claude-sonnet-5-5'), 'economy: the numbers pass runs on Sonnet');
+    /* 1000 in + 200 out + 500 cache write per call: opus 0.004+0.004+0.0025, sonnet 0.002+0.002+0.00125, haiku 0.0001+0.0001+0.0000625 */
+    const price = { 'claude-opus-5-5': 0.0105, 'claude-sonnet-5-5': 0.00525, 'claude-haiku-5-5': 0.0002625 };
+    const expect = calls.claude.reduce((t, c) => t + price[c.model], 0);
     assert.ok(Math.abs(u.today.usd - expect) < 1e-6, 'cost ' + u.today.usd + ' vs ' + expect);
     assert.match(await page.textContent('#readerInfo'), /تكلفة القراءة ≈ \$0\.0\d/);
     await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
@@ -561,7 +564,9 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   }));
 
   await step('fast mode: a 429 on the fast lane falls back to the standard lane at once; switched off in the settings → standard, medium effort', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, FAST429: true }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => { localStorage.setItem('kateb.fast', '1'); localStorage.setItem('kateb.mode', 'best'); });
     const t0 = Date.now(); await convert(page);
+    assert.ok(calls.claude.filter(c => /read/.test(c.kind)).every(c => c.effort === 'high' && c.images === 6), 'best mode: high effort, 5 strips');
     assert.ok(calls.fastRejected, 'the fast lane answered 429 once');
     assert.ok(Date.now() - t0 < 20000, 'no 30 s wait: fell back immediately');
     const std = calls.claude.filter(c => c.kind !== 'kind' && !c.fast);
@@ -569,13 +574,15 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.match(await page.textContent('#readerInfo'), /⚡/, 'review screen shows the fast lane');
     await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
     await page.click('#settingsBtn'); await page.waitForSelector('#settings:not([hidden])');
-    await page.uncheck('#setFast');
+    assert.ok(await page.isChecked('input[name="mode"][value="best"]'), 'settings show «أقصى دقة»');
+    await page.uncheck('#setFast'); await page.check('input[name="mode"][value="econ"]');
     await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
     assert.doesNotMatch(await page.textContent('#readerNote'), /⚡/);
+    assert.match(await page.textContent('#readerNote'), /وضع التوفير/);
     calls.length = 0; calls.claude = [];
     await convert(page);
     assert.ok(calls.claude.every(c => !c.fast && !c.beta), 'standard lane only');
-    assert.ok(calls.claude.filter(c => /read/.test(c.kind)).every(c => c.effort === 'medium'));
+    assert.ok(calls.claude.filter(c => /read/.test(c.kind)).every(c => c.images === 5 && c.effort !== 'high'), 'economy again: 4 strips, no high effort');
   }));
 
   /* ---------- KATEB18: alternatives, reasons, glossary, fields, language fixes, smart-mode labels ---------- */
@@ -801,7 +808,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.match(await page.textContent('#readerInfo'), /gemini/);
     /* re-read from the stored recording */
     calls.length = 0; calls.audio = [];
-    await page.click('#reconvertBtn'); await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
+    await page.click('#reconvertBtn'); await page.waitForSelector('#done', { state: 'hidden' }); await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
     assert.strictEqual(calls.audio.length, 1, 'إعادة التحويل transcribes the stored recording again');
     assert.match(await page.textContent('#versionsBtn'), /نسخ سابقة/);
   }));

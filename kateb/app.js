@@ -90,7 +90,7 @@
     CLAUDE = Engine.provider(KEY) === 'claude';
     var name = Engine.provider(KEY) === 'claude' ? 'Claude' : 'Gemini';
     var b = $('providerBadge'); if (b) { b.textContent = name; b.hidden = false; }
-    var w = $('readerNote'); if (w) w.textContent = 'القارئ: ' + name + (name === 'Claude' ? ' (Opus 5.5' + (Engine.fastOn() ? ' ⚡ وضع السرعة' : '') + ' — قراءتان + مراجعة + فحص الأرقام)' : ' (المجاني — أبطأ)') + '. اترك الصفحة مفتوحة.';
+    var w = $('readerNote'); if (w) w.textContent = 'القارئ: ' + name + (name === 'Claude' ? ' (Opus 5.5' + (Engine.fastOn() ? ' ⚡ وضع السرعة' : '') + (econ() ? ' 💰 وضع التوفير' : ' 🎯 أقصى دقة') + ' — قراءتان + مراجعة + فحص الأرقام)' : ' (المجاني — أبطأ)') + '. اترك الصفحة مفتوحة.';
     var d = loadDraft();
     $('resumeBtn').hidden = !d;
     if (d) $('resumeWhen').textContent = new Date(d.t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
@@ -221,10 +221,10 @@
   var CLAUDE = Engine.provider(KEY) === 'claude';
   function rotOf(t) { var m = /^\s*ROT:\s*(0|90|180|270)/.exec(t || ''); return m ? +m[1] : 0; }
   function stripRot(t) { return String(t || '').replace(/^\s*ROT:\s*\d+\s*\n?/, ''); }
-  async function readTwice(imgs, system) {
-    var eff = CLAUDE && Engine.fastOn() ? 'high' : 'medium';      // ⚡ fast mode buys the time for a deeper read
-    var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: eff, best: true, system: system });
-    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: eff, best: true, system: system })
+  async function readTwice(imgs, system, ctx) {
+    var eff = CLAUDE && !econ() ? 'high' : 'medium';               // «أقصى دقة» reads deeper
+    var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: eff, best: true, system: system, context: ctx });
+    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: econ() ? 'low' : eff, best: true, system: system, context: ctx })
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return r.truncated ? null : Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     var ra = await pa, b = await pb;
     if (ra.model) usedModels[ra.model] = 1;
@@ -238,11 +238,15 @@
     return "\n\nEARLIER PAGES OF THE SAME PAPER (already transcribed; the same people, case number, court, dates and amounts recur — an unclear name or number on this page that matches one here is read the same way):\n" + t;
   }
   var usedModels = {}, curAdded = {}, glossaryBank;
+  /* «💰 وضع التوفير» (default) or «🎯 أقصى دقة»: the same pipeline, cheaper settings — fewer strips, medium
+     effort on the reads (the thinking tokens are the big variable), the numbers pass on Sonnet, shorter banks */
+  function econ() { return Engine.lsGet('kateb.mode') !== 'best'; }
+  function setMode(m) { Engine.lsSet('kateb.mode', m); }
   /* the common expressions of Egyptian court papers (kateb/bank/glossary.json) go with every legal page */
   async function glossaryPrompt() {
     if (EXAM || !CLAUDE || typeof Bank === 'undefined') return '';
     if (glossaryBank === undefined) { try { glossaryBank = await Bank.load('glossary'); } catch (e) { glossaryBank = null; } }
-    return glossaryBank ? PROMPTS.glossary(Bank.promptText(glossaryBank, 500)) : '';
+    return glossaryBank ? PROMPTS.glossary(Bank.promptText(glossaryBank, econ() ? 200 : 500)) : '';
   }
   var TYPE_LABEL = { sihha: 'دعوى صحة توقيع', reannounce: 'إعادة إعلان', announce: 'إعلان بأصل الصحيفة', warning: 'إنذار', sahifa: 'صحيفة دعوى / استئناف', inherit_announce: 'إعلان في مادة الوراثة', inherit_request: 'طلب وراثة', sale: 'عقد بيع', gift: 'عقد هبة', price: 'إقرار سعر', iqrar: 'إقرار', memo: 'مذكرة' };
   async function readPage(p, label, step) {
@@ -250,7 +254,7 @@
     step(0, 'جارٍ تجهيز ' + label + '…');
     var side = CLAUDE ? 1568 : 3072;                       // Claude reads at 1568px; bigger only slows the upload
     p.canvas = p.base;
-    var bands = CLAUDE ? 5 : 3;                           // more strips = more pixels per line of handwriting
+    var bands = CLAUDE ? (econ() ? 4 : 5) : 3;            // more strips = more pixels per line of handwriting (and more image tokens)
     var imgs = await Engine.pageImages(p.canvas, bands, side);
     /* a quick look at the title tells the paper type, so both full reads get the office's formulas for it */
     var type = null, bank = null;
@@ -261,30 +265,29 @@
       } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
     }
     if (type && typeof Bank !== 'undefined') bank = await Bank.load(type);
-    var system = (bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, 400)) : '') + (await glossaryPrompt()) + caseContext() + learnPrompt();
-    system = system || undefined;
+    var system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '') + (await glossaryPrompt())) || undefined, ctx = (caseContext() + learnPrompt()) || undefined;
     step(1, 'جارٍ قراءة ' + label + ' (قراءتان معاً' + (bank ? ' بصيغ «' + (TYPE_LABEL[type] || type) + '»' : '') + ')…');
-    var pair = await readTwice(imgs, system);
+    var pair = await readTwice(imgs, system, ctx);
     var rot = rotOf(pair.a) || rotOf(pair.b);
-    if (rot) { p.canvas = Engine.rotated(p.base, rot); imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system); }
+    if (rot) { p.canvas = Engine.rotated(p.base, rot); imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system, ctx); }
     var a = stripRot(pair.a), b = pair.b ? stripRot(pair.b) : null;
     step(2, 'جارٍ مراجعة ' + label + ' مع الأصل والصيغ المعتادة…');
     if (!type && !EXAM && typeof Office !== 'undefined') {
       type = Office.detect(a);
-      if (type && typeof Bank !== 'undefined') { bank = await Bank.load(type); system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, 400)) : '') + (await glossaryPrompt()) + caseContext() + learnPrompt()) || undefined; }
+      if (type && typeof Bank !== 'undefined') { bank = await Bank.load(type); system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '') + (await glossaryPrompt())) || undefined; }
     }
     var final = a, d = b ? Verify.disagreements(a, b) : null;
     /* the numbers pass runs beside the judge: every number, date and amount read once more on its own */
-    var numbersP = Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), effort: 'high', best: true, maxTokens: 2048, system: system })
+    var numbersP = Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, econ() ? { onWait: onWait, signal: sig(), effort: 'low', maxTokens: 2048 } : { onWait: onWait, signal: sig(), effort: 'high', best: true, maxTokens: 2048, system: system, context: ctx })
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     try {
       if (b && !d.same) {
-        var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, signal: sig(), system: system, effort: 'high', best: true });
+        var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
         if (rj.model) usedModels[rj.model] = 1;
         var tj = Engine.clean(rj.text); if (tj.length > Math.min(a.length, b.length) * 0.6 && !rj.truncated) final = tj;
       } else if (!b || (bank && a.indexOf('⟦') >= 0)) {
         /* one proofreading pass: second read failed, or both agree but doubts remain and the formulas may settle them */
-        var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait, signal: sig(), system: system, effort: 'high', best: true });
+        var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
         var tc = Engine.clean(rc.text); if (tc.length > a.length * 0.6 && !rc.truncated) final = tc;
       }
     } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
@@ -946,6 +949,7 @@
     $('setLearnState').textContent = learnOn() ? 'مفعّل — ' + profileLabel() : 'غير مفعّل';
     $('setEnhance').checked = enhanceOn();
     if ($('setFast')) $('setFast').checked = Engine.fastOn();
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="mode"]'), function (r) { r.checked = r.value === (econ() ? 'econ' : 'best'); });
     audioKeyState();
     $('storageInfo').textContent = Store.which() === 'ls' ? 'هذا المتصفح لا يسمح بقاعدة بيانات محلية: تُحفظ النصوص فقط بدون صور الورق.' : '';
     Store.usage().then(function (u) { if (u && u.usage) $('storageInfo').textContent = 'المساحة المستخدمة على هذا الجهاز: ' + (u.usage / 1048576).toFixed(1) + ' MB' + (u.quota ? ' من ' + Math.round(u.quota / 1048576) + ' MB' : ''); }).catch(function () {});
@@ -969,6 +973,7 @@
     $('setLearnBtn').addEventListener('click', renderLearn);
     $('setEnhance').addEventListener('change', function () { if ($('enhanceChk')) $('enhanceChk').checked = this.checked; });
     if ($('setFast')) $('setFast').addEventListener('change', function () { Engine.setFast(this.checked); });
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="mode"]'), function (r) { r.addEventListener('change', function () { if (this.checked) setMode(this.value); }); });
     if ($('audioKeySave')) {
       $('audioKeySave').addEventListener('click', async function () {
         var k = $('audioKeyIn').value.trim(); if (!k) return;
@@ -1444,7 +1449,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '20';
+  var APP_VER = '21';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

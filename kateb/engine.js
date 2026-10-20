@@ -79,7 +79,13 @@ var Engine = (function () {
     content.push({ type: 'text', text: prompt });
     var body = { model: opt.model || (opt.fast ? CLAUDE_FAST : opt.best ? CLAUDE_BEST : CLAUDE_MODEL), max_tokens: opt.maxTokens || 8192, messages: [{ role: 'user', content: content }],
       output_config: { effort: opt.effort || 'medium' } };
-    if (opt.system) body.system = [{ type: 'text', text: opt.system, cache_control: { type: 'ephemeral' } }];
+    /* the stable part (formulas, glossary) is cached across the calls of a page and across pages; the part that
+       changes per page (earlier pages, learned words) comes after it so the cache still hits */
+    if (opt.system || opt.context) {
+      body.system = [];
+      if (opt.system) body.system.push({ type: 'text', text: opt.system, cache_control: { type: 'ephemeral' } });
+      if (opt.context) body.system.push({ type: 'text', text: opt.context });
+    }
     /* ⚡ fast mode (Opus only): the same model answering up to 2.5× faster at twice the price; when its own rate limit
        is hit the call falls back to the standard lane instead of waiting */
     var fastLane = fastOn() && /claude-opus/.test(body.model) && opt.fast !== true;
@@ -239,7 +245,7 @@ var Engine = (function () {
     return fast ? p.map(function (x) { return x * 2; }) : p;                 // fast mode: twice the list price
   }
   var LS_FAST = 'kateb.fast';
-  function fastOn() { var v = lsGet(LS_FAST); return v === null ? true : v === '1'; }   // on unless switched off in the settings
+  function fastOn() { return lsGet(LS_FAST) === '1'; }                               // off unless switched on in the settings (2× price)
   function setFast(on) { lsSet(LS_FAST, on ? '1' : '0'); }
   function usd(model, u) { var p = priceOf(model); return ((u.i || 0) * p[0] + (u.o || 0) * p[1] + (u.w || 0) * p[2] + (u.r || 0) * p[3]) / 1e6; }
   function day(t) { var d = t ? new Date(t) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
