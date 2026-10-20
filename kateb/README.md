@@ -142,10 +142,19 @@ To rebuild the bank after adding office files or web formulas (kept outside the 
   (case numbers, dates, amounts, names found in the truth) and hallucinated words, so pipeline changes are
   compared on real pages before being called improvements.
 
-## Speed: ⚡ fast mode (default on, ⚙️ الإعدادات)
-Every Opus call (the two reads, the judge, the numbers pass) goes through Claude's fast mode (`speed: "fast"`, beta
-`fast-mode-2026-02-01`): the same model answering up to 2.5× faster at twice the list price (about $0.5-0.7 a page).
-The two reads then run at effort `high` instead of `medium` in about the same wall time. A 429 on the fast lane or a
+## Cost: 💰 وضع التوفير (default) vs 🎯 أقصى دقة (⚙️ الإعدادات, `kateb.mode`)
+The pipeline is the same in both (two reads → judge/check → numbers pass → guard → learning); the setting changes
+what each call costs. Economy: the page + 4 strips (5 images instead of 6), read A at medium effort, read B at low,
+the numbers pass on Sonnet at low effort without the banks, judge/check on Opus at medium, 250 bank lines + 200
+glossary lines in the prompt, fast mode off. Best: 5 strips, high effort everywhere, every call on Opus, 400 + 500
+lines. The system prompt is split in two blocks: the stable one (bank + glossary) is cached across the calls of a
+page and across pages; the variable one (earlier pages, learned words) comes after it so it no longer breaks the
+cache. Rough list-price cost per legal page: economy $0.15–0.30, best $0.5–0.8, best + ⚡ about double.
+
+## Speed: ⚡ fast mode (default off, ⚙️ الإعدادات)
+When switched on, every Opus call (the two reads, the judge, the numbers pass in best mode) goes through Claude's
+fast mode (`speed: "fast"`, beta `fast-mode-2026-02-01`): the same model answering up to 2.5× faster at twice the
+list price. It only changes the lane, not the effort (that is the cost setting above). A 429 on the fast lane or a
 400 for an account without it falls back to the standard lane at once (no wait); Haiku stays standard. The usage
 ledger prices fast-lane calls at $8 / $40 (model key `… ⚡`). The review screen shows the lane and the read time.
 
