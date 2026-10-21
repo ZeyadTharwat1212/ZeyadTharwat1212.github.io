@@ -55,6 +55,15 @@ Layout rules on top of the office formats (v17, `office.js`):
 
     python tests/tools/build_templates.py <folder of one source .docx per type> kateb/templates <office corpus folder>
 
+## The office's master template (v25)
+Every lawyer file of the office is made in one master Word template (Zeyad's .dotx, 2026-10-21): page 1 has the
+بسم الله picture, the marble stamp box (مكتب / lawyer / المحامي), the left side column (الموضوع / subject /
+كطلب الطالب وتحت مسئوليته / وكيل الطالب / المحامي) and the double vertical rule; pages 2+ are plain full-width pages.
+`python tests/tools/apply_master.py <master.dotx> kateb/templates` puts its margins and page-1 parts under the six
+court-paper templates (sihha, reannounce, announce, warning, sahifa, inherit_announce); each type keeps its own
+paragraph and run formats from the office files (`officeAnchors` / `officePage` keep the old shapes for reference).
+Page 1's text wraps beside the column (`wrapSide`), so it stops at the rule exactly like the office papers.
+
 ## How a page is read (v23)
 1. One small **Haiku** call reads the title (paper type → its formula bank), says PRINTED / HANDWRITTEN, and how far
    the page is turned (ROT) — a sideways page is turned **before** the reads, never read twice.

@@ -197,6 +197,7 @@ var Office = (function () {
     blocks.forEach(function (b) {
       var role = roleOf(b, st);
       if (role === 'ornament' || role === 'blank') return;               // the template's own ornament is used
+      if (role === 'basmala' && T.master) return;                        // the master template prints its own بسم الله
       if (role === 'title') { st.title = true; st.sinceTitle = 0; } else if (st.title) st.sinceTitle++;
       if (/^(date|request|body|party|clause)$/.test(role)) st.body = true;
       out.push({ role: role, b: b });
@@ -238,7 +239,9 @@ var Office = (function () {
     opts = opts || {};
     var S = await spec(), T = S[key]; if (!T) throw { code: 'template' };
     var items = plan(T, blocks), paras = [];
-    var lead = T.order[0] === 'ornament' || T.order[0] === 'lead' ? T.order[0] : null;
+    var lead = T.master ? null : T.order[0] === 'ornament' || T.order[0] === 'lead' ? T.order[0] : null;
+    /* the master template: its first (empty) paragraph carries the page-1 parts; the text starts on the next line */
+    if (T.master) paras.push({ role: 'lead', pPr: T.master.pPr, runs: '' });
     if (lead) { var oex = T.roles[lead][0]; paras.push({ role: lead, pPr: oex.pPr, runs: lead === 'ornament' ? runXml(' ', oex.rN || oex.rB || oex.rP, {}) : '' }); }
     var blankBeforeDate = T.order.indexOf('date') > 0 && T.order[T.order.indexOf('date') - 1] === 'blank';
     items.forEach(function (it) {
@@ -252,7 +255,7 @@ var Office = (function () {
     });
     if (!paras.length) paras.push({ role: 'body', pPr: '<w:pPr/>', runs: '' });
     /* shapes hang from the same line number as in the original (their offsets are measured from that line) */
-    placedAnchors(T).forEach(function (a) {
+    (T.master ? T.anchors : placedAnchors(T)).forEach(function (a) {
       var i = Math.min(a.at, paras.length - 1);
       while (i > 0 && paras[i].xml) i--;
       if (paras[i].xml) { paras.unshift({ role: 'lead', pPr: T.blank, runs: '' }); i = 0; }
@@ -364,7 +367,7 @@ var Office = (function () {
 
   /* a Word shape (stamp box, rule, text box) → absolutely positioned HTML with the same geometry */
   function cm(emu) { return (emu / 360000).toFixed(3) + 'cm'; }
-  function shapeHtml(xml, fill, page) {
+  function shapeHtml(xml, fill, page, img) {
     var out = '', choice = (xml.split('<mc:Fallback>')[0]);
     var re = /<wp:anchor[\s\S]*?<\/wp:anchor>/g, m;
     while ((m = re.exec(choice))) {
@@ -383,6 +386,7 @@ var Office = (function () {
         css += 'width:0;height:' + cm(h) + ';border-left:' + lw + 'pt solid #000;';
         out += '<span class="oshape" style="display:block;' + css + '"></span>'; continue;
       }
+      if (img) { out += '<img class="oshape" alt="" src="' + img + '" style="' + css + 'width:' + cm(w) + ';height:' + cm(h) + ';object-fit:contain">'; continue; }   // the master's بسم الله
       css += 'width:' + cm(w) + ';height:' + cm(h) + ';padding:0.13cm 0.25cm;overflow:hidden;';
       css += 'background:' + (/<a:blipFill/.test(a) ? '#f3f3f3' : '#fff') + ';';
       if (lw) css += 'border:' + Math.max(lw, dbl ? 3 : 0.75) + 'pt ' + (dbl ? 'double' : 'solid') + ' #000;';
@@ -408,7 +412,8 @@ var Office = (function () {
     opts = opts || {};
     var S = await spec(), T = S[key]; if (!T) throw { code: 'template' };
     var items = plan(T, blocks), paras = [], L = opts.lawyer || {}, title = L.title || 'المحامي', c = client(blocks);
-    var lead = T.order[0] === 'ornament' || T.order[0] === 'lead' ? T.order[0] : null;
+    var lead = T.master ? null : T.order[0] === 'ornament' || T.order[0] === 'lead' ? T.order[0] : null;
+    if (T.master) paras.push({ role: 'lead', html: '<p style="' + pCss(T.master.pPr) + '">&nbsp;</p>' });
     if (lead) { var oex = T.roles[lead][0], showOrn = lead === 'ornament' && fontOk(attr(oex.rN || oex.rB || oex.rP, 'rFonts', 'cs'));
       paras.push({ role: lead, html: '<p style="' + pCss(oex.pPr) + '">' + (showOrn ? spanHtml(oex.text || '', oex.rN || oex.rB || oex.rP, {}) : '&nbsp;') + '</p>' }); }
     var blankBeforeDate = T.order.indexOf('date') > 0 && T.order[T.order.indexOf('date') - 1] === 'blank', dated = false;
@@ -439,9 +444,9 @@ var Office = (function () {
     };
     var fill = function (t) { return t.replace(/\{\{(LAWYER|LAWYER_TITLE|AGENT|SUBJECT|BYREQ|AGENTOF|CLIENT)\}\}/g, function (m) { return fillMap[m]; }); };
     var pg = T.page || {};
-    placedAnchors(T).forEach(function (a) {
+    (T.master ? T.anchors : placedAnchors(T)).forEach(function (a) {
       var i = Math.min(a.at, paras.length - 1); while (i > 0 && paras[i].role === 'table') i--;
-      var sh = shapeHtml(fitStamp(a.xml, L.name || ''), fill, pg); if (!sh) return;
+      var sh = shapeHtml(fitStamp(a.xml, L.name || ''), fill, pg, a.img); if (!sh) return;
       paras[i].html = paras[i].html.replace(/^<p( style=")?/, function (m, q) { return q ? '<p style="position:relative;' : '<p style="position:relative"'; });
       if (/ostamp/.test(sh)) paras[i].html = paras[i].html.replace(/^(<p[^>]*>)/, '$1' + sh); else paras[i].html = paras[i].html.replace(/<\/p>$/, sh + '</p>');
     });

@@ -136,13 +136,16 @@ test('fills the صحة توقيع template: ornament, stamp, side box, original 
   const parts = await xmlParts(zip);
   const doc = parts['word/document.xml'];
   assert.ok(!doc.includes('{{') && !doc.includes('KATEB-BODY'), 'all placeholders filled');
-  assert.match(doc, /Zokrofi/, 'ornament font kept');
+  assert.ok(/r:embed="rIdKM1"/.test(doc) && /w10:wrap type="square"/.test(doc), 'the master template: its بسم الله picture and the page-1 side column');
+  assert.ok(!/Zokrofi/.test(doc), 'the old text ornament is not doubled with the master\'s بسم الله');
+  const rels = parts['word/_rels/document.xml.rels'] || await zip.file('word/_rels/document.xml.rels').async('string');
+  assert.ok(/Id="rIdKM1"[^>]*media\/kmaster1\.wmf/.test(rels) && zip.file('word/media/kmaster2.jpeg'), 'the master\'s pictures travel with the file');
   assert.match(doc, /ألون إبراهيم باشا/);                        // stamp + office line
   assert.match(doc, />دعوى صحة توقيع</);                          // side-box subject
   assert.match(doc, /كطلب الطالبة وتحت مسئوليتها/, 'client is female (ومحلها)');
   assert.match(doc, /Simplified Arabic/);
   assert.match(doc, /<w:highlight w:val="yellow"\/>/, 'unsure words stay yellow');
-  assert.ok(+/<w:pgMar [^>]*w:left="(\d+)"/.exec(doc)[1] > 2000, 'wide court margin kept');
+  assert.ok(+/<w:pgMar [^>]*w:left="(\d+)"/.exec(doc)[1] === 2268 && +/<w:pgMar [^>]*w:right="(\d+)"/.exec(doc)[1] === 707, 'the master template\'s margins');
 });
 
 test('fills a contract: property table in the original table format, clause prefixes', async () => {
