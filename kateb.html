@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=27">
+<link rel="stylesheet" href="kateb/style.css?v=28">
 </head>
 <body>
 <main>
@@ -49,6 +49,13 @@
 
 <section id="start" class="row" hidden>
   <div class="hero"><h2>من <em>خط اليد</em> إلى Word و PDF بتنسيق المكتب</h2><p>صوّر الورقة، والذكاء الاصطناعي يقرأها قراءتين ويراجعها بصيغ المكتب، ثم تراجع الكلمات غير الواضحة بنفسك قبل الحفظ.</p></div>
+  <div class="card outmode" id="outBox">
+    <b class="outq">ماذا تريد في ملف Word؟</b>
+    <div class="kinds outs" id="outList">
+      <button class="kind" type="button" data-out="pro" aria-pressed="true"><span class="ki">⚖️</span><span><b>ورقة محاماة</b><small>بتنسيق المكتب وصيغه والختم والعمود الجانبي</small></span></button>
+      <button class="kind" type="button" data-out="plain" aria-pressed="false"><span class="ki">📄</span><span><b>نص فقط</b><small>الكلام كما هو في صفحة Word بيضاء بدون تنسيق المحاماة</small></span></button>
+    </div>
+  </div>
   <div class="drop" id="dropZone">
     <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
     <h3>كيف تريد إدخال الورقة؟</h3>
@@ -280,22 +287,22 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"legal"};</script>
-<script src="kateb/engine.js?v=27"></script>
-<script src="kateb/scan.js?v=27"></script>
-<script src="kateb/verify.js?v=27"></script>
-<script src="kateb/arabic.js?v=27"></script>
-<script src="kateb/bank.js?v=27"></script>
-<script src="kateb/store.js?v=27"></script>
-<script src="kateb/learn.js?v=27"></script>
-<script src="kateb/fields.js?v=27"></script>
-<script src="kateb/memory.js?v=27"></script>
-<script src="kateb/speech.js?v=27"></script>
-<script src="kateb/raster.js?v=27"></script>
-<script src="kateb/dict.js?v=27"></script>
-<script src="kateb/ocr.js?v=27"></script>
-<script src="kateb/docx.js?v=27"></script>
-<script src="kateb/exam.js?v=27"></script>
-<script src="kateb/office.js?v=27"></script>
-<script src="kateb/app.js?v=27"></script>
+<script src="kateb/engine.js?v=28"></script>
+<script src="kateb/scan.js?v=28"></script>
+<script src="kateb/verify.js?v=28"></script>
+<script src="kateb/arabic.js?v=28"></script>
+<script src="kateb/bank.js?v=28"></script>
+<script src="kateb/store.js?v=28"></script>
+<script src="kateb/learn.js?v=28"></script>
+<script src="kateb/fields.js?v=28"></script>
+<script src="kateb/memory.js?v=28"></script>
+<script src="kateb/speech.js?v=28"></script>
+<script src="kateb/raster.js?v=28"></script>
+<script src="kateb/dict.js?v=28"></script>
+<script src="kateb/ocr.js?v=28"></script>
+<script src="kateb/docx.js?v=28"></script>
+<script src="kateb/exam.js?v=28"></script>
+<script src="kateb/office.js?v=28"></script>
+<script src="kateb/app.js?v=28"></script>
 </body>
 </html>

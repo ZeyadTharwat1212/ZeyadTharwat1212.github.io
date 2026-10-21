@@ -534,13 +534,48 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])'); await page.click('#kindCancel');
   }));
 
+  await step('v28 «نص فقط» (lawyer app): the start-screen choice reads the page as plain text — no paper type, no formulas, no office template, nothing asked — and is remembered', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ }, null, 'sk-ant-test', async (page, calls) => {
+    await page.click('#outList [data-out="plain"]');
+    assert.strictEqual(await page.getAttribute('#outList [data-out="plain"]', 'aria-pressed'), 'true');
+    await convert(page);
+    const reads = calls.claude.filter(c => c.kind === 'read' || c.kind === 'read2');
+    assert.ok(reads.length === 2 && reads.every(r => /as plain text/.test(r.p) && !/STANDARD FORMULAS|STANDARD WORDING|COMMON EXPRESSIONS/.test(r.system)), 'plain reads without the legal banks');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    const doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
+    assert.ok(!doc.includes('rIdKM1') && !doc.includes('{{') && doc.includes('مينا سامي'), 'a plain white Word page with the text');
+    assert.ok(await page.locator('#kindDlg').isHidden(), 'nothing asked');
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    assert.strictEqual(await page.getAttribute('#outList [data-out="plain"]', 'aria-pressed'), 'true', 'the choice is remembered on this device');
+    await page.click('#outList [data-out="pro"]');
+  }));
+  await step('v28 Hanan: «بالتنسيق» with مراجعة chosen on the start screen → the first Word is a revision sheet without asking; «نص فقط» → the page as written on a white page, no exam header', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page, calls) => {
+    assert.ok(await page.locator('#outKinds').isVisible());
+    await page.click('#outKinds [data-okind="revision"]');
+    await convert(page);
+    let [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    let doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
+    assert.ok(doc.includes('Revision Sheet') && doc.includes('Date:'), 'revision header from the start-screen choice');
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#outList [data-out="plain"]');
+    assert.ok(await page.locator('#outKinds').isHidden(), 'no kinds for text only');
+    await convert(page);
+    const r = calls.claude.filter(c => c.kind === 'read').pop();
+    assert.match(r.p, /exactly as written: do not add section headings/);
+    [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
+    assert.ok(!doc.includes('Time:') && !doc.includes('Revision Sheet') && !doc.includes('Subject:'), 'no exam header on the plain page');
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])'); await page.click('#outList [data-out="pro"]'); await page.click('#outKinds [data-okind="exam"]');
+  }));
+
   await step('exam: kinds امتحان / مراجعة / مذكرة / عادية change the header of Word and PDF', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page) => {
     await convert(page);
     assert.match(await page.textContent('#kindBtn'), /امتحان/);
-    await page.click('#wordBtn'); await page.waitForSelector('#kindDlg:not([hidden])');
+    /* v28: the kind is chosen on the start screen (default امتحان), so the first Word does not ask; it can still be changed */
+    await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])');
     await page.click('#kindList [data-kind="revision"]');
     assert.strictEqual(await page.inputValue('#kindTitle'), 'Revision Sheet');
-    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#kindOk')]);
+    await page.click('#kindOk');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
     let doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
     assert.ok(doc.includes('Revision Sheet') && doc.includes('Date:') && !doc.includes('Time:'), 'revision header');
     await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])');

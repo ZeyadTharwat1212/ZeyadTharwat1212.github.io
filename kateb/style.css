@@ -455,3 +455,12 @@ body.wide{padding-bottom:110px}
 #docAudio,#recAudio,#audioPlayer{width:100%}
 /* narrow screens: with «رجوع» showing, the brand keeps only its logo so the header does not overlap */
 @media (max-width:520px){#backBtn:not([hidden])~.brand>div{display:none}.backbtn{font-size:15px;padding:6px 10px}}
+
+/* v28: «ماذا تريد في ملف Word؟» on the start screen: the specialist layout or text only */
+.outmode{display:flex;flex-direction:column;gap:10px}
+.outq{font-size:18px}
+.outs .kind{min-height:72px}
+.outs .kind b{font-size:18px}
+.outkinds{grid-template-columns:repeat(3,minmax(0,1fr))}
+.outkinds .kind{min-height:52px;justify-content:center}
+@media (max-width:520px){.outkinds{grid-template-columns:1fr 1fr 1fr}.outkinds .kind{flex-direction:column;gap:2px;text-align:center;padding:8px 4px}.outkinds .kind b{font-size:14px}}
