@@ -60,7 +60,7 @@ var ExamBuilder = (function () {
     var tabs = '<w:tabs>';
     for (var i = 1; i < per; i++) tabs += '<w:tab w:val="left" w:pos="' + Math.round(9400 * i / per) + '"/>';
     tabs += '</w:tabs>';
-    var inner = cells.map(function (c, i) { return (i ? '<w:r>' + rpr() + '<w:tab/></w:r>' : '') + runsXml(c); }).join('');
+    var inner = cells.map(function (c, i) { return (i ? '<w:r>' + rpr({ sz: 32 }) + '<w:tab/></w:r>' : '') + runsXml(c, { sz: 32 }); }).join('');
     return para(inner, '<w:keepLines/>' + tabs + spacing(40, 120) + '<w:ind w:left="284"/>');
   }
 
@@ -101,14 +101,15 @@ var ExamBuilder = (function () {
     var zip = new JSZip(), media = [], body = '';
     if (header) {
       if (!header.noTable) body += headerTable(header);
-      if (header.title) body += para(textRuns(header.title, { font: 'Arial Black', b: true, u: true, sz: 34 }), spacing(160, 120, 240) + '<w:jc w:val="center"/>');
+      /* v29: sizes as in Hanan's own files — title 20 pt Arial Black, «Question (n)» 18 pt bold, items 16 pt bold, choices 16 pt */
+      if (header.title) body += para(textRuns(header.title, { font: 'Arial Black', b: true, u: true, sz: 40 }), spacing(header.noTable ? 0 : 160, 160, 240) + '<w:jc w:val="center"/>');
     }
     var qn = 0;
     blocks.forEach(function (bl) {
       if (bl.k === 'q') {
-        body += para(runsXml(bl.runs, { b: true, u: !!opts.underlineQ, sz: 30 }), '<w:keepNext/>' + spacing(200, 100));
+        body += para(runsXml(bl.runs, { b: true, u: !!opts.underlineQ, sz: 36 }), '<w:keepNext/>' + spacing(200, 100));
       } else if (bl.k === 'item') {
-        body += para(runsXml(bl.runs, { sz: 28 }), '<w:keepNext/>' + spacing(100, 40) + '<w:ind w:left="0"/>');
+        body += para(runsXml(bl.runs, { b: true, sz: 32 }), '<w:keepNext/>' + spacing(100, 40) + '<w:ind w:left="0"/>');
       } else if (bl.k === 'opt') {
         body += optXml(bl.cells.map(function (c) { return c.map(function (r) { return Object.assign({}, r); }); }));
       } else if (bl.k === 'table') {
@@ -122,7 +123,7 @@ var ExamBuilder = (function () {
       } else if (bl.k === 'p') {
         var jc = bl.align === 'C' ? 'center' : bl.align === 'R' ? 'right' : '';
         var rtl = AR.test((bl.runs || []).map(function (r) { return r.text || ''; }).join(''));
-        body += para(runsXml(bl.runs, { b: bl.heading, sz: bl.heading ? 30 : 28 }), (rtl ? '<w:bidi/>' : '') + spacing(60, 60) + (jc ? '<w:jc w:val="' + jc + '"/>' : ''));
+        body += para(runsXml(bl.runs, { b: bl.heading, sz: bl.heading ? 36 : 32 }), (rtl ? '<w:bidi/>' : '') + spacing(60, 60) + (jc ? '<w:jc w:val="' + jc + '"/>' : ''));
       }
     });
     var sect = '<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="11906" w:h="16838"/>' +

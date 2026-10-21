@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=28">
+<link rel="stylesheet" href="kateb/style.css?v=29">
 </head>
 <body>
 <main>
@@ -56,10 +56,12 @@
       <button class="kind" type="button" data-out="plain" aria-pressed="false"><span class="ki">📄</span><span><b>نص فقط</b><small>الكلام والأرقام والرموز كما هي في صفحة Word بيضاء</small></span></button>
     </div>
     <div class="kinds outkinds" id="outKinds">
-      <button class="kind" type="button" data-okind="exam" aria-pressed="true"><span class="ki">📝</span><span><b>امتحان</b></span></button>
+      <button class="kind" type="button" data-okind="exam" aria-pressed="true"><span class="ki">📝</span><span><b>امتحان نهائي</b></span></button>
+      <button class="kind" type="button" data-okind="monthly" aria-pressed="false"><span class="ki">🗓️</span><span><b>امتحان شهري</b></span></button>
       <button class="kind" type="button" data-okind="revision" aria-pressed="false"><span class="ki">📋</span><span><b>مراجعة / ورقة عمل</b></span></button>
       <button class="kind" type="button" data-okind="notes" aria-pressed="false"><span class="ki">📒</span><span><b>مذكرة / شرح</b></span></button>
     </div>
+    <label class="chk" id="outHeadRow"><input type="checkbox" id="outHead" checked> رأس الصفحة (المحافظة والمدرسة، والمادة والصف والزمن)</label>
   </div>
   <div class="drop" id="dropZone">
     <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
@@ -93,6 +95,7 @@
   </div>
   <details class="more card">
     <summary>بيانات رأس الامتحان (تتغير مرة واحدة فقط)</summary>
+    <div class="actions2" style="margin-top:8px"><button class="btn sm" type="button" data-hpreset="gov">رأس المديرية (Assiut Governorate)</button><button class="btn sm" type="button" data-hpreset="badr">رأس مدرسة بدر (Inclusive students)</button></div>
     <div dir="ltr" style="padding:6px 0 0">
       <label class="field">Line 1<input id="hLine1" value="Assiut Governorate"></label>
       <label class="field">Line 2<input id="hLine2" value="Directorate of Education"></label>
@@ -294,19 +297,19 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=28"></script>
-<script src="kateb/scan.js?v=28"></script>
-<script src="kateb/verify.js?v=28"></script>
-<script src="kateb/arabic.js?v=28"></script>
-<script src="kateb/bank.js?v=28"></script>
-<script src="kateb/store.js?v=28"></script>
-<script src="kateb/learn.js?v=28"></script>
-<script src="kateb/fields.js?v=28"></script>
-<script src="kateb/speech.js?v=28"></script>
-<script src="kateb/raster.js?v=28"></script>
-<script src="kateb/docx.js?v=28"></script>
-<script src="kateb/exam.js?v=28"></script>
+<script src="kateb/engine.js?v=29"></script>
+<script src="kateb/scan.js?v=29"></script>
+<script src="kateb/verify.js?v=29"></script>
+<script src="kateb/arabic.js?v=29"></script>
+<script src="kateb/bank.js?v=29"></script>
+<script src="kateb/store.js?v=29"></script>
+<script src="kateb/learn.js?v=29"></script>
+<script src="kateb/fields.js?v=29"></script>
+<script src="kateb/speech.js?v=29"></script>
+<script src="kateb/raster.js?v=29"></script>
+<script src="kateb/docx.js?v=29"></script>
+<script src="kateb/exam.js?v=29"></script>
 
-<script src="kateb/app.js?v=28"></script>
+<script src="kateb/app.js?v=29"></script>
 </body>
 </html>

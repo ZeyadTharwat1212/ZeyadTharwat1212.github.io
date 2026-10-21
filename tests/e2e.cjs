@@ -101,7 +101,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   if (drive) { await drive(page, calls, context); assert.deepStrictEqual(errors, [], 'no page errors'); await context.close(); return; }
   await page.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: await pagePhoto(browser) });
   await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
-  await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+  try { await page.waitForSelector('#done:not([hidden])', { timeout: 20000 }); } catch (e) { throw new Error(e.message.split('\n')[0] + ' — page errors: ' + JSON.stringify(errors) + ' — screen: ' + await page.evaluate(() => { const v = [...document.querySelectorAll('section')].find(x => !x.hidden); return v ? v.id + ' ' + v.textContent.slice(0, 200) : ''; })); }
   assert.deepStrictEqual(errors, [], 'no page errors');
   await check(page, calls, context);
   await context.close();
@@ -565,6 +565,30 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
     assert.ok(!doc.includes('Time:') && !doc.includes('Revision Sheet') && !doc.includes('Subject:'), 'no exam header on the plain page');
     await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])'); await page.click('#outList [data-out="pro"]'); await page.click('#outKinds [data-okind="exam"]');
+  }));
+
+  await step('v29 Hanan: «امتحان شهري» = big «Primary 4 Monthly Exam» title, no header; a final exam with «رأس الصفحة» unticked has only its title; the header presets fill the three lines; her font sizes', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page) => {
+    await page.click('#outKinds [data-okind="monthly"]');
+    assert.ok(!(await page.isChecked('#outHead')), 'monthly: no header by default');
+    await convert(page);
+    let [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    let doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
+    assert.ok(/Primary 4 Monthly Exam/.test(doc) && !doc.includes('Subject:') && !doc.includes('Assiut'), 'monthly title, no header');
+    assert.ok(doc.includes('<w:sz w:val="40"/>') && doc.includes('<w:sz w:val="36"/>'), 'her sizes: 20 pt title, 18 pt questions');
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#outKinds [data-okind="exam"]');
+    assert.ok(await page.isChecked('#outHead'), 'final exam: header on by default');
+    await page.uncheck('#outHead');
+    await convert(page);
+    [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
+    assert.ok(!doc.includes('Subject:') && /First term exam/.test(doc), 'header switched off: the title only');
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.check('#outHead');
+    await page.evaluate(() => { document.querySelector('details.more').open = true; });
+    await page.click('[data-hpreset="badr"]');
+    assert.strictEqual(await page.inputValue('#hLine2'), 'Badr governmental language school');
+    await page.click('[data-hpreset="gov"]');
   }));
 
   await step('exam: kinds امتحان / مراجعة / مذكرة / عادية change the header of Word and PDF', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page) => {

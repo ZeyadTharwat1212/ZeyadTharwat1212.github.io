@@ -430,16 +430,18 @@
      Remembered on this device; taken at the start of each conversion. */
   var OUT_KEY = EXAM ? 'exam.out' : 'kateb.out', OKIND_KEY = 'exam.okind', plainRun = false;
   function outMode() { return Engine.lsGet(OUT_KEY) === 'plain' ? 'plain' : 'pro'; }
-  function startKind() { var k = Engine.lsGet(OKIND_KEY); return /^(exam|revision|notes)$/.test(k || '') ? k : 'exam'; }
+  function startKind() { var k = Engine.lsGet(OKIND_KEY); return /^(exam|monthly|revision|notes)$/.test(k || '') ? k : 'exam'; }
   function paintOut() {
     if (!$('outList')) return;
     var m = outMode(), k = startKind();
     Array.prototype.forEach.call($('outList').querySelectorAll('[data-out]'), function (b) { b.setAttribute('aria-pressed', b.dataset.out === m ? 'true' : 'false'); });
+    if ($('outHead')) { $('outHeadRow').hidden = m === 'plain'; $('outHead').checked = headPref(k); }
     if ($('outKinds')) { $('outKinds').hidden = m === 'plain'; Array.prototype.forEach.call($('outKinds').querySelectorAll('[data-okind]'), function (b) { b.setAttribute('aria-pressed', b.dataset.okind === k ? 'true' : 'false'); }); }
   }
   if ($('outList')) {
     $('outList').addEventListener('click', function (e) { var b = e.target.closest('[data-out]'); if (!b) return; Engine.lsSet(OUT_KEY, b.dataset.out); paintOut(); });
     if ($('outKinds')) $('outKinds').addEventListener('click', function (e) { var b = e.target.closest('[data-okind]'); if (!b) return; Engine.lsSet(OKIND_KEY, b.dataset.okind); paintOut(); });
+    if ($('outHead')) $('outHead').addEventListener('change', function () { Engine.lsSet('exam.head.' + startKind(), this.checked ? '1' : '0'); });
     paintOut();
   }
   function FMT() { return EXAM ? (plainRun ? EXAM_PLAIN_FORMAT : EXAM_FORMAT) : (plainRun ? PLAIN_FORMAT : LEGAL_FORMAT); }
@@ -523,7 +525,7 @@
         curDoc = Store.newDoc(MODE, autoName(), ps, { type: results[0] && results[0].type || null });
         /* the choice made on the start screen: text only → a plain page, nothing to ask; Hanan's kind chosen up front */
         curDoc.plain = plainRun;
-        if (EXAM) { curDoc.kind = plainRun ? 'plain' : startKind(); var kk = EXAM_KINDS.filter(function (x) { return x.key === curDoc.kind; })[0]; if (kk && curDoc.kind !== 'exam') curDoc.kindTitle = kk.title(); }
+        if (EXAM) { curDoc.kind = plainRun ? 'plain' : startKind(); curDoc.head = !plainRun && headPref(curDoc.kind); var kk = EXAM_KINDS.filter(function (x) { return x.key === curDoc.kind; })[0]; if (kk && curDoc.kind !== 'exam') curDoc.kindTitle = kk.title(); }
       }
       curDoc.cost = (curDoc.cost || 0) + docCost; curDoc.kindOk = !!(curDoc.plain || (EXAM && curDoc.kind)); curDoc.nameAuto = curDoc.name;
     }
@@ -1341,20 +1343,33 @@
     var h = {}; ['hLine1', 'hLine2', 'hLine3', 'hSubject', 'hGrade', 'hTime', 'hTitle'].forEach(function (id) { h[id] = $(id) ? $(id).value : ''; });
     var out = { line1: h.hLine1, line2: h.hLine2, line3: h.hLine3, subject: h.hSubject, grade: h.hGrade, time: h.hTime, title: h.hTitle };
     var k = examKind(); if (curDoc && curDoc.kindTitle) out.title = curDoc.kindTitle;
+    if (k === 'plain') return null;
+    /* v29: the header (Governorate / school + Subject / Grade / Time) is a choice: on for finals by default, off for a
+       monthly exam (her monthly papers have only the title) and for notes — and she can switch it for any paper */
+    if (!headOn(k)) { out.noTable = true; out.right = []; return out; }
     if (k === 'revision') out.right = ['Subject: ' + (out.subject || ''), 'Grade: ' + (out.grade || ''), 'Date: ' + (out.date || '………………')];
-    else if (k === 'notes') { out.noTable = true; out.right = []; }
-    else if (k === 'plain') return null;
     else out.right = ['Subject: ' + (out.subject || ''), 'Grade: ' + (out.grade || ''), 'Time: ' + (out.time || '')];
     return out;
   }
+  /* v29: the two headers her finals use, one tap each (the lines stay editable) */
+  var HEAD_PRESETS = {
+    gov: ['Assiut Governorate', 'Directorate of Education', 'Administration of Distinguished & Governmental Language Schools'],
+    badr: ['Assiut directorate of education', 'Badr governmental language school', 'Inclusive students (slow learners)']
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-hpreset]'), function (b) {
+    b.addEventListener('click', function () { var L = HEAD_PRESETS[b.dataset.hpreset]; ['hLine1', 'hLine2', 'hLine3'].forEach(function (id, i) { if ($(id)) { $(id).value = L[i]; $(id).dispatchEvent(new Event('input')); } }); });
+  });
   /* ---------- «ما نوع هذه الورقة؟» asked once per document before the first Word / PDF ---------- */
   var EXAM_KINDS = [
     { key: 'exam', icon: '📝', label: 'امتحان', hint: 'رأس المدرسة كامل: المادة والصف والزمن، وعنوان الامتحان', title: function () { return Engine.lsGet('exam.hTitle') || 'First term exam'; } },
+    { key: 'monthly', icon: '🗓️', label: 'امتحان شهري', hint: 'عنوان «Primary 4 Monthly Exam» والأسئلة، بدون رأس', title: function () { var g = (($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade') || '').trim(); return (/^\d/.test(g) ? 'Primary ' + g : g || 'Primary') + ' Monthly Exam'; } },
     { key: 'revision', icon: '📋', label: 'مراجعة / ورقة عمل', hint: 'رأس بالمادة والصف والتاريخ، وعنوان «Revision Sheet»', title: function () { return 'Revision Sheet'; } },
     { key: 'notes', icon: '📒', label: 'مذكرة / شرح', hint: 'عنوان فقط بدون جدول الرأس', title: function () { return 'Notes'; } },
     { key: 'plain', icon: '📄', label: 'ورقة عادية', hint: 'النص كما هو، بدون رأس ولا عنوان', title: function () { return ''; } }
   ];
   function examKind() { return (curDoc && curDoc.kind) || 'exam'; }
+  function headPref(k) { var v = Engine.lsGet('exam.head.' + k); return v === null ? k === 'exam' || k === 'revision' : v === '1'; }   // default: finals and revision sheets have the header
+  function headOn(k) { return curDoc && typeof curDoc.head === 'boolean' ? curDoc.head : headPref(k); }
   function kindLabel() {
     var b = $('kindBtn'); if (!b) return;
     if (EXAM) { var k = EXAM_KINDS.filter(function (x) { return x.key === examKind(); })[0] || EXAM_KINDS[0]; b.textContent = k.icon + ' ' + k.label + ' ▾'; }
@@ -1367,7 +1382,8 @@
     if (EXAM) {
       kindChoice = examKind();
       list.innerHTML = EXAM_KINDS.map(function (k) { return '<button class="kind" type="button" data-kind="' + k.key + '" aria-pressed="' + (k.key === kindChoice) + '"><span class="ki">' + k.icon + '</span><span><b>' + k.label + '</b><small>' + k.hint + '</small></span></button>'; }).join('');
-      extra.innerHTML = '<label class="tplrow">عنوان الورقة<input id="kindTitle" dir="ltr" autocomplete="off"></label>';
+      extra.innerHTML = '<label class="tplrow">عنوان الورقة<input id="kindTitle" dir="ltr" autocomplete="off"></label><label class="chk"><input type="checkbox" id="kindHead"> رأس الصفحة (المحافظة والمدرسة، والمادة والصف والزمن)</label>';
+      $('kindHead').checked = headOn(kindChoice);
       $('kindTitle').value = (curDoc && curDoc.kindTitle) || EXAM_KINDS.filter(function (k) { return k.key === kindChoice; })[0].title();
       $('kindHint').textContent = 'اختاري نوع الورقة ليخرج الملف بالرأس والشكل المناسبين.';
     } else {
@@ -1389,12 +1405,12 @@
       var b = e.target.closest('[data-kind]'); if (!b) return;
       kindChoice = b.dataset.kind;
       Array.prototype.forEach.call($('kindList').querySelectorAll('[data-kind]'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
-      if (EXAM) { var k = EXAM_KINDS.filter(function (x) { return x.key === kindChoice; })[0]; if (k && $('kindTitle')) $('kindTitle').value = k.title(); } else kindExtraLegal();
+      if (EXAM) { var k = EXAM_KINDS.filter(function (x) { return x.key === kindChoice; })[0]; if (k && $('kindTitle')) $('kindTitle').value = k.title(); if ($('kindHead')) { $('kindHead').checked = headPref(kindChoice); $('kindHead').disabled = kindChoice === 'plain'; } } else kindExtraLegal();
     });
     $('kindCancel').addEventListener('click', function () { $('kindDlg').hidden = true; kindThen = null; });
     $('kindOk').addEventListener('click', function () {
       if (curDoc) {
-        if (EXAM) { curDoc.kind = kindChoice; curDoc.kindTitle = ($('kindTitle').value || '').trim(); }
+        if (EXAM) { curDoc.kind = kindChoice; curDoc.kindTitle = ($('kindTitle').value || '').trim(); if ($('kindHead') && kindChoice !== 'plain') { curDoc.head = $('kindHead').checked; Engine.lsSet('exam.head.' + kindChoice, curDoc.head ? '1' : '0'); } }
         else {
           $('tplSel').value = kindChoice; tplHint(); $('lawName').value = $('kindLawName').value; $('lawTitle').value = $('kindLawTitle').value; Engine.lsSet('kateb.lawName', $('lawName').value.trim()); Engine.lsSet('kateb.lawTitle', $('lawTitle').value);
           if (kindChoice && curDoc.name === curDoc.nameAuto) { curDoc.name = curDoc.nameAuto = autoName(kindChoice); $('docName').value = curDoc.name; }
@@ -1609,7 +1625,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '28';
+  var APP_VER = '29';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -1683,7 +1699,8 @@
   var EXAM_FORMAT =
     "OUTPUT FORMAT (plain text lines, no code fences, no commentary):\n" +
     "GRADE: <grade>   (first line, only if the paper names the grade, e.g. GRADE: Primary 4)\n" +
-    "[Q] Question (1) Choose the correct answer   (one line per section heading; number sections (1), (2), (3)… in order; standard wording: 'Choose the correct answer', 'Complete each of the following', 'Answer the following questions', or the section's own wording)\n" +
+    "[Q] Question (1) Choose the correct answer   (one line per section heading; number sections (1), (2), (3)… in order; standard wording: 'Choose the correct answer', 'Complete each of the following', 'Match', 'Join', 'Put (✓) or (✗)', 'Answer the following questions', or the section's own wording)\n" +
+    "THE EXAM IS IN ENGLISH: every heading, question, choice and word problem in correct English exactly as the teacher wrote it (fix only spelling and capitals) — never translate into Arabic; Arabic only where the teacher herself wrote Arabic.\n" +
     "[I] **1)** <question text>   (each numbered question; restart at 1 in each section; blanks as __________)\n" +
     "[OPT] a) … | b) … | c) … | d) …   (the answer choices of the question above, on one line)\n" +
     "[TABLE] cell | cell || cell | cell   (tables and bar models; || separates rows; a shorter row's last cell spans the rest)\n" +
