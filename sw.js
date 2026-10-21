@@ -1,11 +1,11 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v22';
+var CACHE = 'kateb-v23';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=22', 'kateb/engine.js?v=22', 'kateb/verify.js?v=22', 'kateb/docx.js?v=22', 'kateb/exam.js?v=22', 'kateb/app.js?v=22',
-  'kateb/office.js?v=22', 'kateb/bank.js?v=22', 'kateb/arabic.js?v=22', 'kateb/scan.js?v=22', 'kateb/store.js?v=22', 'kateb/learn.js?v=22', 'kateb/fields.js?v=22', 'kateb/speech.js?v=22', 'kateb/raster.js?v=22', 'kateb/dict.js?v=22', 'kateb/ocr.js?v=22', 'kateb/bank/glossary.json?v=22', 'kateb/templates/templates.json?v=22',
-  'kateb/templates/announce.docx?v=22', 'kateb/templates/gift.docx?v=22', 'kateb/templates/inherit_announce.docx?v=22', 'kateb/templates/inherit_request.docx?v=22', 'kateb/templates/iqrar.docx?v=22', 'kateb/templates/memo.docx?v=22', 'kateb/templates/price.docx?v=22', 'kateb/templates/reannounce.docx?v=22', 'kateb/templates/sahifa.docx?v=22', 'kateb/templates/sale.docx?v=22', 'kateb/templates/sihha.docx?v=22', 'kateb/templates/warning.docx?v=22',
+  'kateb/style.css?v=23', 'kateb/engine.js?v=23', 'kateb/verify.js?v=23', 'kateb/docx.js?v=23', 'kateb/exam.js?v=23', 'kateb/app.js?v=23',
+  'kateb/office.js?v=23', 'kateb/bank.js?v=23', 'kateb/arabic.js?v=23', 'kateb/scan.js?v=23', 'kateb/store.js?v=23', 'kateb/learn.js?v=23', 'kateb/fields.js?v=23', 'kateb/memory.js?v=23', 'kateb/bank/memory.json?v=23', 'kateb/speech.js?v=23', 'kateb/raster.js?v=23', 'kateb/dict.js?v=23', 'kateb/ocr.js?v=23', 'kateb/bank/glossary.json?v=23', 'kateb/templates/templates.json?v=23',
+  'kateb/templates/announce.docx?v=23', 'kateb/templates/gift.docx?v=23', 'kateb/templates/inherit_announce.docx?v=23', 'kateb/templates/inherit_request.docx?v=23', 'kateb/templates/iqrar.docx?v=23', 'kateb/templates/memo.docx?v=23', 'kateb/templates/price.docx?v=23', 'kateb/templates/reannounce.docx?v=23', 'kateb/templates/sahifa.docx?v=23', 'kateb/templates/sale.docx?v=23', 'kateb/templates/sihha.docx?v=23', 'kateb/templates/warning.docx?v=23',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',

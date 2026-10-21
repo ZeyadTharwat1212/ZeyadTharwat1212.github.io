@@ -33,6 +33,19 @@ function serve() {
   });
 }
 
+/* the short judge (v23): the fake answers each marked place the way the old full judge (answers.J) decided it */
+function decideAnswer(prompt, J, two) {
+  const body = prompt.split('READING 1 (with the marked places):\n')[1] || '';
+  const out = [];
+  for (const m of body.matchAll(/⟪(\d+)\| ([\s\S]*?)(?: ‖ ([\s\S]*?))?⟫/g)) {
+    const [, n, x, y] = m;
+    if (y === undefined) { out.push(n + ' | ' + (!two || J.includes(x) ? x : x.replace(/[⟦⟧]/g, '').split('|')[0])); continue; }
+    const has = s => s !== '∅' && J.includes(s);
+    const pick = has(y) && !has(x) ? y : x;
+    out.push(n + ' | ' + (J.includes('⟦' + pick + '⟧') ? '⟦' + pick + '⟧' : pick));
+  }
+  return out.join('\n');
+}
 async function fakeWorld(context, answers, calls) {
   await context.route(/cdnjs\.cloudflare\.com\/.*jszip/, r => r.fulfill({ contentType: 'text/javascript', body: JSZIP_SRC }));
   await context.route(/cdnjs\.cloudflare\.com\/.*pdf/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.pdfjsLib={};' }));
@@ -43,7 +56,9 @@ async function fakeWorld(context, answers, calls) {
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
     calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta, ocr: kind === 'printed' ? prompt.split('OCR OUTPUT:\n')[1] : undefined });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
-    const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    const short = /MARKED PLACES/.test(prompt);
+    const text = short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    calls.claude[calls.claude.length - 1].short = short; calls.claude[calls.claude.length - 1].cache = body.messages[0].content.some(c => c.cache_control);
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
   });
@@ -125,9 +140,9 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.match(dl.suggestedFilename(), /\.docx$|^download$/);
     const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
     const doc = await zip.file('word/document.xml').async('string');
-    for (const w of ['مذكرة بدفاع', 'أحمد محمد علي', '<w:tbl>', '<w:highlight w:val="yellow"/>', '1234', '57']) assert.ok(doc.includes(w), 'Word has ' + w);
+    for (const w of ['مذكرة بدفاع', 'أحمد محمد علي', '<w:tbl>', '<w:highlight w:val="yellow"/>', '١٢٣٤', '٥٧']) assert.ok(doc.includes(w), 'Word has ' + w);
     assert.ok(!doc.includes('\u200F'), 'no direction marks in the file');
-    assert.ok(!/[٠-٩]/.test(doc), 'the Word file stores Western digits like the office files');
+    assert.ok(!/<w:t[^>]*>[^<]*[0-9][^<]*<\/w:t>/.test(doc), 'v23: every number in the Word text is in Arabic digits ٠-٩');
     if (SHOTS) fs.writeFileSync(path.join(SHOTS, 'legal.docx'), fs.readFileSync(await dl.path()));
     await exportPdf(page); await page.waitForFunction(() => window.__printed === 1);
     assert.ok((await page.innerHTML('#printRoot')).includes('مذكرة بدفاع'));
@@ -185,6 +200,12 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     const doc = await zip.file('word/document.xml').async('string');
     assert.ok(doc.includes('Zokrofi') && doc.includes('>دعوى صحة توقيع<') && doc.includes('ألون إبراهيم باشا') && !doc.includes('{{'), 'office Word file');
     assert.ok(zip.file('word/media/image2.jpeg'), 'stamp texture kept');
+    assert.ok(doc.includes('٧/١/٢٠٢٦') && !/<w:t[^>]*>[^<]*[0-9][^<]*<\/w:t>/.test(doc), 'v23: Arabic digits in the office Word file');
+    const stampP = (doc.match(/<w:p\b(?:(?!<\/w:p>)[\s\S])*?ألون إبراهيم باشا[\s\S]*?<\/w:p>/) || [''])[0];
+    const sz = +((stampP.match(/<w:sz w:val="(\d+)"/) || [0, 99])[1]);
+    if (SHOTS) fs.writeFileSync(path.join(SHOTS, 'office-sihha.docx'), fs.readFileSync(await dl.path()));
+    assert.ok(sz <= 32 && sz >= 22, 'v23: a long lawyer name is sized to fit the stamp box on one line (half-points ' + sz + ')');
+    assert.ok(!/w:line="240"/.test(doc) || /w:line="(228|192)"/.test(doc), 'v23: the office line spacing is kept in Word');
     if (SHOTS) fs.writeFileSync(path.join(SHOTS, 'office-sihha.docx'), fs.readFileSync(await dl.path()));
     await exportPdf(page); await page.waitForFunction(() => window.__printed === 1);
     const pr = await page.innerHTML('#printRoot');
@@ -197,19 +218,21 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   }));
 
   const SIHHA_B = SIHHA_READ.replace('مينا سامي', 'مينا سامح').replace('باع المعلن', 'باع ⟦المعلز⟧');
-  await step('Claude: two parallel Sonnet reads, Opus judge with the صحة توقيع formula bank, rotation from the read, snap fixes a formula word', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_B, J: SIHHA_B, ROT: 0 }, async (page, calls) => {
+  await step('Claude: reading 1 on Opus + reading 2 on Sonnet in parallel, the short Opus judge on the disputed places with the صحة توقيع formula bank, snap fixes a formula word', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_B, J: SIHHA_B, ROT: 0 }, async (page, calls) => {
     assert.deepStrictEqual(calls.slice().sort(), ['judge', 'kind', 'numbers', 'read', 'read2']);
     const c = calls.claude, reads = c.filter(x => x.kind === 'read' || x.kind === 'read2'), judge = c.find(x => x.kind === 'judge'), nums = c.find(x => x.kind === 'numbers'), kindCall = c.find(x => x.kind === 'kind');
     assert.ok(kindCall.model === 'claude-haiku-5-5' && kindCall.images === 1, 'type detection: one small Haiku call');
-    assert.ok(reads.every(x => x.model === 'claude-opus-5-5' && x.images === 5 && !x.fast), 'reads on Opus with the whole page + 4 strips (economy mode)');
-    assert.ok(reads.some(x => x.effort === 'medium') && reads.some(x => x.effort === 'low'), 'economy: one medium read, one low');
+    const r1 = c.find(x => x.kind === 'read'), r2 = c.find(x => x.kind === 'read2');
+    assert.ok(reads.every(x => x.images === 5 && !x.fast), 'both reads see the whole page + 4 strips (economy mode)');
+    assert.ok(r1.model === 'claude-opus-5-5' && r1.effort === 'medium' && r1.cache, 'reading 1 on Opus, its images cached for the judge');
+    assert.ok(r2.model === 'claude-sonnet-5-5' && r2.effort === 'low' && !r2.cache, 'economy: reading 2 on Sonnet (a different model, half the price), low effort');
     assert.ok(reads.every(x => x.system.includes('STANDARD FORMULAS')), 'the formula bank is the cached system block');
     assert.ok(reads.every(x => x.system.includes('STANDARD FORMULAS') && x.system.includes('دعوى صحة توقيع')), 'both reads get the sihha bank');
     assert.ok(nums.model === 'claude-sonnet-5-5' && nums.effort === 'low' && !nums.system, 'economy: numbers pass on Sonnet, low effort, no bank');
     assert.match(await page.textContent('#readerInfo'), /claude-opus-5-5/, 'review screen shows the real model used');
     assert.strictEqual(judge.model, 'claude-opus-5-5');
     assert.ok(judge.system.includes('STANDARD FORMULAS') && judge.system.includes('دعوى صحة توقيع'), 'judge gets the sihha bank');
-    assert.ok(judge.effort === 'medium', 'economy: judge at medium');
+    assert.ok(judge.effort === 'medium' && judge.cache && judge.short && judge.images === 5, 'economy: the short judge at medium (same effort as reading 1, so the images come from the cache)');
     const txt = await page.textContent('#pagesBox .sheet');
     assert.ok(txt.includes('باع المعلن إليه'), 'snap restored the formula word: ' + txt);
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'only the disputed name stays yellow');
@@ -222,6 +245,18 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   await step('Claude: a sideways page is rotated from the ROT line and read again', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ, ROT: 90 }, async (page, calls) => {
     assert.ok(calls.filter(k => k === 'read').length >= 2, 'read again after rotating');
     assert.ok(!(await page.textContent('#pagesBox .sheet')).includes('ROT:'));
+  }, 'sk-ant-test'));
+
+  await step('Claude: the Haiku title call also reports a sideways page, so it is turned BEFORE the reads (no second pair of reads)', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ, K: 'دعوى صحة توقيع\nHANDWRITTEN\nROT: 90' }, async (page, calls) => {
+    assert.strictEqual(calls.filter(k => k === 'read').length, 1, 'one reading 1: ' + calls.join(','));
+    assert.strictEqual(calls.filter(k => k === 'read2').length, 1, 'one reading 2: ' + calls.join(','));
+  }, 'sk-ant-test'));
+  await step('Claude: reads that agree with no doubt → no judge at all; an unreadable word → one short proofreading call that fills it from the context', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ.replace('باع المعلن', 'باع ⟦؟⟧'), B: SIHHA_READ.replace('باع المعلن', 'باع ⟦؟⟧'), D: '1 | المعلن\nFIX | 7/1/2026 | 8/1/2026' }, async (page, calls) => {
+    const ck = calls.claude.find(c => c.kind === 'check');
+    assert.ok(ck && ck.short && ck.model === 'claude-opus-5-5' && ck.cache, 'short check on Opus with cached images: ' + calls.join(','));
+    assert.ok(!calls.includes('judge'));
+    const txt = (await page.textContent('#pagesBox .sheet')).replace(/\u200F/g, '');
+    assert.ok(txt.includes('باع المعلن إليه') && txt.includes('٨/١/٢٠٢٦') && !txt.includes('؟'), 'the unreadable word filled, the FIX line applied: ' + txt);
   }, 'sk-ant-test'));
 
   await step('camera tray: two shots cleaned to white pages, removed/kept, read together as two pages', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ }, async (page, calls) => {}, 'sk-ant-test', async (page) => {

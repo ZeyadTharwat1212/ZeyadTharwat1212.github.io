@@ -167,7 +167,7 @@ test('every template builds a well-formed file', async () => {
 /* ---------- formula bank (kateb/bank.js + kateb/bank/*.json) ---------- */
 const Bank = require('../kateb/bank.js');
 test('bank files hold formulas with placeholders, never a client name or number', () => {
-  const files = fs.readdirSync(path.join(REPO, 'kateb/bank')).filter(f => f.endsWith('.json') && f !== 'spelling.json');
+  const files = fs.readdirSync(path.join(REPO, 'kateb/bank')).filter(f => f.endsWith('.json') && f !== 'spelling.json' && f !== 'memory.json');
   assert.ok(files.length >= 10);
   for (const f of files) {
     const b = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank', f), 'utf8'));
@@ -314,7 +314,7 @@ test('engine: Claude usage ledger → estimated cost per model', () => {
   assert.ok(Math.abs(u.models['claude-haiku-5-5'].usd - 0.1) < 1e-9);
   assert.ok(Math.abs(u.total.usd - 7.3) < 1e-9);
   assert.strictEqual(u.total.tokens, 3300000);
-  assert.deepStrictEqual(Engine.priceOf('claude-sonnet-5-5-20260101'), [2, 10, 2.5, 0.2], 'dated model ids match by prefix');
+  assert.deepStrictEqual(Engine.priceOf('claude-sonnet-5-5-20260101'), [2, 10, 2.5, 0.1], 'dated model ids match by prefix');
   Engine.usageReset(); assert.strictEqual(Engine.usageSummary().total.calls, 0);
 });
 
@@ -434,4 +434,50 @@ test('Dict: the AyaSpell dictionary on the device — legal words pass, misspell
   const flood = Dict.mark('كلمة غير معروفة: خزعبل قرطبل مرقبل زبرجل طرمبل', null);
   assert.ok(flood.skipped && flood.text.indexOf('⟦') < 0, 'too many unknown words → nothing marked');
   assert.strictEqual(Dict.unknown('بناء عليه نلتمس الحكم', null).words.length, 0);
+});
+
+test('privacy: no person\'s name in the public bank or templates (same rule as tests/tools/privacy.py)', () => {
+  const fs = require('fs'), path = require('path');
+  const { hasName } = require('./privacy.cjs');
+  const root = path.join(__dirname, '..', 'kateb');
+  const leaks = [];
+  for (const f of fs.readdirSync(path.join(root, 'bank')).filter(f => f.endsWith('.json'))) {
+    const d = JSON.parse(fs.readFileSync(path.join(root, 'bank', f), 'utf8'));
+    for (const l of d.lines || []) if (hasName(l.t || '')) leaks.push(f + ': ' + (l.t || '').slice(0, 40));
+    if (f === 'memory.json') for (const k of Object.keys(d)) for (const x of [].concat(d[k])) if (hasName(x)) leaks.push(f + ': ' + x);
+  }
+  const tj = fs.readFileSync(path.join(root, 'templates', 'templates.json'), 'utf8');
+  for (const m of tj.matchAll(/"([^"]{6,})"/g)) if (hasName(m[1])) leaks.push('templates.json: ' + m[1].slice(0, 40));
+  assert.deepStrictEqual(leaks, [], 'names would be published');
+  assert.ok(hasName('القبلي / فلان علان') && hasName('السيد / محمد احمد') && !hasName('ومحله المختار مكتب الأستاذ / {{NAME}}'), 'rule sanity');
+});
+
+/* ---------- v23: the short judge and the office memory ---------- */
+test('short judge: only the disputed places and reading 1 doubts are marked, the answers are put back', () => {
+  const a = '[H] **دعوى صحة توقيع**\nالسيد / ⟦محمد|محمود⟧ علي حسن\tبصفته\nبيع مؤرخ في 7/1/2026 بمبلغ 5000 جنيه\nوهذا ⟦نص⟧ ثابت | خلية';
+  const b = '[H] **دعوى صحة توقيع**\nالسيد / محمود علي حسين\tبصفته\nبيع مؤرخ في 7/1/2025 بمبلغ 5000 جنيه مصري\nوهذا نص ثابت | خلية';
+  const m = Verify.marks(a, b);
+  assert.strictEqual(m.disputes, 4); assert.strictEqual(m.doubts, 1);
+  assert.ok(m.prompt.includes('⟪1| محمد ‖ محمود⟫') && m.prompt.includes('⟪3| 7/1/2026 ‖ 7/1/2025⟫') && m.prompt.includes('جنيه ⟪4| ∅ ‖ مصري⟫') && m.prompt.includes('⟪5| ⟦نص⟧⟫'), m.prompt);
+  const d = Verify.decide(m, '1 | محمود\n2 | حسن\n3 | 7/1/2026\n4 | ∅\n5 | نص\nFIX | 5000 جنيه | 5000 جنيه مصري');
+  assert.strictEqual(d.text, '[H] **دعوى صحة توقيع**\nالسيد / محمود علي حسن\tبصفته\nبيع مؤرخ في 7/1/2026 بمبلغ 5000 جنيه مصري\nوهذا نص ثابت | خلية');
+  const none = Verify.decide(m, 'كلام لا يتبع الشكل');
+  assert.ok(none.text.includes('⟦محمد|محمود⟧') && none.text.includes('⟦7/1/2026|7/1/2025⟧') && none.text.includes('⟦مصري⟧'), 'unanswered disputes stay yellow with both readings: ' + none.text);
+  assert.strictEqual(Verify.marks(a, 'نص مختلف تماماً عن القراءة الأولى'), null, 'reads too far apart → the full judge');
+});
+test('memory: learns lawyers, judges and sure names from a reviewed paper; the private link adds lawyers; prompts', () => {
+  global.Fields = require('../kateb/fields.js');
+  const Memory = require('../kateb/memory.js');
+  Memory.reset();
+  Memory.learn('مكتب الأستاذ / سمير عادل فهمي المحامي\nالسيد / ⟦رامي⟧ فوزي جرجس بصفته\nالسيد / ناصر وهبة شاكر بصفته\nبرئاسة المستشار / عادل نبيل رشدي\nأمام محكمة بندر أول أسيوط الجزئية');
+  assert.deepStrictEqual(Memory.list('lawyer', 5), ['سمير عادل فهمي']);
+  assert.deepStrictEqual(Memory.list('judge', 5), ['عادل نبيل رشدي']);
+  assert.ok(Memory.list('person', 9).includes('ناصر وهبة شاكر') && !Memory.list('person', 9).some(n => /رامي/.test(n)), 'a name still yellow is not learned');
+  const h = Buffer.from(JSON.stringify({ lawyers: ['هدى كمال نصر'] })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  assert.strictEqual(Memory.fromHash('#k=abc&m=' + h), 1);
+  assert.ok(Memory.list('lawyer', 5)[0] === 'هدى كمال نصر');
+  assert.ok(/OFFICE MEMORY/.test(Memory.privatePrompt()) && Memory.privatePrompt().includes('ناصر وهبة شاكر'));
+  const pub = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank/memory.json'), 'utf8'));
+  assert.ok(Memory.publicPrompt(pub).includes('محكمة أسيوط الابتدائية') && Memory.publicPrompt(pub).includes('قسم أول أسيوط'));
+  Memory.reset();
 });

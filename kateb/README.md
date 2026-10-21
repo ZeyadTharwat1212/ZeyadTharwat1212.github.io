@@ -55,14 +55,21 @@ Layout rules on top of the office formats (v17, `office.js`):
 
     python tests/tools/build_templates.py <folder of one source .docx per type> kateb/templates <office corpus folder>
 
-## How a page is read
-1. The page is sent whole + as 2–3 sharper strips (1568px on Claude, 3072px on Gemini).
-2. **Read 1** and **read 2** run **at the same time** (Claude Sonnet 5.5, different instructions and temperature).
-   The first line of each reply says how far the page must be turned (ROT); a sideways page is turned and read again.
-3. The paper type is detected from the title (`Office.detect`) and its **formula bank** is loaded.
-4. If the reads agree word for word and nothing is doubtful → done. Otherwise a **judge** pass (Claude Opus 5.5, high
-   effort) sees the images, both reads, the formula bank of this paper type, and the earlier pages of the same paper
-   (names, case numbers, dates recur), and settles each disagreement from the ink.
+## How a page is read (v23)
+1. One small **Haiku** call reads the title (paper type → its formula bank), says PRINTED / HANDWRITTEN, and how far
+   the page is turned (ROT) — a sideways page is turned **before** the reads, never read twice.
+2. The page is sent whole + 4 sharper strips (1568px on Claude, 3072px on Gemini).
+3. **Read 1** (Opus 5.5) and **read 2** (Sonnet 5.5 in economy — a different model makes different mistakes)
+   run **at the same time**, with the formula bank, the glossary, the area memory (`bank/memory.json`: courts, police
+   stations, districts, notary offices) in the cached system block, and the earlier pages + learned words + the
+   device's private office memory (`memory.js`: lawyers, judges, people) in the per-page block. Read 1's images are
+   cached. A numbers pass (Sonnet, low effort) reads every number once more beside them.
+4. If the reads agree and nothing is doubtful → done (no judge). Otherwise the **short judge** (`Verify.marks` /
+   `Verify.decide`): Opus gets reading 1 with only the disputed places written ⟪n| reading 1 ‖ reading 2⟫ and its own
+   doubts ⟪n| ⟦…⟧⟫, looks at the (cached) images, and answers a few lines «n | final text» plus «FIX | wrong | right»
+   for any other misread number or word — instead of rewriting the whole page. Unreadable words are filled from the
+   context (in ⟦ ⟧), spelling slips of ordinary words are corrected, names and numbers come from the ink. Reads too far
+   apart (under 60% agreement or over 60 disputes) fall back to the full judge that rewrites the page.
 5. `Verify.guard` marks yellow any word neither read saw, any word a read doubted, and every word the reads
    disagreed on (legal mode; exam mode: numbers). `Bank.snap` then un-marks doubtful words that sit inside a known
    formula with matching neighbours (never names, numbers, dates or places).
@@ -143,13 +150,14 @@ To rebuild the bank after adding office files or web formulas (kept outside the 
   compared on real pages before being called improvements.
 
 ## Cost: 💰 وضع التوفير (default) vs 🎯 أقصى دقة (⚙️ الإعدادات, `kateb.mode`)
-The pipeline is the same in both (two reads → judge/check → numbers pass → guard → learning); the setting changes
-what each call costs. Economy: the page + 4 strips (5 images instead of 6), read A at medium effort, read B at low,
+The pipeline is the same in both (two reads → short judge → numbers pass → guard → learning); the setting changes
+what each call costs. Economy: the page + 4 strips (5 images instead of 6), read A on Opus at medium effort (the same
+effort as the judge, so its cached images are hit), read B on Sonnet at low,
 the numbers pass on Sonnet at low effort without the banks, judge/check on Opus at medium, 250 bank lines + 200
 glossary lines in the prompt, fast mode off. Best: 5 strips, high effort everywhere, every call on Opus, 400 + 500
 lines. The system prompt is split in two blocks: the stable one (bank + glossary) is cached across the calls of a
 page and across pages; the variable one (earlier pages, learned words) comes after it so it no longer breaks the
-cache. Rough list-price cost per legal page: economy $0.15–0.30, best $0.5–0.8, best + ⚡ about double.
+cache. Rough list-price cost per legal page (v23): economy about $0.20–0.30 (reading 1 output is most of it), best $0.5–0.8, best + ⚡ about double. v23 cut the economy page by roughly a third (Sonnet read 2, short judge, cached images, no rotation re-read) and the judge step from a full rewrite to a few lines.
 
 ## Free helpers on the device (v22): OCR for printed pages, the Arabic dictionary
 Two open-source pieces run inside the page, cost nothing and send nothing anywhere; both are on by default and can be

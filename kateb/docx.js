@@ -18,7 +18,7 @@ var DocxBuilder = (function () {
     var out = '';
     r.text.split('\t').forEach(function (part, i) {
       if (i) out += '<w:r>' + rpr + '<w:tab/></w:r>';
-      if (part) out += '<w:r>' + rpr + '<w:t xml:space="preserve">' + esc(part) + '</w:t></w:r>';
+      if (part) out += '<w:r>' + rpr + '<w:t xml:space="preserve">' + esc(rtlPara ? part.replace(/[0-9]/g, function (c) { return '٠١٢٣٤٥٦٧٨٩'[+c]; }) : part) + '</w:t></w:r>';   // v23: Arabic digits ٠-٩ in Arabic paragraphs (English papers keep 0-9)
     });
     return out;
   }

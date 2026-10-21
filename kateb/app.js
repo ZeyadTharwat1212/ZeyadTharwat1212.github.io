@@ -57,6 +57,9 @@
   (function boot() {
     if (!window.crypto || !crypto.subtle) { $('nokeyMsg').textContent = 'افتح الرابط من متصفح كروم أو سفاري الحديث.'; $('linkForm').hidden = true; show('nokey'); return; }
     var blob = Engine.blobFromHash();
+    /* «&m=…» in the private link: the office's lawyers and judges for the memory on this device (never in the public code) */
+    var mh = /[&#]m=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+    if (mh && typeof Memory !== 'undefined' && mh[1] !== Engine.lsGet('kateb.mblob')) { Memory.fromHash(location.hash); Engine.lsSet('kateb.mblob', mh[1]); }
     /* a link with a key this device has not unlocked yet (a new key) always asks for the password and replaces the old key */
     if (blob && blob !== Engine.lsGet('kateb.blob')) { KEY = null; show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
     var gb = Engine.audioBlobFromHash();
@@ -218,13 +221,17 @@
   /* one page: both reads at once, rotation taken from the reads, then the judge with the formula bank of the
      detected paper type, Verify.guard marks what the reads did not agree on, Bank.snap fixes doubtful words
      that sit inside a known formula. */
-  var CLAUDE = Engine.provider(KEY) === 'claude';
+  var CLAUDE = Engine.provider(KEY) === 'claude', SHORT = CLAUDE && !EXAM;     // SHORT: the short judge (only the disputed places)
   function rotOf(t) { var m = /^\s*ROT:\s*(0|90|180|270)/.exec(t || ''); return m ? +m[1] : 0; }
   function stripRot(t) { return String(t || '').replace(/^\s*ROT:\s*\d+\s*\n?/, ''); }
+  /* v23 legal pages: reading 1 on Opus with its images cached (the judge reuses them at 5% of the price), reading 2
+     on Sonnet — a different model makes different mistakes, so where they agree the text is safe, and it costs half.
+     Hanan's exams and «🎯 أقصى دقة» keep both reads on Opus. */
   async function readTwice(imgs, system, ctx) {
-    var eff = CLAUDE && !econ() ? 'high' : 'medium';               // «أقصى دقة» reads deeper
-    var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: eff, best: true, system: system, context: ctx });
-    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: econ() ? 'low' : eff, best: true, system: system, context: ctx })
+    var short = SHORT && econ();
+    var eff = CLAUDE && !econ() ? 'high' : 'medium';       // the same effort as the judge: a different effort would miss the image cache
+    var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: eff, best: true, cacheImages: SHORT, system: system, context: ctx });
+    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: econ() ? 'low' : eff, best: !short, system: system, context: ctx })
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return r.truncated ? null : Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     var ra = await pa, b = await pb;
     if (ra.model) usedModels[ra.model] = 1;
@@ -237,7 +244,7 @@
     var t = prev.join('\n----\n'); if (t.length > 6000) t = t.slice(-6000);
     return "\n\nEARLIER PAGES OF THE SAME PAPER (already transcribed; the same people, case number, court, dates and amounts recur — an unclear name or number on this page that matches one here is read the same way):\n" + t;
   }
-  var usedModels = {}, curAdded = {}, curDict = {}, glossaryBank;
+  var usedModels = {}, curAdded = {}, curDict = {}, glossaryBank, memoryBank;
   /* 📄 printed pages: free on-device OCR (Tesseract) + one correction call; 📖 Arabic dictionary on the device:
      words no dictionary, formula or earlier confirmation knows are marked for review — both on unless switched off */
   function ocrOn() { return Engine.lsGet('kateb.ocr') !== '0'; }
@@ -272,7 +279,9 @@
   async function glossaryPrompt() {
     if (EXAM || !CLAUDE || typeof Bank === 'undefined') return '';
     if (glossaryBank === undefined) { try { glossaryBank = await Bank.load('glossary'); } catch (e) { glossaryBank = null; } }
-    return glossaryBank ? PROMPTS.glossary(Bank.promptText(glossaryBank, econ() ? 200 : 500)) : '';
+    if (memoryBank === undefined) { try { memoryBank = await Bank.load('memory'); } catch (e) { memoryBank = null; } }
+    var pub = typeof Memory !== 'undefined' ? Memory.publicPrompt(memoryBank) : '';
+    return (glossaryBank ? PROMPTS.glossary(Bank.promptText(glossaryBank, econ() ? 200 : 500)) : '') + pub;
   }
   var TYPE_LABEL = { sihha: 'دعوى صحة توقيع', reannounce: 'إعادة إعلان', announce: 'إعلان بأصل الصحيفة', warning: 'إنذار', sahifa: 'صحيفة دعوى / استئناف', inherit_announce: 'إعلان في مادة الوراثة', inherit_request: 'طلب وراثة', sale: 'عقد بيع', gift: 'عقد هبة', price: 'إقرار سعر', iqrar: 'إقرار', memo: 'مذكرة' };
   async function readPage(p, label, step) {
@@ -287,13 +296,14 @@
     if (!EXAM && CLAUDE && typeof Office !== 'undefined') {
       try {
         var k = await Engine.generate(KEY, PROMPTS.kind(), [imgs.blobs[0]], { fast: true, signal: sig(), effort: 'low', maxTokens: 120 });
-        var kl = Engine.clean(k.text).split('\n');
+        var kl = Engine.clean(k.text).split('\n'), kr = /ROT\s*:?\s*(90|180|270)/i.exec(kl.slice(1).join(' '));
         type = Office.detect('[H] ' + kl[0]);
         printed = /PRINTED/i.test(kl.slice(1).join(' '));
+        if (kr) { p.canvas = Engine.rotated(p.base, +kr[1]); imgs = await Engine.pageImages(p.canvas, bands, side); }   // turned before the reads: no second pair of reads
       } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
     }
     if (type && typeof Bank !== 'undefined') bank = await Bank.load(type);
-    var system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '') + (await glossaryPrompt())) || undefined, ctx = (caseContext() + learnPrompt()) || undefined;
+    var system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '') + (await glossaryPrompt())) || undefined, ctx = (caseContext() + learnPrompt() + (!EXAM && typeof Memory !== 'undefined' ? Memory.privatePrompt() : '')) || undefined;
     var a = null, b = null, ocrUsed = false;
     /* a printed page: the free on-device OCR reads it and Claude corrects that text against one image — one call
        instead of two reads, a judge and a numbers pass; anything short of a usable OCR falls back to the full read */
@@ -314,7 +324,7 @@
       step(1, 'جارٍ قراءة ' + label + ' (قراءتان معاً' + (bank ? ' بصيغ «' + (TYPE_LABEL[type] || type) + '»' : '') + ')…');
       var pair = await readTwice(imgs, system, ctx);
       var rot = rotOf(pair.a) || rotOf(pair.b);
-      if (rot) { p.canvas = Engine.rotated(p.base, rot); imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system, ctx); }
+      if (rot) { p.canvas = Engine.rotated(p.canvas, rot); imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system, ctx); }
       a = stripRot(pair.a); b = pair.b ? stripRot(pair.b) : null;
       step(2, 'جارٍ مراجعة ' + label + ' مع الأصل والصيغ المعتادة…');
     }
@@ -327,7 +337,17 @@
     var numbersP = ocrUsed ? Promise.resolve(null) : Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, econ() ? { onWait: onWait, signal: sig(), effort: 'low', maxTokens: 2048 } : { onWait: onWait, signal: sig(), effort: 'high', best: true, maxTokens: 2048, system: system, context: ctx })
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     try {
+      var mk = SHORT && !ocrUsed ? Verify.marks(a, b || null) : null;
       if (ocrUsed) { /* the correction already saw the image: no judge, no second proofreading */ }
+      else if (mk && b && (mk.disputes || (mk.doubts && (!d.same || !skipCheck(a, bank))) || /⟦\s*؟+\s*⟧/.test(a))) {
+        /* the short judge: Opus looks only at the marked places (the disputes, and reading 1's doubts) and the numbers,
+           and answers in a few lines instead of rewriting the page — a fraction of the time and of the price */
+        step(2, 'جارٍ حسم ' + (mk.disputes ? mk.disputes + ' موضع اختلاف' : mk.doubts + ' كلمة غير مؤكدة') + ' مع الأصل…');
+        var rs = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mk.prompt, mk.disputes > 0), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true, cacheImages: true, maxTokens: 4096 });
+        if (rs.model) usedModels[rs.model] = 1;
+        var ds = Verify.decide(mk, Engine.clean(rs.text));
+        if (!rs.truncated) final = ds.text;
+      }
       else if (b && !d.same) {
         var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
         if (rj.model) usedModels[rj.model] = 1;
@@ -1392,6 +1412,8 @@
       var blob, all = sheets();
       marks().forEach(function (m) { m.classList.remove('cur'); });
       if (!EXAM) {
+        /* the reviewed paper teaches the memory its lawyers, judges, people and courts (what is still yellow is left out) */
+        try { if (typeof Memory !== 'undefined') Memory.learn(all.map(function (sh) { var c = sh.cloneNode(true); Array.prototype.forEach.call(c.querySelectorAll('mark'), function (m) { m.textContent = '⟦' + m.textContent + '⟧'; }); return htmlText(c.innerHTML); }).join('\n')); } catch (e) {}
         var paras = allParas(), key = tplKey();
         var zip = key ? await Office.build(JSZip, paras, key, { lawyer: lawyer() }) : DocxBuilder.build(JSZip, paras, { pageNumbers: true, title: 'مستند' });
         blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -1507,7 +1529,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '22';
+  var APP_VER = '23';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -1570,13 +1592,14 @@
     "- Court papers and contracts: the document's name is [H] (e.g. [H] دعوى صحة توقيع, [H] إعادة إعلان في الدعوى, [H] عقد بيع ابتدائي) and a case-number line right under it is [H] too; centered phrases such as «وأعلنته بالآتي», «بناء عليه», «الموضوع», «لذلك», «موقع العقار …» are [C]; every person served or every party is its own line starting with its number (1. / 1- ) and with the name in **bold**; contract clauses start with their ordinal as written («أولاً :», «بند تمهيدي :»); the property table «موقع العقار» is a [TABLE]; keep «ولأجل العلم ،،» as its own line. Do not write decorative marks.\n" +
     "- A table or a ruled list in columns: one line [TABLE] cell | cell | cell || cell | cell | cell (| between cells, || between rows, first row = the header as written).\n" +
     "- **text** = bold, __text__ = underlined, as in the source. Use a TAB between two items on one line far apart (e.g. a name and the word بصفته).\n" +
-    "- Wrap any word or number you are not fully sure of in ⟦ ⟧ like ⟦كلمة⟧. When you hesitate between readings, give them all inside the brackets, the most likely first, separated by |: ⟦محمود|محمد⟧ (at most three). Truly unreadable → ⟦؟⟧. Never silently guess names, numbers, dates or case numbers: mark them.\n" +
-    "- Faithful transcription: a spelling or grammar slip the hand really made stays as written (it is not yours to fix); an unusual but clearly written legal phrase stays as written; only a word you cannot read with confidence is marked. Context tells you what a word is likely to be — the ink tells you what it is.\n" +
+    "- Wrap any word or number you are not fully sure of in ⟦ ⟧ like ⟦كلمة⟧. When you hesitate between readings, give them all inside the brackets, the most likely first, separated by |: ⟦محمود|محمد⟧ (at most three).\n" +
+    "- NOTHING IS LEFT UNREAD: never write ⟦؟⟧, never leave a gap, never drop a word because it is hard. A word you cannot read is filled with the word the context demands — the sentence, the formula of this paper type, the earlier pages, the office memory — and wrapped in ⟦ ⟧ so the reviewer checks it. Names, numbers, dates and case numbers too: the best reading from the visible strokes, the earlier pages and the office memory, always in ⟦ ⟧ when not certain.\n" +
+    "- SPELLING IS CORRECTED AUTOMATICALLY: the typed paper must have no spelling mistakes. A slip of the hand in an ordinary word is written in the office's correct spelling (hamza forms أ إ آ ء ئ ؤ، ة not ه، ى not ي at the end, a missing or doubled letter, دعوه → دعوى، الى → إلى، علي → على where it means «on»). NEVER correct names of people, families or places, numbers, dates, amounts or case numbers — those stay exactly as the ink shows. The wording itself is not changed.\n" +
     "- Leave out: words crossed out or scribbled over (if they hid a name or field, write ........ in their place), stamps, seals, signatures, page numbers, handwritten court notes in the margins.\n" +
-    "- HOUSE STYLE OF THIS OFFICE (measured on 1,740 of its typed papers): ALL numbers and dates use Western digits 0-9, even when the hand wrote ٠-٩. Dates are day/month/year like 10/1/2020 or 7/10/2025 (never year first). Amounts like 250000 ج ( مائتان وخمسون ألف جنيه مصري لا غير ). Case references like رقم 2537 لسنة 2025. Keep the source's spelling and punctuation otherwise.\n" +
+    "- HOUSE STYLE OF THIS OFFICE (measured on 1,740 of its typed papers): ALL numbers and dates use Western digits 0-9, even when the hand wrote ٠-٩. Dates are day/month/year like 10/1/2020 or 7/10/2025 (never year first). Amounts like 250000 ج ( مائتان وخمسون ألف جنيه مصري لا غير ). Case references like رقم 2537 لسنة 2025. Keep the source's punctuation.\n" +
     "- Copy EVERY digit: a year has four digits (2022, not 202), an amount keeps all its zeros; read numbers from the strips digit by digit, never from memory.\n" +    "- Spelling is standard Egyptian legal Arabic as the office types it: دعوى (never دعوه or دعوة), إلى، على، بالآتي، صحة توقيع، محكمة، الأهلية القانونية، أسيوط. Final ة and ى are never written as ه or ي by mistake.\n" +
-    "- Do not add, remove, summarize, translate or correct the wording.\n" +
-    "- Letters are read from the ink, not from what the sentence expects: count the dots and their position for ب ت ث ن ي، ج ح خ، د ذ، ر ز، س ش، ص ض، ط ظ، ع غ، ف ق; ه vs ة and ي vs ى as written; hamza (أ إ آ ا) as written. A faint or missing dot is still a doubt: mark the word rather than resolve it from context.";
+    "- Do not add, remove, summarize, translate or reword.\n" +
+    "- Letters are read from the ink, not from what the sentence expects: count the dots and their position for ب ت ث ن ي، ج ح خ، د ذ، ر ز، س ش، ص ض، ط ظ، ع غ، ف ق; ه vs ة and ي vs ى as written; hamza (أ إ آ ا) as written. When a dot is faint or missing in an ordinary word, the sentence and the formulas decide which word it is; in a name or a number, give the best reading and mark it.";
   var EXAM_FORMAT =
     "OUTPUT FORMAT (plain text lines, no code fences, no commentary):\n" +
     "GRADE: <grade>   (first line, only if the paper names the grade, e.g. GRADE: Primary 4)\n" +
@@ -1636,8 +1659,16 @@
     fix: function (t) { return FIX_PROMPT + t; },
     numbers: function (b) { return stripsNote(b) + NUMBERS_PROMPT; },
     kind: function () { return KIND_PROMPT; },
-    read: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts (صحة توقيع، إعلانات، إنذارات، عقود بيع وهبة، إقرارات، مذكرات).\n\n" + stripsNote(b) + "Transcribe the ENTIRE page word for word, exactly as written. These papers follow fixed legal formulas: for each unclear word use the sentence's meaning, the standard phrasing of this kind of paper, and how the same letters look elsewhere on the page; if still unsure, mark it. Names, numbers, dates and amounts are never guessed from context.\n\n" + ROT_NOTE + LEGAL_FORMAT; },
+    read: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts (صحة توقيع، إعلانات، إنذارات، عقود بيع وهبة، إقرارات، مذكرات).\n\n" + stripsNote(b) + "Transcribe the ENTIRE page word for word, exactly as written. These papers follow fixed legal formulas: for each unclear word use the sentence's meaning, the standard phrasing of this kind of paper, and how the same letters look elsewhere on the page; if still unsure, write the most likely word and mark it. Names, numbers, dates and amounts come from the ink letter by letter and digit by digit, helped by the earlier pages and the office memory; when unsure, the best reading in ⟦ ⟧.\n\n" + ROT_NOTE + LEGAL_FORMAT; },
     read2: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts.\n\n" + stripsNote(b) + STRIPWISE + "Transcribe the ENTIRE page word for word. Names of people and places, numbers, dates and case numbers must be copied letter by letter; if any letter is unsure, mark the word.\n\n" + ROT_NOTE + LEGAL_FORMAT; },
+    decide: function (b, marked, two) {
+      return (two ? "Two transcribers copied the attached page independently. You settle the places where they differ. " : "You are proofreading a transcription of the attached page against the page itself. ") + stripsNote(b) +
+        "Below is reading 1. MARKED PLACES: " + (two ? "every place where reading 2 differs is written ⟪n| reading 1 ‖ reading 2⟫ (∅ = nothing there); " : "") + "a place reading 1 was unsure of is written ⟪n| ⟦…⟧⟫.\n" +
+        "For each marked place look closely at the ink of that line in the strips and write what the page really says — not what sounds better. A word the ink cannot settle is filled with the most likely word from the sentence, the formulas, the earlier pages and the office memory, wrapped in ⟦ ⟧ (never ⟦؟⟧, never empty when something is written there; ⟦a|b⟧ for two close readings). Ordinary words in the office's correct spelling; names, numbers and dates exactly as the ink shows.\n" +
+        "Then check EVERY number, date, amount and case number of reading 1 against the strips digit by digit (a year has four digits), and every word that is plainly misread or misspelled: for each error outside the marked places write one FIX line.\n" +
+        "Reply ONLY with lines in this format, no other text:\n<n> | <final text for place n>\nFIX | <the wrong text exactly as in reading 1, 1-5 words> | <the correct text>\n\n" +
+        "READING 1 (with the marked places):\n" + marked;
+    },
     printed: function (t) { return "This page is PRINTED (typed), and a free OCR engine on the device has already read it. Correct that text against the attached image of the page: fix every misread, glued, split or missing word, number, date and name; drop OCR garbage and repeated lines; restore the paragraphs and the layout tags. Add nothing the page does not show; where the image is unclear, mark the word as the format says.\n\n" + LEGAL_FORMAT + "\n\nOCR OUTPUT:\n" + t + "\n\nReply with the full corrected transcription only."; },
     check: function (b, d) { return "You are proofreading a transcription of the attached page against the page itself. " + stripsNote(b) + "Go through the draft line by line and word by word against the images. Fix every misread word, missing or extra word, wrong number, date, name, digit order, bold/underline, and any skipped or doubled paragraph. Remove ⟦ ⟧ from words you can now confirm; keep or add ⟦ ⟧ on anything still uncertain. Keep the same format.\n\n" + LEGAL_FORMAT + "\n\nDRAFT TRANSCRIPTION:\n" + d + "\n\nReply with the full corrected transcription only."; },
     judge: function (b, r1, r2, d) { return "Two transcribers copied the attached page independently. You decide the final text. " + stripsNote(b) + diffNote(d) + "For every disagreement look closely at the ink in the images and keep what the page really shows — not what sounds better. Also check that no paragraph is missing or doubled and that the layout tags are right. Where the image still does not settle a word, wrap it in ⟦ ⟧ — with the plausible readings separated by | when there are two or three, the most likely first (⟦محمود|محمد⟧).\n\n" + LEGAL_FORMAT + "\n\nREADING 1:\n" + r1 + "\n\nREADING 2:\n" + r2 + "\n\nReply with the one correct full transcription only."; }

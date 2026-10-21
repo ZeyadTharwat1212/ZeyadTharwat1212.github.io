@@ -41,6 +41,25 @@ var Office = (function () {
     return null;
   }
   /* «ومحله المختار مكتب الأستاذ / فلان المحامي» → stamp name and title */
+  /* v23: every number in the Word file in Arabic digits ٠-٩ (Zeyad: «الارقام كلها عربي») — shows the same on any Word,
+     whatever its Numeral setting. Dates keep their order: ١٠/١١/٢٠٢٠ reads exactly like the office's 10/11/2020. */
+  function arDig(t) { return String(t).replace(/[0-9]/g, function (c) { return '٠١٢٣٤٥٦٧٨٩'[+c]; }); }
+  /* v23: the lawyer's name is set in a big display font inside a fixed box; a long name wrapped and the box clipped
+     it («مكرمشة»). The name's size now shrinks until it fits one line of the box (never above the office's size). */
+  function fitStamp(xml, name) {
+    if (!xml || xml.indexOf('{{LAWYER}}') < 0) return xml;
+    var len = String(name || '').replace(/\s+/g, ' ').trim().length; if (!len) return xml;
+    var ext = /<wp:extent cx="(\d+)"/.exec(xml), cx = ext ? +ext[1] : 1896745;
+    var ins = /lIns="(\d+)"[^>]*rIns="(\d+)"/.exec(xml), pad = ins ? +ins[1] + +ins[2] : 182880;
+    var avail = (cx - pad) / 12700 - 4;                                  // pt
+    var fitPt = Math.floor(avail / (0.52 * len));                        // ~0.52 em per Arabic letter in display fonts
+    return xml.replace(/<w:p\b[^>]*>(?:(?!<\/w:p>)[\s\S])*?\{\{LAWYER\}\}[\s\S]*?<\/w:p>/g, function (para) {
+      return para.replace(/(<w:sz(?:Cs)? w:val=")(\d+)(")/g, function (m, a, v, b) {
+        var pt = Math.max(11, Math.min(+v / 2, fitPt)); return a + Math.round(pt * 2) + b;
+      }).replace(/(font-size:)([\d.]+)(pt)/g, function (m, a, v, b) { return a + Math.max(11, Math.min(+v, fitPt)) + b; });
+    });
+  }
+
   function lawyerFrom(text) {
     var t = String(text || '').replace(/[*_⟦⟧]/g, '').replace(/[\u064B-\u0652\u0670\u0640]/g, '').replace(/[ \t]+/g, ' ');
     var m = t.match(/مكتب\s+ال?[أاإ]ستاذ[ةه]?\s*\/?\s*([^.،,\n]+?)\s+(المحامي[ةه]?)(\s+بالنقض)?(?=[\s.،,]|$)/);
@@ -100,7 +119,7 @@ var Office = (function () {
     var rpr = rprSet(base || '<w:rPr/>', adds), out = '';
     String(text).split('\t').forEach(function (part, i) {
       if (i) out += '<w:r>' + rpr + '<w:tab/></w:r>';
-      if (part) out += '<w:r>' + rpr + '<w:t xml:space="preserve">' + esc(part) + '</w:t></w:r>';
+      if (part) out += '<w:r>' + rpr + '<w:t xml:space="preserve">' + esc(AR.test(text) || !/[A-Za-z]/.test(text) ? arDig(part) : part) + '</w:t></w:r>';
     });
     return out;
   }
@@ -149,12 +168,9 @@ var Office = (function () {
   /* the office types its running text at 0.8 line spacing in Simplified Arabic, whose glyphs are short; on any
      machine without that font (phones, most PCs) the lines overlap. Single spacing is the floor. */
   var LINE_FLOOR = 240;
-  function airy(ppr) {
-    return String(ppr || '').replace(/<w:spacing([^>]*)w:line="(\d+)"([^>]*)\/>/, function (m, a, v, b) {
-      if (/w:lineRule="(exact|atLeast)"/.test(a + b) || +v >= LINE_FLOOR) return m;
-      return '<w:spacing' + a + 'w:line="' + LINE_FLOOR + '"' + b + '/>';
-    });
-  }
+  /* v23: the Word file keeps the office's own line spacing exactly (Zeyad: «نفس التنسيق»); the office PCs have
+     Simplified Arabic, so 0.8 spacing prints as in their files. LINE_FLOOR now applies to the PDF only. */
+  function airy(ppr) { return String(ppr || ''); }
 
   function tableXml(T, rows) {
     var t = T.table, cols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 1);
@@ -250,7 +266,7 @@ var Office = (function () {
     };
     var body = paras.map(function (p) {
       if (p.xml) return p.xml;
-      var anchors = (p.anchors || '').replace(/\{\{(LAWYER|LAWYER_TITLE|AGENT|SUBJECT|BYREQ|AGENTOF|CLIENT)\}\}/g, function (m) { return esc(fill[m]); });
+      var anchors = fitStamp(p.anchors || '', L.name || '').replace(/\{\{(LAWYER|LAWYER_TITLE|AGENT|SUBJECT|BYREQ|AGENTOF|CLIENT)\}\}/g, function (m) { return esc(arDig(fill[m])); });
       return '<w:p>' + p.pPr + anchors + p.runs + '</w:p>';
     }).join('');
     var zip = await JSZip.loadAsync(await skeleton(key));
@@ -409,7 +425,7 @@ var Office = (function () {
     var pg = T.page || {};
     placedAnchors(T).forEach(function (a) {
       var i = Math.min(a.at, paras.length - 1); while (i > 0 && paras[i].role === 'table') i--;
-      var sh = shapeHtml(a.xml, fill, pg); if (!sh) return;
+      var sh = shapeHtml(fitStamp(a.xml, L.name || ''), fill, pg); if (!sh) return;
       paras[i].html = paras[i].html.replace(/^<p( style=")?/, function (m, q) { return q ? '<p style="position:relative;' : '<p style="position:relative"'; });
       if (/ostamp/.test(sh)) paras[i].html = paras[i].html.replace(/^(<p[^>]*>)/, '$1' + sh); else paras[i].html = paras[i].html.replace(/<\/p>$/, sh + '</p>');
     });

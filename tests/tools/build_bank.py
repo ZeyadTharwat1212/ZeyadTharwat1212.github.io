@@ -8,6 +8,8 @@ MIN_FILES different office files of the same paper type, or comes from a publish
 the fixed wording of the papers and never a client's data: a name, a number, an address or a date is a placeholder.
 """
 import collections, glob, json, os, re, sys, zipfile
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from privacy import keep  # never publish a line that carries a person's name (public site)
 
 MIN_FILES = 4
 TASHKEEL = re.compile('[ً-ْٰـ]')
@@ -131,11 +133,12 @@ def build(txt_root, docx_src, web_dir, out_dir):
         for k, e in per.get(typ, {}).items():
             if e['n'] < MIN_FILES or has_private(k): continue
             o = e['o'].most_common(1)[0][0]
-            lines.append({'t': o, 'n': e['n'], 'o': tokens(o)})
+            if keep(o): lines.append({'t': o, 'n': e['n'], 'o': tokens(o)})
             seen.add(k)
         for k, m in web.get(typ, []):
             if k in seen or len(k) < 12: continue
-            seen.add(k); lines.append({'t': m, 'n': 1, 'o': tokens(m), 'src': 'web'})
+            seen.add(k)
+            if keep(m): lines.append({'t': m, 'n': 1, 'o': tokens(m), 'src': 'web'})
         lines.sort(key=lambda x: -x['n'])
         # words tokens of the original spelling (for snap) must align with Bank.words(t): same split on whitespace
         with open(os.path.join(out_dir, typ + '.json'), 'w', encoding='utf8') as fh:

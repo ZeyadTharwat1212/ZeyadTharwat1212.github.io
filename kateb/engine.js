@@ -76,6 +76,8 @@ var Engine = (function () {
   async function generateClaude(key, prompt, blobs, opt) {
     var content = [];
     for (var i = 0; i < (blobs || []).length; i++) content.push({ type: 'image', source: { type: 'base64', media_type: blobs[i].type || 'image/jpeg', data: await blobToB64(blobs[i]) } });
+    /* the page images are the big input: cached on the first Opus call so the judge reads them at 5% of the price */
+    if (opt.cacheImages && content.length) content[content.length - 1].cache_control = { type: 'ephemeral' };
     content.push({ type: 'text', text: prompt });
     var body = { model: opt.model || (opt.fast ? CLAUDE_FAST : opt.best ? CLAUDE_BEST : CLAUDE_MODEL), max_tokens: opt.maxTokens || 8192, messages: [{ role: 'user', content: content }],
       output_config: { effort: opt.effort || 'medium' } };
@@ -238,7 +240,7 @@ var Engine = (function () {
      Prices are Anthropic's published list prices per million tokens: [input, output, cache write, cache read].
      The real bill is on console.anthropic.com; this is an estimate from the usage field of every reply. */
   var LS_USAGE = 'kateb.usage';
-  var PRICE = { 'claude-opus-5-5': [4, 20, 5, 0.2], 'claude-sonnet-5-5': [2, 10, 2.5, 0.2], 'claude-haiku-5-5': [0.1, 0.5, 0.125, 0.01] };
+  var PRICE = { 'claude-opus-5-5': [4, 20, 5, 0.2], 'claude-sonnet-5-5': [2, 10, 2.5, 0.1], 'claude-haiku-5-5': [0.1, 0.5, 0.125, 0.01] };
   function priceOf(model) {
     var m = String(model || ''), fast = /⚡/.test(m), ks = Object.keys(PRICE), p = PRICE['claude-opus-5-5'];
     for (var i = 0; i < ks.length; i++) if (m.indexOf(ks[i]) === 0) { p = PRICE[ks[i]]; break; }

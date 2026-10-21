@@ -212,6 +212,117 @@ var Verify = (function () {
   }
   function doubtRecall(ref, hypMarked) { var a = audit(ref, hypMarked); return a.wrong ? a.caught / a.wrong : 1; }
 
-  return { norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers, houseDigits: houseDigits, arabicDigits: arabicDigits, west: west, rtlDates: rtlDates, stripMarks: stripMarks };
+  /* ---------- the short judge: only the places the two reads disagree on (and reading 1's own doubts) ----------
+     marks(a, b) → { prompt: reading 1 with ⟪n| reading 1 ‖ reading 2⟫ and ⟪n| ⟦doubt⟧⟫ places, pieces, count, disputes, doubts }
+     or null when the reads are too far apart for a word-by-word decision (then the full judge rewrites the page).
+     decide(m, reply) applies the judge's «n | text» lines and «FIX | wrong | right» lines. */
+  function lcsPairs(a, b) {
+    var n = a.length, m = b.length;
+    if (n * m > 4e6) return null;
+    var L = new Array(n + 1);
+    for (var i = 0; i <= n; i++) L[i] = new Uint16Array(m + 1);
+    for (i = n - 1; i >= 0; i--) for (var j = m - 1; j >= 0; j--)
+      L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    var out = []; i = 0; j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { out.push([i, j]); i++; j++; }
+      else if (L[i + 1][j] >= L[i][j + 1]) i++;
+      else j++;
+    }
+    return out;
+  }
+  /* the page as one stream of segments; a line end is its own segment, a [FIG] line one plain segment */
+  function wordsOf(text) {
+    var flat = [], ws = [];
+    String(text || '').replace(/\r/g, '').split('\n').forEach(function (l, li) {
+      if (li) flat.push({ t: '\n', nl: true });
+      if (isFig(l)) { flat.push({ t: l }); return; }
+      segments(l).forEach(function (x) { if (x.word && !x.alt) { x.k = ws.length; ws.push({ core: x.core, t: x.t }); } flat.push(x); });
+    });
+    return { flat: flat, ws: ws };
+  }
+  function marks(a, b, maxMarks) {
+    var A = wordsOf(a), runs = [];
+    if (b) {
+      var B = wordsOf(b), pr = lcsPairs(A.ws.map(function (w) { return w.core; }), B.ws.map(function (w) { return w.core; }));
+      if (!pr) return null;
+      if (pr.length / Math.max(A.ws.length, B.ws.length, 1) < 0.6) return null;
+      var pi = -1, pj = -1;
+      pr.concat([[A.ws.length, B.ws.length]]).forEach(function (p) {
+        if (p[0] > pi + 1 || p[1] > pj + 1) runs.push({ a0: pi + 1, a1: p[0], b: B.ws.slice(pj + 1, p[1]).map(function (w) { return w.t; }).join(' ') });
+        pi = p[0]; pj = p[1];
+      });
+    }
+    if (runs.length > (maxMarks || 60)) return null;
+    var startAt = {}, before = {}, after = {}, inRun = {};
+    runs.forEach(function (r) {
+      if (r.a1 > r.a0) { startAt[r.a0] = r; for (var k = r.a0; k < r.a1; k++) inRun[k] = 1; }
+      else if (r.a0 > 0) (after[r.a0 - 1] = after[r.a0 - 1] || []).push(r);
+      else (before[0] = before[0] || []).push(r);
+    });
+    var pieces = [], n = 0, disputes = 0, doubts = 0, f = A.flat;
+    function mark(raw, other, kind) { n++; if (kind === 'd') disputes++; else doubts++; pieces.push({ n: n, raw: raw, b: other, kind: kind }); }
+    for (var i = 0; i < f.length; i++) {
+      var s = f[i];
+      if (s.k !== undefined && before[s.k]) { before[s.k].forEach(function (r) { mark('∅', r.b, 'd'); pieces.push({ t: ' ' }); }); delete before[s.k]; }
+      if (s.k !== undefined && startAt[s.k]) {
+        /* a disputed run of reading 1 words, possibly over a line end; doubt brackets and alternatives inside are dropped */
+        var r = startAt[s.k], raw = '', j = i, dq = false;
+        for (var q = pieces.length - 1; q >= 0 && !pieces[q].n && !/\n/.test(pieces[q].t); q--) {   // the run starts inside a doubt
+          if (pieces[q].t === '⟧') break;
+          if (pieces[q].t === '⟦') { pieces.splice(q, 1); dq = true; break; }
+        }
+        for (; j < f.length; j++) {
+          var c = f[j];
+          if (c.t === '⟦') { dq = true; continue; }
+          if (c.t === '⟧') { dq = false; continue; }
+          if (dq && (c.alt || c.t === '|')) continue;
+          raw += c.t;
+          if (c.k === r.a1 - 1) break;
+        }
+        if (dq) for (j = j + 1; j < f.length && !f[j].nl; j++) { if (f[j].t === '⟧') break; if (!(f[j].alt || f[j].t === '|')) raw += f[j].t; }
+        mark(raw.trim(), r.b || '∅', 'd'); i = j; continue;
+      }
+      if (s.t === '⟦') {
+        /* reading 1's own doubt that no disputed run touches */
+        var close = -1, touched = false;
+        for (var z = i + 1; z < f.length && !f[z].nl; z++) { if (f[z].t === '⟧') { close = z; break; } if (f[z].k !== undefined && (inRun[f[z].k] || before[f[z].k] || after[f[z].k])) touched = true; }
+        if (close > 0 && !touched) { mark(f.slice(i, close + 1).map(function (q) { return q.t; }).join(''), null, 'q'); i = close; continue; }
+      }
+      pieces.push({ t: s.t });
+      if (s.k !== undefined && after[s.k]) { after[s.k].forEach(function (r) { pieces.push({ t: ' ' }); mark('∅', r.b, 'd'); }); delete after[s.k]; }
+    }
+    Object.keys(after).forEach(function (k) { after[k].forEach(function (r) { pieces.push({ t: ' ' }); mark('∅', r.b, 'd'); }); });
+    var prompt = pieces.map(function (p) { return p.n ? '⟪' + p.n + '| ' + p.raw + (p.kind === 'd' ? ' ‖ ' + p.b : '') + '⟫' : p.t; }).join('');
+    return { prompt: prompt, pieces: pieces, count: n, disputes: disputes, doubts: doubts };
+  }
+  function bare(t) { return String(t || '').replace(/[⟦⟧]/g, '').replace(/\|[^\s]*/g, '').trim(); }
+  function decide(m, reply) {
+    var dec = {}, fixes = [], seen = 0;
+    String(reply || '').replace(/\r/g, '').split('\n').forEach(function (l) {
+      var f = /^\s*FIX\s*\|\s*(.+?)\s*\|\s*(.*?)\s*$/.exec(l);
+      if (f) { fixes.push([f[1], f[2]]); return; }
+      var d = /^\s*⟪?\s*(\d{1,3})\s*⟫?\s*[|:：]\s?(.*?)\s*$/.exec(l);
+      if (d && +d[1] >= 1 && +d[1] <= m.count) { dec[+d[1]] = d[2].replace(/^⟪\d+\|\s*/, '').replace(/⟫$/, ''); seen++; }
+    });
+    var text = m.pieces.map(function (p) {
+      if (!p.n) return p.t;
+      if (dec[p.n] !== undefined) { var v = dec[p.n].trim(); return v === '∅' || v === '' ? '' : v; }
+      if (p.kind === 'q') return p.raw;                               // no answer: the doubt stays as it was
+      if (p.raw === '∅') return '⟦' + bare(p.b) + '⟧';                // reading 2 only: kept, marked
+      if (p.b === '∅') return /\n/.test(p.raw) ? p.raw : '⟦' + bare(p.raw) + '⟧';
+      return /\n/.test(p.raw) ? p.raw : '⟦' + bare(p.raw) + '|' + bare(p.b) + '⟧';
+    }).join('');
+    var fixed = 0;
+    fixes.forEach(function (f) {
+      var w = f[0].trim(); if (w.length < 2 || f[1] === undefined) return;
+      var parts = text.split(w); if (parts.length !== 2) return;
+      text = parts[0] + f[1].trim() + parts[1]; fixed++;
+    });
+    text = text.split('\n').map(function (l) { return l.replace(/[ ]{2,}/g, ' ').replace(/ +$/, '').replace(/^ +/, ''); }).join('\n');
+    return { text: text, answered: seen, fixed: fixed };
+  }
+
+  return { marks: marks, decide: decide, norm: norm, tokens: tokens, compare: compare, disagreements: disagreements, guard: guard, stripMarkup: stripMarkup, cer: cer, wer: wer, audit: audit, doubtRecall: doubtRecall, checkNumbers: checkNumbers, houseDigits: houseDigits, arabicDigits: arabicDigits, west: west, rtlDates: rtlDates, stripMarks: stripMarks };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Verify;
