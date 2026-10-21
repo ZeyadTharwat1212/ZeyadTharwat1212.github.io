@@ -1140,11 +1140,14 @@
      does not hear) chunk by chunk, then Claude lays the words out as the written paper (no word added or changed). */
   var rec = null, liveRec = null, recBlob = null, recSecs = 0, liveParts = [], liveHist = [], waveT = null, recAudioUrl = null, docAudioUrl = null, pendingAudio = null, audioSel = null;
   function voiceScreen(back) {
+    var dr = null; try { dr = localStorage.getItem(LIVE_DRAFT); } catch (e) {}
     show('voice', back); if (!back) resetRec();
     $('voiceErr').hidden = true;
     if (!Speech.recSupported()) { $('voiceErr').hidden = false; $('voiceErr').textContent = 'هذا المتصفح لا يدعم التسجيل. افتح الرابط في كروم أو سفاري.'; $('recStart').disabled = true; }
     else $('recStart').disabled = false;
-    $('voiceHint').textContent = (Engine.audioKey(KEY) ? '' : 'لا يوجد مفتاح صوت: النص سيأتي من محرك المتصفح فقط. ') + 'اضغط «ابدأ التسجيل» واقرأ الورقة بصوت واضح. النص يظهر أثناء الكلام، وبعد الانتهاء يُحوَّل إلى مستند منسّق.';
+    $('voiceHint').textContent = 'اضغط «ابدأ التسجيل» واقرأ الورقة بصوت واضح. الكلام يُكتب أمامك أثناء الكلام؛ أوقف مؤقتًا وصحّح أي كلمة بنفسك ثم استكمل. في النهاية يُحوَّل إلى Word منسّق.';
+    /* a dictation left unfinished (the page was closed): it comes back */
+    if (dr && !$('liveEdit').value && !rec) { $('liveEdit').value = dr; saveLive(); $('liveBox').hidden = false; $('liveConvert').hidden = false; $('liveInterim').textContent = 'رجع آخر نص لم يُحوَّل بعد — استكمل التسجيل أو حوّله.'; }
   }
   function resetRec() {
     if (rec) { try { rec.stop(); } catch (e) {} } rec = null; if (liveRec) { try { liveRec.stop(); } catch (e) {} } liveRec = null;
@@ -1152,43 +1155,59 @@
     if (recAudioUrl) { try { URL.revokeObjectURL(recAudioUrl); } catch (e) {} recAudioUrl = null; }
     $('recStat').className = 'recstat'; $('recState').textContent = 'جاهز للتسجيل'; $('recTime').textContent = '٠:٠٠';
     $('recStart').hidden = false; $('recPause').hidden = true; $('recResume').hidden = true; $('recStop').hidden = true;
-    $('liveBox').hidden = true; $('liveText').innerHTML = ''; $('recDone').hidden = true; $('recNote').textContent = '';
+    $('liveBox').hidden = true; $('liveEdit').value = ''; $('liveInterim').textContent = ''; liveCaret = null; saveLive(); $('recDone').hidden = true; $('recNote').textContent = '';
+    $('liveConvert').hidden = true; if ($('recExact')) $('recExact').hidden = true;
     if ($('wave')) Speech.drawWave($('wave'), [], false);
   }
-  function liveHtml(interim) {
-    var out = '';
-    liveParts.forEach(function (p) {
-      if (p.paragraph) { out += '\n\n'; return; }
-      if (p.newline) { out += '\n'; }
-      if (!p.text) return;
-      out += (p.heading ? '<b>' : '') + escH(p.text) + (p.heading ? '</b>\n' : ' ');
+  /* v27: live dictation you can edit (Zeyad: «الكلام يظهر قدامه وهو بيتكلم ويقدر يوقف ويعدّل»). What the browser hears is
+     written into an editable box at the cursor — at the end unless the person tapped somewhere to correct — and the
+     grey line under it is what is still being heard. The box is the transcript: converting uses it as edited. */
+  var liveCaret = null, LIVE_DRAFT = 'kateb.liveDraft';
+  function saveLive() { try { var v = $('liveEdit').value; if (v.trim()) localStorage.setItem(LIVE_DRAFT, v); else localStorage.removeItem(LIVE_DRAFT); } catch (e) {} }
+  function liveInsert(p) {
+    var ta = $('liveEdit'), v = ta.value, at = liveCaret === null || liveCaret > v.length ? v.length : liveCaret, piece;
+    if (p.paragraph) piece = '\n\n';
+    else if (p.heading) piece = '\n' + p.text + '\n';
+    else piece = (p.newline ? '\n' : '') + (p.text || '');
+    if (!piece) return;
+    var before = v.slice(0, at), after = v.slice(at);
+    if (before && !/\s$/.test(before) && !/^\n/.test(piece)) piece = ' ' + piece;
+    if (after && !/^\s/.test(after) && !/\n$/.test(piece)) piece += ' ';
+    ta.value = before + piece + after;
+    var end = (before + piece).length;
+    if (liveCaret !== null) liveCaret = end;                      // keeps writing where the person put the cursor
+    try { if (document.activeElement === ta) ta.setSelectionRange(end, end); } catch (e) {}
+    if (liveCaret === null) ta.scrollTop = ta.scrollHeight;
+    saveLive();
+    $('liveConvert').hidden = !(rec && rec.state && rec.state() === 'paused') || !ta.value.trim();
+  }
+  /* the person moves the cursor or types: new speech goes there; back at the very end → follow the end again */
+  ['click', 'keyup', 'input', 'select', 'touchend'].forEach(function (ev) {
+    if ($('liveEdit')) $('liveEdit').addEventListener(ev, function () {
+      var ta = $('liveEdit'); liveCaret = ta.selectionEnd >= ta.value.length ? null : ta.selectionEnd;
+      if (ev === 'input') { saveLive(); if (!rec) $('liveConvert').hidden = !ta.value.trim(); }
     });
-    return out + (interim ? '<span class="interim">' + escH(interim) + '</span>' : '');
-  }
-  /* the live text as plain lines (the fallback transcript when there is no audio key) */
-  function liveText() {
-    var out = '';
-    liveParts.forEach(function (p) { if (p.paragraph) out += '\n\n'; else if (p.newline) out += '\n'; if (p.text) out += (p.heading ? '[H] ' : '') + p.text + (p.heading ? '\n' : ' '); });
-    return out.replace(/[ \t]+\n/g, '\n').trim();
-  }
+  });
+  /* the transcript for the layout step: the box as the person left it */
+  function liveText() { return $('liveEdit') ? $('liveEdit').value.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() : ''; }
   if ($('recStart')) {
     $('recStart').addEventListener('click', async function () {
       $('voiceErr').hidden = true;
       try { rec = await Speech.recorder({ onTick: function (sec, lvl) { $('recTime').textContent = Speech.fmtTime(sec); liveHist.push(lvl); if (liveHist.length > 400) liveHist.shift(); }, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } }); }
       catch (e) { $('voiceErr').hidden = false; $('voiceErr').textContent = Engine.errText({ code: 'mic' }); rec = null; return; }
-      liveParts = []; liveHist = [];
+      liveParts = []; liveHist = []; $('liveConvert').hidden = true;
       liveRec = Speech.live({ lang: 'ar-EG',
-        onInterim: function (t) { $('liveText').innerHTML = liveHtml(t); },
-        onFinal: function (t) { var p = $('cmdChk').checked ? Speech.command(t) : { text: t }; liveParts.push(p); $('liveText').innerHTML = liveHtml(''); $('liveText').scrollTop = $('liveText').scrollHeight; },
+        onInterim: function (t) { $('liveInterim').textContent = t; },
+        onFinal: function (t) { var p = $('cmdChk').checked ? Speech.command(t) : { text: t }; liveParts.push(p); $('liveInterim').textContent = ''; liveInsert(p); },
         onError: function (code) { if (code === 'not-allowed' || code === 'service-not-allowed') $('recNote').textContent = 'النص المباشر غير متاح؛ سيُفرَّغ التسجيل بعد الانتهاء.'; } });
-      $('liveBox').hidden = false; $('liveText').innerHTML = liveRec ? '' : '<span class="interim">النص المباشر غير متاح في هذا المتصفح؛ سيُفرَّغ التسجيل بعد الانتهاء.</span>';
+      $('liveBox').hidden = false; $('liveInterim').textContent = liveRec ? '' : 'الكتابة المباشرة غير متاحة في هذا المتصفح؛ سيُفرَّغ التسجيل بعد الانتهاء (يمكنك الكتابة في المربع بنفسك).';
       rec.start(); if (liveRec) liveRec.start();
       $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…';
       $('recStart').hidden = true; $('recPause').hidden = false; $('recStop').hidden = false; $('recDone').hidden = true;
       waveT = setInterval(function () { Speech.drawWave($('wave'), liveHist, rec && rec.state() === 'recording'); }, 100);
     });
-    $('recPause').addEventListener('click', function () { if (!rec) return; rec.pause(); if (liveRec) liveRec.pause(); $('recStat').className = 'recstat paused'; $('recState').textContent = 'متوقف مؤقتًا'; $('recPause').hidden = true; $('recResume').hidden = false; });
-    $('recResume').addEventListener('click', function () { if (!rec) return; rec.resume(); if (liveRec) liveRec.resume(); $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…'; $('recPause').hidden = false; $('recResume').hidden = true; });
+    $('recPause').addEventListener('click', function () { if (!rec) return; rec.pause(); if (liveRec) liveRec.pause(); $('recStat').className = 'recstat paused'; $('recState').textContent = 'متوقف مؤقتًا — صحّح النص إن أردت ثم استكمل'; $('recPause').hidden = true; $('recResume').hidden = false; $('liveInterim').textContent = ''; $('liveConvert').hidden = !liveText(); });
+    $('recResume').addEventListener('click', function () { if (!rec) return; rec.resume(); if (liveRec) liveRec.resume(); $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…'; $('recPause').hidden = false; $('recResume').hidden = true; $('liveConvert').hidden = true; });
     $('recStop').addEventListener('click', async function () {
       if (!rec) return;
       $('recStop').disabled = true;
@@ -1199,9 +1218,19 @@
       $('recPause').hidden = true; $('recResume').hidden = true; $('recStop').hidden = true; $('recStart').hidden = true;
       if (!recBlob.size || recSecs < 1) { $('voiceErr').hidden = false; $('voiceErr').textContent = 'لم يُسجَّل شيء. تأكد من الميكروفون وجرّب مرة أخرى.'; $('recStart').hidden = false; return; }
       recAudioUrl = URL.createObjectURL(recBlob); $('recAudio').src = recAudioUrl; $('recDone').hidden = false;
-      $('recNote').textContent = Engine.audioKey(KEY) ? 'اضغط «تحويل» ليُفرَّغ التسجيل بدقة ثم يُنسَّق كمستند.' : (liveText() ? 'لا يوجد مفتاح صوت: سيُستخدم النص المباشر كما سُمع.' : 'لا يوجد مفتاح صوت ولا نص مباشر: أضف مفتاح الصوت من الإعدادات ثم حوّل.');
+      var hasLive = !!liveText(), aKey = Engine.audioKey(KEY);
+      $('recConvert').hidden = !hasLive && !aKey; if ($('recExact')) $('recExact').hidden = !(hasLive && aKey);
+      $('recNote').textContent = hasLive ? 'راجع النص في المربع وصحّح ما تريد، ثم اضغط «تحويل النص إلى Word» — يُنسَّق كما كتبته.' : aKey ? 'اضغط «تحويل» ليُفرَّغ التسجيل ثم يُنسَّق كمستند.' : 'لا يوجد نص ولا مفتاح صوت: اكتب في المربع أو أضف مفتاح الصوت من الإعدادات.';
     });
-    $('recConvert').addEventListener('click', function () { if (recBlob) convertAudio(recBlob, { source: 'voice', seconds: recSecs, live: liveText() }); });
+    /* the edited box is the transcript (no second transcription: the person's corrections stay, and it costs less);
+       without any text the recording itself is transcribed by the audio key */
+    $('recConvert').addEventListener('click', function () { if (recBlob) convertAudio(recBlob, { source: 'voice', seconds: recSecs, live: liveText(), useLive: !!liveText() }); });
+    if ($('recExact')) $('recExact').addEventListener('click', function () { if (recBlob) convertAudio(recBlob, { source: 'voice', seconds: recSecs, live: liveText(), useLive: false }); });
+    $('liveConvert').addEventListener('click', async function () {
+      if (!liveText()) return;
+      if (rec) { if (liveRec) liveRec.stop(); var r = await rec.stop(); rec = null; clearInterval(waveT); recBlob = r.blob; recSecs = r.seconds; }
+      convertAudio(recBlob && recBlob.size ? recBlob : null, { source: 'voice', seconds: recSecs, live: liveText(), useLive: true });
+    });
     $('recAgain').addEventListener('click', function () { if (!recBlob || window.confirm('حذف هذا التسجيل والبدء من جديد؟')) resetRec(); });
   }
   function audioScreen(back) {
@@ -1233,7 +1262,8 @@
     var t0 = Date.now();
     try {
       var aKey = Engine.audioKey(KEY), transcript = '', seconds = o.seconds || 0;
-      if (aKey) {
+      if (o.useLive && o.live) transcript = o.live;                 // the dictation box, as the person corrected it
+      else if (aKey && blob) {
         var chunks;
         try { var cd = await Speech.toChunks(blob); chunks = cd.chunks; seconds = cd.seconds || seconds; }
         catch (e) { if (GEMINI_AUDIO.test(blob.type || '') && blob.size < 19 * 1048576) chunks = [{ from: 0, to: seconds, blob: blob }]; else throw { code: 'audio_decode' }; }
@@ -1271,7 +1301,8 @@
       curAdded = {};
       var res = await toResult(text); res.text = text; res.type = type; res.secs = Math.round((Date.now() - t0) / 1000); res.agree = null;
       results = [res];
-      pendingAudio = { blob: blob, source: o.source, transcript: transcript, seconds: seconds };
+      pendingAudio = blob ? { blob: blob, source: o.source, transcript: transcript, seconds: seconds } : null;
+      if (o.useLive) { try { localStorage.removeItem(LIVE_DRAFT); } catch (e) {} }
       setProgress(3, 3, 'تم'); setStage('all');
       finish();
     } catch (e) {
@@ -1555,7 +1586,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '26';
+  var APP_VER = '27';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

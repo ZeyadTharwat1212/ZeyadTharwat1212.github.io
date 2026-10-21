@@ -54,7 +54,7 @@ async function fakeWorld(context, answers, calls) {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
     const kind = /OCR OUTPUT:/.test(prompt) ? 'printed' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
-    calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta, ocr: kind === 'printed' ? prompt.split('OCR OUTPUT:\n')[1] : undefined });
+    calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, p: prompt.slice(0, 6000), model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta, ocr: kind === 'printed' ? prompt.split('OCR OUTPUT:\n')[1] : undefined });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
     const short = /MARKED PLACES/.test(prompt);
     const text = short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
@@ -878,14 +878,15 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(parts[0].heading && parts[0].text === 'إعادة إعلان في الدعوى', 'عنوان → heading');
     assert.ok(/نقطة|\.$/.test(parts[1].text) && parts[1].text.endsWith('.'), '«نقطة» at the end → full stop: ' + parts[1].text);
     assert.ok(parts[2].paragraph, '«فقرة جديدة» → paragraph');
-    assert.ok((await page.innerHTML('#liveText')).includes('<b>إعادة إعلان في الدعوى</b>'), 'live text shows the heading');
+    assert.ok((await page.inputValue('#liveEdit')).includes('إعادة إعلان في الدعوى\n'), 'live text shows the heading on its own line');
     await page.click('#recPause'); assert.ok(await page.locator('.recstat.paused').count());
     await page.click('#recResume'); assert.ok(await page.locator('.recstat.on').count());
     await page.waitForTimeout(1500);
     await page.click('#recStop'); await page.waitForSelector('#recDone:not([hidden])', { timeout: 10000 });
     assert.match(await page.textContent('#recState'), /انتهى التسجيل/);
     assert.ok((await page.getAttribute('#recAudio', 'src') || '').startsWith('blob:'), 'playback of the recording');
-    await page.click('#recConvert');
+    assert.ok(await page.locator('#recExact').isVisible(), 'with an audio key the recording can still be transcribed again exactly');
+    await page.click('#recExact');
     await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
     assert.ok(calls.audio && calls.audio.length === 1 && calls.audio[0].mime === 'audio/wav' && calls.audio[0].bytes > 1000, 'the recording went to the audio key as one WAV chunk: ' + JSON.stringify(calls.audio && calls.audio.map(a => [a.mime, a.bytes])));
     assert.match(calls.audio[0].prompt, /Spoken punctuation commands/);
@@ -901,6 +902,41 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(await page.locator('#audioBox').isVisible(), 'the recording is stored with the document');
     const d = await page.evaluate(() => { const d = window.__test.doc(); return { source: d.source, hasAudio: !!d.audio, transcript: d.transcript }; });
     assert.ok(d.source === 'voice' && d.hasAudio && /المحضر سالف الذكر/.test(d.transcript), JSON.stringify(d));
+  }));
+
+  await step('v27 live dictation you can edit: the words are written into the box while speaking; pause, correct a word, put the cursor in the middle, resume → the new words go at the cursor; convert uses the corrected box (no second transcription) and the draft survives a reload', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => {
+      localStorage.setItem('kateb.audiokey', 'AIza-test');
+      window.__phrases = ['بناء علي طلب السيد مينا سامي', 'ومحله المختار مكتب الأستاذ'];
+      window.SpeechRecognition = window.webkitSpeechRecognition = function () {
+        const self = this; let t = null, on = false;
+        this.start = () => { on = true; const next = () => { if (!on || !window.__phrases.length) return; const ph = window.__phrases.shift();
+          self.onresult && self.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: ph.slice(0, 5) }], { isFinal: false })] });
+          t = setTimeout(() => { self.onresult && self.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: ph }], { isFinal: true })] }); t = setTimeout(next, 120); }, 120); }; t = setTimeout(next, 80); };
+        this.stop = () => { on = false; clearTimeout(t); self.onend && self.onend(); };
+        this.abort = this.stop;
+      };
+    });
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
+    await page.waitForFunction(() => /مكتب الأستاذ/.test(document.getElementById('liveEdit').value), null, { timeout: 15000 });
+    await page.click('#recPause');
+    assert.ok(await page.locator('#liveConvert').isVisible(), 'paused: the text can be converted right away');
+    /* the person corrects a misheard name and puts the cursor after «سامي» */
+    await page.evaluate(() => { const ta = document.getElementById('liveEdit'); ta.focus(); ta.value = ta.value.replace('مينا سامي', 'مينا سامح'); ta.dispatchEvent(new Event('input')); const at = ta.value.indexOf('سامح') + 4; ta.setSelectionRange(at, at); ta.dispatchEvent(new Event('select')); });
+    await page.evaluate(() => { window.__phrases.push('بالغ سن الرشد'); });
+    await page.click('#recResume');
+    await page.waitForFunction(() => /بالغ سن الرشد/.test(document.getElementById('liveEdit').value), null, { timeout: 10000 });
+    const v = await page.inputValue('#liveEdit');
+    assert.ok(/مينا سامح بالغ سن الرشد ومحله المختار/.test(v), 'the new words went where the cursor was, the correction kept: ' + v);
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    assert.ok((await page.inputValue('#liveEdit')).includes('مينا سامح'), 'an unfinished dictation comes back after a reload');
+    await page.click('#liveConvert');
+    await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
+    assert.ok(!calls.audio || !calls.audio.length, 'no second transcription of the audio');
+    const fmt = calls.claude.find(c => c.kind === 'format'); assert.ok(fmt && /مينا سامح بالغ سن الرشد/.test(fmt.p), 'laid out by Claude from the corrected box');
+    assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.liveDraft')), null, 'the draft is cleared once converted');
   }));
 
   await step('audio file: upload → name and duration → convert needs the audio key (clear message), with it the file is decoded to WAV and transcribed; without Claude the transcript itself is the document', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: TRANSCRIPT, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {

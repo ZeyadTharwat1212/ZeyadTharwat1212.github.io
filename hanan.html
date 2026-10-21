@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=26">
+<link rel="stylesheet" href="kateb/style.css?v=27">
 </head>
 <body>
 <main>
@@ -117,10 +117,16 @@
     </div>
     <label class="chk"><input type="checkbox" id="cmdChk" checked> تنفيذ الأوامر المنطوقة («نقطة»، «فاصلة»، «سطر جديد»، «فقرة جديدة»، «عنوان»)</label>
   </div>
-  <div class="card live" id="liveBox" hidden><div class="small">النص المسموع (الرمادي ما زال يتغير):</div><div class="livetext" id="liveText" dir="rtl"></div></div>
+  <div class="card live" id="liveBox" hidden>
+    <div class="small" id="liveHelp">الكلام يُكتب هنا وأنتِ تتكلمين. أوقفي مؤقتًا، اضغطي على أي كلمة وصحّحيها، ثم استكملي: الكلام الجديد يُكتب مكان المؤشر.</div>
+    <textarea class="livetext" id="liveEdit" dir="auto" spellcheck="false" placeholder="سيظهر هنا ما تقولينه…"></textarea>
+    <div class="liveinterim" id="liveInterim" dir="auto"></div>
+    <div class="actions2"><button class="btn go" id="liveConvert" type="button" hidden>✨ تحويل النص إلى Word</button></div>
+  </div>
   <div class="card" id="recDone" hidden>
     <audio id="recAudio" controls preload="metadata"></audio>
-    <div class="actions2"><button class="btn go" id="recConvert" type="button">✨ تحويل التسجيل إلى Word</button><button class="btn" id="recAgain" type="button">🗑️ تسجيل جديد</button></div>
+    <div class="actions2"><button class="btn go" id="recConvert" type="button">✨ تحويل النص إلى Word</button><button class="btn" id="recAgain" type="button">🗑️ تسجيل جديد</button></div>
+    <button class="btn sm" id="recExact" type="button" hidden>🎧 تفريغ التسجيل من جديد بدقة أعلى (يتجاهل تعديلاتك)</button>
     <p class="small" id="recNote"></p>
   </div>
 </section>
@@ -276,19 +282,19 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=26"></script>
-<script src="kateb/scan.js?v=26"></script>
-<script src="kateb/verify.js?v=26"></script>
-<script src="kateb/arabic.js?v=26"></script>
-<script src="kateb/bank.js?v=26"></script>
-<script src="kateb/store.js?v=26"></script>
-<script src="kateb/learn.js?v=26"></script>
-<script src="kateb/fields.js?v=26"></script>
-<script src="kateb/speech.js?v=26"></script>
-<script src="kateb/raster.js?v=26"></script>
-<script src="kateb/docx.js?v=26"></script>
-<script src="kateb/exam.js?v=26"></script>
+<script src="kateb/engine.js?v=27"></script>
+<script src="kateb/scan.js?v=27"></script>
+<script src="kateb/verify.js?v=27"></script>
+<script src="kateb/arabic.js?v=27"></script>
+<script src="kateb/bank.js?v=27"></script>
+<script src="kateb/store.js?v=27"></script>
+<script src="kateb/learn.js?v=27"></script>
+<script src="kateb/fields.js?v=27"></script>
+<script src="kateb/speech.js?v=27"></script>
+<script src="kateb/raster.js?v=27"></script>
+<script src="kateb/docx.js?v=27"></script>
+<script src="kateb/exam.js?v=27"></script>
 
-<script src="kateb/app.js?v=26"></script>
+<script src="kateb/app.js?v=27"></script>
 </body>
 </html>
