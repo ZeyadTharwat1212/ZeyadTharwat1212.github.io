@@ -334,11 +334,11 @@ test('office: the client name for the file name, like the office names its files
   assert.strictEqual(Office.partyName('لا اسم هنا'), '');
 });
 
-test('engine: fast-mode usage is priced at twice the list price; the switch defaults to on', () => {
+test('engine: fast-mode usage is priced at twice the list price; the switch defaults to off (2× price)', () => {
   const Engine = require('../kateb/engine.js');
   assert.deepStrictEqual(Engine.priceOf('claude-opus-5-5 ⚡'), [8, 40, 10, 0.4]);
   assert.deepStrictEqual(Engine.priceOf('claude-opus-5-5'), [4, 20, 5, 0.2]);
-  assert.strictEqual(Engine.fastOn(), true); Engine.setFast(false); assert.strictEqual(Engine.fastOn(), false); Engine.setFast(true);
+  assert.strictEqual(Engine.fastOn(), false); Engine.setFast(true); assert.strictEqual(Engine.fastOn(), true); Engine.setFast(false);
 });
 
 /* ---------- KATEB18: alternatives, fields, glossary ---------- */
@@ -416,4 +416,22 @@ test('raster: a PDF of JPEG pages has a valid structure (header, pages, xref, tr
   assert.ok(txt.includes('0 9\n0000000000 65535 f'), 'nine entries: the free one, catalog, pages, 2 × (page, content, image)');
   const off = +txt.match(/\n(\d{10}) 00000 n \n/)[1]; assert.strictEqual(txt.slice(off, off + 7), '1 0 obj');
   assert.ok(txt.trimEnd().endsWith('%%EOF'));
+});
+
+test('Dict: the AyaSpell dictionary on the device — legal words pass, misspellings fail, spelling variants tolerated, marks outside existing doubts, flood guard', async () => {
+  const Dict = require('../kateb/dict.js');
+  await Dict.loadText(fs.readFileSync(path.join(__dirname, '..', 'kateb', 'dict', 'ar.aff.txt'), 'utf8'), fs.readFileSync(path.join(__dirname, '..', 'kateb', 'dict', 'ar.dic.txt'), 'utf8'));
+  assert.ok(Dict.size() > 290000);
+  const good = 'المحكمة وبموجب بالمصروفات للمدعى المستأنف أتعاب المحاماة الابتدائية بناحية وأعلنته وسلمته فلهذه حضورياً جنيهاً صحيفة إنذار إيجارية انتقلت مخاطباً وحيث الطاعن إعلام وراثة انحصر إرثه زوجته وأولاده القصر نلتمس شكلاً ندفع الاختصاص التقادم صداق منقولات تطليق حضانة محمد أحمد مصطفى فاطمة'.split(' ');
+  assert.deepStrictEqual(good.filter(w => !Dict.correct(w)), [], 'every legal word is known');
+  const bad = 'المحكمةخ وبموحب بالمصروفاط للمدغى المستأنق أطعاب الكاءن حضوريانص والدفاعز'.split(' ');
+  assert.deepStrictEqual(bad.filter(w => Dict.correct(w)), [], 'every misspelling is caught');
+  assert.ok(Dict.correct('الاعلان') && Dict.correct('علي') && Dict.correct('المدعي') && Dict.correct('محكمه'), 'ى/ي, ة/ه and the dropped hamza are tolerated');
+  assert.ok(Dict.correct('10/1/2020') && Dict.correct('Ahmed') && Dict.correct(''), 'only plain Arabic words are judged');
+  const m = Dict.mark('[H] دعوى صحة توقيع\nالسيد / محمد عبد الرحمن والمقيم بناحية ⟦الوليدية⟧ مركز أسيوط وسلمته صورة الاعلان للعلم **المحكمةخ** والدفاعز', w => w === 'أسيوط');
+  assert.deepStrictEqual(m.words, ['المحكمةخ', 'والدفاعز']);
+  assert.ok(m.text.includes('⟦الوليدية⟧') && m.text.includes('**⟦المحكمةخ⟧**') && m.text.includes('⟦والدفاعز⟧') && !m.text.includes('⟦أسيوط⟧'), m.text);
+  const flood = Dict.mark('كلمة غير معروفة: خزعبل قرطبل مرقبل زبرجل طرمبل', null);
+  assert.ok(flood.skipped && flood.text.indexOf('⟦') < 0, 'too many unknown words → nothing marked');
+  assert.strictEqual(Dict.unknown('بناء عليه نلتمس الحكم', null).words.length, 0);
 });

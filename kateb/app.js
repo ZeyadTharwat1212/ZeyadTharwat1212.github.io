@@ -237,7 +237,33 @@
     var t = prev.join('\n----\n'); if (t.length > 6000) t = t.slice(-6000);
     return "\n\nEARLIER PAGES OF THE SAME PAPER (already transcribed; the same people, case number, court, dates and amounts recur — an unclear name or number on this page that matches one here is read the same way):\n" + t;
   }
-  var usedModels = {}, curAdded = {}, glossaryBank;
+  var usedModels = {}, curAdded = {}, curDict = {}, glossaryBank;
+  /* 📄 printed pages: free on-device OCR (Tesseract) + one correction call; 📖 Arabic dictionary on the device:
+     words no dictionary, formula or earlier confirmation knows are marked for review — both on unless switched off */
+  function ocrOn() { return Engine.lsGet('kateb.ocr') !== '0'; }
+  function dictOn() { return Engine.lsGet('kateb.dict') !== '0'; }
+  /* words the dictionary need not know: the office's formulas, the glossary, this hand's learned words, the names */
+  function knownWord(bank, text) {
+    var set = {};
+    function addLines(bk) { if (bk && bk.lines) bk.lines.forEach(function (l) { (l.o || []).forEach(function (w) { var c = String(w).replace(/[^ء-ي]/g, ''); if (c) set[c] = 1; }); }); }
+    addLines(bank); addLines(glossaryBank);
+    learnItems.forEach(function (r) { if (r.profile === profile()) { set[r.from] = 1; if (r.to) set[r.to] = 1; } });
+    if (text && typeof Fields !== 'undefined') Fields.extract(text).names.forEach(function (n) { n.split(/\s+/).forEach(function (w) { var c = w.replace(/[^ء-ي]/g, ''); if (c) set[c] = 1; }); });
+    return function (w) { return !!set[w]; };
+  }
+  /* an OCR output worth correcting rather than reading again: Tesseract's own confidence, mostly Arabic letters, and
+     — when the dictionary is loaded — most of its words are real words (scribbles and photos of handwriting are not) */
+  function ocrGood(o) {
+    if (!Ocr.usable(o)) return false;
+    if (dictOn() && typeof Dict !== 'undefined' && Dict.ready()) return Dict.share(o.text) >= 0.6;
+    return o.conf >= 65;
+  }
+  /* economy: the extra proofreading call is kept for pages with several doubts or with words no dictionary knows */
+  function skipCheck(a, bank) {
+    if (!econ() || EXAM || !dictOn() || typeof Dict === 'undefined' || !Dict.ready()) return false;
+    if ((a.match(/⟦/g) || []).length > 2) return false;
+    var u = Dict.unknown(a, knownWord(bank, a)); return !!u && u.words.length === 0;
+  }
   /* «💰 وضع التوفير» (default) or «🎯 أقصى دقة»: the same pipeline, cheaper settings — fewer strips, medium
      effort on the reads (the thinking tokens are the big variable), the numbers pass on Sonnet, shorter banks */
   function econ() { return Engine.lsGet('kateb.mode') !== 'best'; }
@@ -257,35 +283,56 @@
     var bands = CLAUDE ? (econ() ? 4 : 5) : 3;            // more strips = more pixels per line of handwriting (and more image tokens)
     var imgs = await Engine.pageImages(p.canvas, bands, side);
     /* a quick look at the title tells the paper type, so both full reads get the office's formulas for it */
-    var type = null, bank = null;
+    var type = null, bank = null, printed = false;
     if (!EXAM && CLAUDE && typeof Office !== 'undefined') {
       try {
         var k = await Engine.generate(KEY, PROMPTS.kind(), [imgs.blobs[0]], { fast: true, signal: sig(), effort: 'low', maxTokens: 120 });
-        type = Office.detect('[H] ' + Engine.clean(k.text).split('\n')[0]);
+        var kl = Engine.clean(k.text).split('\n');
+        type = Office.detect('[H] ' + kl[0]);
+        printed = /PRINTED/i.test(kl.slice(1).join(' '));
       } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
     }
     if (type && typeof Bank !== 'undefined') bank = await Bank.load(type);
     var system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '') + (await glossaryPrompt())) || undefined, ctx = (caseContext() + learnPrompt()) || undefined;
-    step(1, 'جارٍ قراءة ' + label + ' (قراءتان معاً' + (bank ? ' بصيغ «' + (TYPE_LABEL[type] || type) + '»' : '') + ')…');
-    var pair = await readTwice(imgs, system, ctx);
-    var rot = rotOf(pair.a) || rotOf(pair.b);
-    if (rot) { p.canvas = Engine.rotated(p.base, rot); imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system, ctx); }
-    var a = stripRot(pair.a), b = pair.b ? stripRot(pair.b) : null;
-    step(2, 'جارٍ مراجعة ' + label + ' مع الأصل والصيغ المعتادة…');
+    var a = null, b = null, ocrUsed = false;
+    /* a printed page: the free on-device OCR reads it and Claude corrects that text against one image — one call
+       instead of two reads, a judge and a numbers pass; anything short of a usable OCR falls back to the full read */
+    if (printed && CLAUDE && ocrOn() && typeof Ocr !== 'undefined' && Ocr.supported() && PROMPTS.printed) {
+      try {
+        step(1, 'الورقة مطبوعة: جارٍ قراءتها على الجهاز بالقارئ المجاني…');
+        var o = await Ocr.read(p.canvas, { signal: sig(), onProgress: function (t, pr) { if (t) step(1, t + (pr !== null && pr < 1 ? ' ' + Math.round(pr * 100) + '٪' : '')); } });
+        if (ocrGood(o)) {
+          step(2, 'جارٍ تصحيح القراءة مع الصورة (طلب واحد)…');
+          var rp = await Engine.generate(KEY, PROMPTS.printed(o.text), [imgs.blobs[0]], { onWait: onWait, signal: sig(), temperature: 0.1, effort: econ() ? 'low' : 'medium', best: !econ(), system: system, context: ctx });
+          if (rp.model) usedModels[rp.model] = 1;
+          var tp = stripRot(Engine.clean(rp.text));
+          if (tp.length > o.text.length * 0.5 && !rp.truncated) { a = tp; ocrUsed = true; }
+        }
+      } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit' || e.code === 'cancelled')) throw e; }
+    }
+    if (!ocrUsed) {
+      step(1, 'جارٍ قراءة ' + label + ' (قراءتان معاً' + (bank ? ' بصيغ «' + (TYPE_LABEL[type] || type) + '»' : '') + ')…');
+      var pair = await readTwice(imgs, system, ctx);
+      var rot = rotOf(pair.a) || rotOf(pair.b);
+      if (rot) { p.canvas = Engine.rotated(p.base, rot); imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system, ctx); }
+      a = stripRot(pair.a); b = pair.b ? stripRot(pair.b) : null;
+      step(2, 'جارٍ مراجعة ' + label + ' مع الأصل والصيغ المعتادة…');
+    }
     if (!type && !EXAM && typeof Office !== 'undefined') {
       type = Office.detect(a);
       if (type && typeof Bank !== 'undefined') { bank = await Bank.load(type); system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '') + (await glossaryPrompt())) || undefined; }
     }
     var final = a, d = b ? Verify.disagreements(a, b) : null;
     /* the numbers pass runs beside the judge: every number, date and amount read once more on its own */
-    var numbersP = Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, econ() ? { onWait: onWait, signal: sig(), effort: 'low', maxTokens: 2048 } : { onWait: onWait, signal: sig(), effort: 'high', best: true, maxTokens: 2048, system: system, context: ctx })
+    var numbersP = ocrUsed ? Promise.resolve(null) : Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, econ() ? { onWait: onWait, signal: sig(), effort: 'low', maxTokens: 2048 } : { onWait: onWait, signal: sig(), effort: 'high', best: true, maxTokens: 2048, system: system, context: ctx })
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     try {
-      if (b && !d.same) {
+      if (ocrUsed) { /* the correction already saw the image: no judge, no second proofreading */ }
+      else if (b && !d.same) {
         var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
         if (rj.model) usedModels[rj.model] = 1;
         var tj = Engine.clean(rj.text); if (tj.length > Math.min(a.length, b.length) * 0.6 && !rj.truncated) final = tj;
-      } else if (!b || (bank && a.indexOf('⟦') >= 0)) {
+      } else if (!b || (bank && a.indexOf('⟦') >= 0 && !skipCheck(a, bank))) {
         /* one proofreading pass: second read failed, or both agree but doubts remain and the formulas may settle them */
         var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
         var tc = Engine.clean(rc.text); if (tc.length > a.length * 0.6 && !rc.truncated) final = tc;
@@ -311,10 +358,16 @@
       }
     }
     if (bank) { var sn = Bank.snap(text, bank); text = sn.text; snapped = sn.fixed; }
+    /* the dictionary's own marks: a word nobody knows (no dictionary, no formula, never confirmed) is shown for review */
+    var dictWords = []; curDict = {};
+    if (!EXAM && dictOn() && typeof Dict !== 'undefined' && Dict.ready()) {
+      var dm = Dict.mark(text, knownWord(bank, text)); text = dm.text; dictWords = dm.words;
+      dictWords.forEach(function (w) { curDict[Verify.norm(w)] = 1; });
+    }
     var r = await toResult(text);
     r.img = Engine.scaled(p.canvas, 1600).toDataURL('image/jpeg', 0.8);
     r.agree = d ? Math.round(d.agreement * 100) : null;
-    r.text = text; r.type = type; r.snapped = snapped; r.learned = learned; r.secs = Math.round((Date.now() - t0) / 1000);
+    r.text = text; r.type = type; r.snapped = snapped; r.learned = learned; r.secs = Math.round((Date.now() - t0) / 1000); r.ocr = ocrUsed; r.dict = dictWords.length;
     return r;
   }
 
@@ -330,6 +383,7 @@
     if (running) return; running = true; show('work'); results = []; usedModels = {}; docCost = 0;
     runAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
     try { learnItems = learnOn() ? await loadLearn() : []; } catch (e) { learnItems = []; }
+    if (!EXAM && dictOn() && typeof Dict !== 'undefined' && !Dict.ready()) Dict.load().catch(function () {});   // 1 MB once, in the background
     var n = pages.length, S = 3;
     try {
       for (var i = 0; i < n; i++) {
@@ -351,7 +405,7 @@
   function runsHtml(runs) {
     return (runs || []).map(function (r) {
       var h = r.frac ? '<span class="frac" contenteditable="false" data-n="' + escH(r.frac[0]) + '" data-d="' + escH(r.frac[1]) + '"><span>' + escH(r.frac[0]) + '</span><span>' + escH(r.frac[1]) + '</span></span>' : escH(shown(r.text));
-      if (r.u) h = '<u>' + h + '</u>'; if (r.b) h = '<b>' + h + '</b>'; if (r.hl) { var why = /^\s*؟+\s*$/.test(r.text) ? 'unreadable' : (r.alts && r.alts.length) ? 'alts' : curAdded[Verify.norm(r.text)] ? 'disagree' : 'model'; h = '<mark data-o="' + escH(r.text) + '" data-why="' + why + '"' + (r.alts && r.alts.length ? ' data-alts="' + escH(r.alts.join('|')) + '"' : '') + '>' + h + '</mark>'; } return h;
+      if (r.u) h = '<u>' + h + '</u>'; if (r.b) h = '<b>' + h + '</b>'; if (r.hl) { var why = /^\s*؟+\s*$/.test(r.text) ? 'unreadable' : (r.alts && r.alts.length) ? 'alts' : curDict[Verify.norm(r.text)] ? 'dict' : curAdded[Verify.norm(r.text)] ? 'disagree' : 'model'; h = '<mark data-o="' + escH(r.text) + '" data-why="' + why + '"' + (r.alts && r.alts.length ? ' data-alts="' + escH(r.alts.join('|')) + '"' : '') + '>' + h + '</mark>'; } return h;
     }).join('');
   }
   function dirOf(t) { return /[A-Za-z]/.test(t) && !DocxBuilder.isRtlText(t) ? 'ltr' : 'rtl'; }
@@ -396,8 +450,8 @@
     $('savedNote').hidden = true; cur = -1;
     $('restoredNote').hidden = !restored;
     var ri = $('readerInfo'), ms = Object.keys(usedModels), nl = results.reduce(function (t, r) { return t + (r.learned || 0); }, 0);
-    var cost = restored ? (curDoc && curDoc.cost) || 0 : docCost, secs = restored ? 0 : results.reduce(function (t, r) { return t + (r.secs || 0); }, 0);
-    if (ri) { ri.hidden = !ms.length && !cost; ri.textContent = (ms.length ? 'قُرئت الصفحات فعلياً بـ: ' + ms.join(' + ') + (CLAUDE && Engine.fastOn() ? ' ⚡' : '') : 'محفوظ على هذا الجهاز') + (secs ? ' في ' + secs + ' ثانية' : '') + (nl ? ' — ' + nl + ' كلمة عُرفت من خط ' + profileLabel() : '') + (cost ? ' — تكلفة القراءة ≈ $' + cost.toFixed(2) : ''); }
+    var cost = restored ? (curDoc && curDoc.cost) || 0 : docCost, secs = restored ? 0 : results.reduce(function (t, r) { return t + (r.secs || 0); }, 0), no = results.filter(function (r) { return r.ocr; }).length;
+    if (ri) { ri.hidden = !ms.length && !cost; ri.textContent = (ms.length ? 'قُرئت الصفحات فعلياً بـ: ' + ms.join(' + ') + (CLAUDE && Engine.fastOn() ? ' ⚡' : '') : 'محفوظ على هذا الجهاز') + (secs ? ' في ' + secs + ' ثانية' : '') + (no ? ' — ' + no + ' صفحة مطبوعة قُرئت بالقارئ المجاني على الجهاز ثم صُحّحت بطلب واحد' : '') + (nl ? ' — ' + nl + ' كلمة عُرفت من خط ' + profileLabel() : '') + (cost ? ' — تكلفة القراءة ≈ $' + cost.toFixed(2) : ''); }
     if (!restored) {
       var ps = results.map(function (r) { return { html: r.html, img: r.img, text: r.text }; });
       if (reconvertDoc) { curDoc = reconvertDoc; reconvertDoc = null; Store.addVersion(curDoc, ps, 'reread'); curDoc.pages = ps; curDoc.learned = []; }
@@ -581,7 +635,7 @@
     renderFieldsSoon();
   }
   if ($('reviewBtn')) $('reviewBtn').addEventListener('click', nextDoubt);
-  var WHY = { model: 'القارئ غير متأكد من هذه الكلمة', alts: 'القارئ متردد بين قراءتين — اختر الصحيحة من الصورة', disagree: 'القراءتان اختلفتا على هذه الكلمة', unreadable: 'غير مقروءة في الصورة — اكتبها بنفسك' };
+  var WHY = { dict: 'ليست في القاموس العربي ولا في صيغ المكتب: قد تكون اسمًا صحيحًا أو خطأ قراءة، تأكد من الصورة', model: 'القارئ غير متأكد من هذه الكلمة', alts: 'القارئ متردد بين قراءتين — اختر الصحيحة من الصورة', disagree: 'القراءتان اختلفتا على هذه الكلمة', unreadable: 'غير مقروءة في الصورة — اكتبها بنفسك' };
   /* the pill under a focused word: why it is yellow + the readings to pick from */
   function showAlts(m) {
     var chips = $('altChips'), why = $('whyNote'); if (!chips) return;
@@ -949,6 +1003,8 @@
     $('setLearnState').textContent = learnOn() ? 'مفعّل — ' + profileLabel() : 'غير مفعّل';
     $('setEnhance').checked = enhanceOn();
     if ($('setFast')) $('setFast').checked = Engine.fastOn();
+    if ($('setOcr')) $('setOcr').checked = ocrOn();
+    if ($('setDict')) $('setDict').checked = dictOn();
     Array.prototype.forEach.call(document.querySelectorAll('input[name="mode"]'), function (r) { r.checked = r.value === (econ() ? 'econ' : 'best'); });
     audioKeyState();
     $('storageInfo').textContent = Store.which() === 'ls' ? 'هذا المتصفح لا يسمح بقاعدة بيانات محلية: تُحفظ النصوص فقط بدون صور الورق.' : '';
@@ -973,6 +1029,8 @@
     $('setLearnBtn').addEventListener('click', renderLearn);
     $('setEnhance').addEventListener('change', function () { if ($('enhanceChk')) $('enhanceChk').checked = this.checked; });
     if ($('setFast')) $('setFast').addEventListener('change', function () { Engine.setFast(this.checked); });
+    if ($('setOcr')) $('setOcr').addEventListener('change', function () { Engine.lsSet('kateb.ocr', this.checked ? '1' : '0'); });
+    if ($('setDict')) $('setDict').addEventListener('change', function () { Engine.lsSet('kateb.dict', this.checked ? '1' : '0'); });
     Array.prototype.forEach.call(document.querySelectorAll('input[name="mode"]'), function (r) { r.addEventListener('change', function () { if (this.checked) setMode(this.value); }); });
     if ($('audioKeySave')) {
       $('audioKeySave').addEventListener('click', async function () {
@@ -1449,7 +1507,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '21';
+  var APP_VER = '22';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -1494,7 +1552,7 @@
   /* iPhone / iPad Safari has no install prompt: show the two taps instead */
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream && !standalone()) $('iosHint').hidden = false;
 
-  window.__test = { finish: finish, toResult: toResult, setResults: function (r) { results = r; }, show: show, sheetToParas: sheetToParas, domBlocks: domBlocks, results: function () { return results; },
+  window.__test = { dict: function () { return typeof Dict !== 'undefined' ? Dict : null; }, finish: finish, toResult: toResult, setResults: function (r) { results = r; }, show: show, sheetToParas: sheetToParas, domBlocks: domBlocks, results: function () { return results; },
     doc: function () { return curDoc; }, fields: renderFields, convertAudio: convertAudio, shots: function () { return shots; }, liveParts: function () { return liveParts; }, fixes: function () { return fixes; }, usage: function () { return Engine.usageSummary(); }, askKind: askKind, save: function () { return saveDraft(); }, saved: function () { return saveChain.then(function () { return learnChain; }); }, undo: undo, redo: redo, hist: function () { return { n: hist.length, i: hi }; }, nav: function () { return { cur: curScreen, stack: nav.slice() }; } };
 
   /* ---------- exam header fields (remembered on this device) ---------- */
@@ -1544,7 +1602,7 @@
     "Read them from the strips (images 2 onwards) digit by digit; a year has four digits, a date has day/month/year. One per line, in reading order, in this exact format:\n" +
     "<number exactly as written, same digit style as the page> | <the two or three words written just before it>\n" +
     "Nothing else: no commentary, no headings. If a digit is truly unreadable write ? in its place.";
-  var KIND_PROMPT = "This is a photo of an Egyptian legal paper. Reply with ONLY its title line exactly as written at the top of the page (for example: دعوى صحة توقيع / إعادة إعلان في الدعوى / إعلان بأصل الصحيفة / إنذار عرض قيمة إيجارية / عقد بيع ابتدائي / عقد هبة / إقرار / مذكرة بدفاع / طلب وراثة / إعلان في مادة الوراثة / صحيفة استئناف). If there is no title, reply with the first written line. Nothing else.";
+  var KIND_PROMPT = "This is a photo of an Egyptian legal paper. Reply with ONLY its title line exactly as written at the top of the page (for example: دعوى صحة توقيع / إعادة إعلان في الدعوى / إعلان بأصل الصحيفة / إنذار عرض قيمة إيجارية / عقد بيع ابتدائي / عقد هبة / إقرار / مذكرة بدفاع / طلب وراثة / إعلان في مادة الوراثة / صحيفة استئناف). If there is no title, reply with the first written line. Then on a second line write PRINTED if the body of the page is typed, printed or a photocopy of print, or HANDWRITTEN if it is written by hand. Nothing else.";
   function glossarySystem(lines) {
     return "\n\nCOMMON EXPRESSIONS OF EGYPTIAN COURT PAPERS (all types — pleadings, judgments, notices, contracts, inheritance, family): \n" + lines +
       "\nWhen a hard-to-read word sits inside one of these expressions and the visible letters fit it, read it as the expression says; when the letters do not fit, write what the ink shows and mark it.";
@@ -1580,6 +1638,7 @@
     kind: function () { return KIND_PROMPT; },
     read: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts (صحة توقيع، إعلانات، إنذارات، عقود بيع وهبة، إقرارات، مذكرات).\n\n" + stripsNote(b) + "Transcribe the ENTIRE page word for word, exactly as written. These papers follow fixed legal formulas: for each unclear word use the sentence's meaning, the standard phrasing of this kind of paper, and how the same letters look elsewhere on the page; if still unsure, mark it. Names, numbers, dates and amounts are never guessed from context.\n\n" + ROT_NOTE + LEGAL_FORMAT; },
     read2: function (b) { return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts.\n\n" + stripsNote(b) + STRIPWISE + "Transcribe the ENTIRE page word for word. Names of people and places, numbers, dates and case numbers must be copied letter by letter; if any letter is unsure, mark the word.\n\n" + ROT_NOTE + LEGAL_FORMAT; },
+    printed: function (t) { return "This page is PRINTED (typed), and a free OCR engine on the device has already read it. Correct that text against the attached image of the page: fix every misread, glued, split or missing word, number, date and name; drop OCR garbage and repeated lines; restore the paragraphs and the layout tags. Add nothing the page does not show; where the image is unclear, mark the word as the format says.\n\n" + LEGAL_FORMAT + "\n\nOCR OUTPUT:\n" + t + "\n\nReply with the full corrected transcription only."; },
     check: function (b, d) { return "You are proofreading a transcription of the attached page against the page itself. " + stripsNote(b) + "Go through the draft line by line and word by word against the images. Fix every misread word, missing or extra word, wrong number, date, name, digit order, bold/underline, and any skipped or doubled paragraph. Remove ⟦ ⟧ from words you can now confirm; keep or add ⟦ ⟧ on anything still uncertain. Keep the same format.\n\n" + LEGAL_FORMAT + "\n\nDRAFT TRANSCRIPTION:\n" + d + "\n\nReply with the full corrected transcription only."; },
     judge: function (b, r1, r2, d) { return "Two transcribers copied the attached page independently. You decide the final text. " + stripsNote(b) + diffNote(d) + "For every disagreement look closely at the ink in the images and keep what the page really shows — not what sounds better. Also check that no paragraph is missing or doubled and that the layout tags are right. Where the image still does not settle a word, wrap it in ⟦ ⟧ — with the plausible readings separated by | when there are two or three, the most likely first (⟦محمود|محمد⟧).\n\n" + LEGAL_FORMAT + "\n\nREADING 1:\n" + r1 + "\n\nREADING 2:\n" + r2 + "\n\nReply with the one correct full transcription only."; }
   };

@@ -8,3 +8,9 @@
   Cache-Control: no-cache
 /*.webmanifest
   Cache-Control: no-cache
+
+# big, rarely changing third-party files: a week in the browser cache
+/kateb/vendor/*
+  Cache-Control: public, max-age=604800
+/kateb/dict/*
+  Cache-Control: public, max-age=604800
