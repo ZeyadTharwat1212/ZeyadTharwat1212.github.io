@@ -29,7 +29,7 @@ var Office = (function () {
   var TYPES = [
     ['reannounce', /^(ا|ا)?عاده اعلان/], ['announce', /^اعلان (باصل|صحيفه)/], ['inherit_announce', /^اعلان في ماده الوراثه|^اعلان وراثه/],
     ['inherit_request', /^طلب وراثه/], ['sihha', /^دعو[يه] صحه توقيع|^صحه توقيع/], ['warning', /^انذار/],
-    ['sahifa', /^(صحيفه|عريضه|استئناف)/], ['gift', /^عقد ?هبه/], ['sale', /^عقد/], ['price', /^اقرار سعر/], ['iqrar', /^اقرار/], ['memo', /^مذكره/]
+    ['sahifa', /^(صحيفه|عريضه|استئناف|دعو[يه] )/], ['gift', /^عقد ?هبه/], ['sale', /^عقد/], ['price', /^اقرار سعر/], ['iqrar', /^اقرار/], ['memo', /^مذكره/]
   ];
   function detect(text) {
     var lines = String(text || '').split('\n').map(function (l) { return norm(l.replace(/^\s*\[[A-Z]+\]\s*/, '').replace(/[*_⟦⟧]/g, '')); })
@@ -256,7 +256,7 @@ var Office = (function () {
       var i = Math.min(a.at, paras.length - 1);
       while (i > 0 && paras[i].xml) i--;
       if (paras[i].xml) { paras.unshift({ role: 'lead', pPr: T.blank, runs: '' }); i = 0; }
-      paras[i].anchors = (paras[i].anchors || '') + wrapStamp(a.xml);
+      paras[i].anchors = (paras[i].anchors || '') + wrapStamp(wrapSide(a.xml));
     });
     var L = opts.lawyer || {}, title = L.title || 'المحامي', c = client(blocks);
     var fill = {
@@ -285,6 +285,22 @@ var Office = (function () {
   function wrapStamp(xml) {
     if (xml.indexOf('{{LAWYER}}') < 0 || intrusion(xml) <= 0) return xml;
     return xml.replace(/<wp:wrapNone\/>/g, '<wp:wrapSquare wrapText="bothSides"/>').replace(/allowOverlap="1"/g, 'allowOverlap="0"');
+  }
+  /* v23b: the side column (the «الموضوع» box and the double vertical rule) is only on page 1. The office's running
+     text reaches into the left margin (w:ind -1418) so pages 2+ are full width; on page 1 the office lines stop at the
+     rule. Floating over the text (wrapNone) the column covered page 1's lines (Zeyad's screenshot). Now page 1's lines
+     wrap beside it — exactly up to the rule — and the later pages keep the full width. */
+  function wrapSide(xml) {
+    if (!xml || xml.indexOf('{{LAWYER}}') >= 0) return xml;
+    var ph = /<wp:positionH relativeFrom="column">\s*<wp:posOffset>(-?\d+)</.exec(xml), ex = /<wp:extent cx="(\d+)" cy="(\d+)"/.exec(xml);
+    if (!ph || !ex || +ex[2] < 3000000) return xml;                       // only the tall page-1 column, not small boxes
+    var right = +ph[1] + +ex[1]; if (right > 0) return xml;                // it must sit in the margin
+    var dist = -right;                                                     // text starts at the margin line, where the office's does;
+    /* distL: no room is left on the far side, so no word drops into the margin under the box */
+    return xml.replace(/<wp:wrapNone\/>/, '<wp:wrapSquare wrapText="largest"/>')
+      .replace(/(<wp:anchor\b[^>]*?)distL="\d+"/, '$1distL="1440000"').replace(/(<wp:anchor\b[^>]*?)distR="\d+"/, '$1distR="' + dist + '"')
+      .replace(/mso-wrap-distance-left:[\d.]+pt/, 'mso-wrap-distance-left:113pt').replace(/mso-wrap-distance-right:[\d.]+pt/, 'mso-wrap-distance-right:' + (dist / 12700).toFixed(1) + 'pt')
+      .replace(/(<\/v:(line|shape|rect)>)(?![\s\S]*<\/v:(line|shape|rect)>)/, '<w10:wrap type="square" side="largest"/>$1');
   }
   /* the side box and the vertical rule hang from a text paragraph in the office files; with a short first text they
      would ride up into the stamp. When the stamp sits on the first line, they take a fixed place on the page instead:

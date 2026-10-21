@@ -481,3 +481,19 @@ test('memory: learns lawyers, judges and sure names from a reviewed paper; the p
   assert.ok(Memory.publicPrompt(pub).includes('محكمة أسيوط الابتدائية') && Memory.publicPrompt(pub).includes('قسم أول أسيوط'));
   Memory.reset();
 });
+test('v23b: page 1 text wraps beside the side column (it no longer runs under it); «دعوى …» pleadings use the صحيفة layout', async () => {
+  assert.strictEqual(Office.detect('[H] **دعوى الزام بصرف مستحقات تامينيه**\nانه في يوم'), 'sahifa');
+  assert.strictEqual(Office.detect('[H] دعوى صحة توقيع\nانه في يوم'), 'sihha');
+  for (const k of ['sahifa', 'announce', 'reannounce', 'sihha', 'warning', 'inherit_announce']) {
+    const zip = await Office.build(JSZip, DocxBuilder.parseMarkup('[H] عنوان\nانه في يوم السبت\nبناء على طلب السيد / فلان\nنص.\nولأجل العلم ،،'), k, { lawyer: { name: 'س', title: 'المحامي' } });
+    const doc = await zip.file('word/document.xml').async('string');
+    const tall = [...doc.matchAll(/<wp:anchor\b[^>]*>[\s\S]*?<\/wp:anchor>/g)].map(m => m[0]).filter(a => +((/<wp:extent cx="\d+" cy="(\d+)"/.exec(a) || [])[1] || 0) > 3000000);
+    assert.ok(tall.length >= 1, k + ': has the side column');
+    for (const a of tall) {
+      assert.ok(/<wp:wrapSquare wrapText="largest"\/>/.test(a) && !/<wp:wrapNone\/>/.test(a), k + ': the column pushes page-1 text aside');
+      const pos = +/<wp:positionH relativeFrom="column">\s*<wp:posOffset>(-?\d+)</.exec(a)[1], cx = +/<wp:extent cx="(\d+)"/.exec(a)[1], dr = +/distR="(\d+)"/.exec(a)[1];
+      assert.strictEqual(pos + cx + dr, 0, k + ': page-1 text starts exactly at the margin line');
+    }
+    assert.ok(/<w10:wrap type="square" side="largest"\/>/.test(doc), k + ': the Word 2007 fallback wraps too');
+  }
+});
