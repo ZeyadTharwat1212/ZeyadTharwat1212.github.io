@@ -151,6 +151,27 @@ lines. The system prompt is split in two blocks: the stable one (bank + glossary
 page and across pages; the variable one (earlier pages, learned words) comes after it so it no longer breaks the
 cache. Rough list-price cost per legal page: economy $0.15–0.30, best $0.5–0.8, best + ⚡ about double.
 
+## Free helpers on the device (v22): OCR for printed pages, the Arabic dictionary
+Two open-source pieces run inside the page, cost nothing and send nothing anywhere; both are on by default and can be
+switched off in ⚙️ الإعدادات (`kateb.ocr`, `kateb.dict`).
+- **📄 Printed pages** (`kateb/ocr.js`, `kateb/vendor/tesseract/`): the kind call now also answers PRINTED or
+  HANDWRITTEN. For a printed page Tesseract (tesseract.js 7 + the `tessdata_fast` Arabic model, about 5 MB loaded
+  once) reads the page in a Web Worker, and Claude gets ONE call — "correct this OCR text against the attached page"
+  with the whole page as the only image (Sonnet, low effort in economy; Opus medium in best) — instead of two reads,
+  a judge and a numbers pass. The OCR output must be worth correcting: confidence ≥ 50, mostly Arabic letters, and at
+  least 60% of its words known to the dictionary (scribbles and photos of handwriting fail this and go down the
+  normal path). Handwriting never takes this path: Tesseract's Arabic model is trained on print.
+- **📖 Arabic dictionary** (`kateb/dict.js`, `kateb/dict/`): AyaSpell / hunspell-ar (294,000 words, 1,600 affix rules,
+  1 MB over the wire, GPL) compacted by `tests/tools/build_dict.py`, checked by a small hunspell of our own (stem +
+  up to two suffixes + a prefix with the cross-product rule; tashkeel ignored; ى/ي, ة/ه and a dropped hamza
+  tolerated). After every legal page, a word that no dictionary, no formula bank, no glossary and no earlier
+  confirmation knows is marked yellow with its own reason («ليست في القاموس العربي…»); names after السيد / are
+  exempt, and a page with too many unknown words gets no marks at all (it is not the dictionary's language). In the
+  economy mode the extra proofreading call is skipped when the page has at most two doubts and no unknown word.
+  Confirming a marked word teaches it (the learning records), so it is not marked again.
+- Re-fetch the third-party files with `tests/tools/fetch_vendor.sh` (versions and sources inside; licences in
+  `kateb/vendor/tesseract/README.md` and `kateb/dict/README.md`).
+
 ## Speed: ⚡ fast mode (default off, ⚙️ الإعدادات)
 When switched on, every Opus call (the two reads, the judge, the numbers pass in best mode) goes through Claude's
 fast mode (`speed: "fast"`, beta `fast-mode-2026-02-01`): the same model answering up to 2.5× faster at twice the

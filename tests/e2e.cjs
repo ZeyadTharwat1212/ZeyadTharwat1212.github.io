@@ -39,11 +39,11 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
   await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
-    const kind = /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    const kind = /OCR OUTPUT:/.test(prompt) ? 'printed' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
-    calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta });
+    calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta, ocr: kind === 'printed' ? prompt.split('OCR OUTPUT:\n')[1] : undefined });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
-    const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    const text = { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
   });
@@ -647,6 +647,90 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     const [dl] = await Promise.all([page.waitForEvent('download'), exportWord(page)]);
     const doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
     assert.ok(doc.includes('مدنى كلى') && !doc.includes('<w:highlight'), 'the accepted fix is plain text in Word');
+  }));
+
+  /* ---------- KATEB23: free on-device OCR for printed pages, the Arabic dictionary ---------- */
+  const DICT_TEXT = '[H] دعوى صحة توقيع\nبناء علي طلب السيد / **مينا سامي** - بالغ سن الرشد\nومحله المختار مكتب الأستاذ / ألون إبراهيم باشا المحامي .\nأنا معاون تنفيذ محكمة أول أسيوط قد انتقلت وأعلنت :-\n1. السيد / **كريم عادل**\tمخاطبا مع\n[C] وأعلنته بالأتي\nبموجب عقد بيع مؤرخ في 7/1/2026 باع المعلن إليه العقار المبين بالعقد والدفاعز عنه .\n[C] بناء عليه\n**ولأجل العلم ،،،**';
+  async function printedPng(page) {
+    const url = await page.evaluate(() => {
+      const c = document.createElement('canvas'); c.width = 1700; c.height = 1100; const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#000'; g.direction = 'rtl'; g.textAlign = 'right';
+      ['دعوى صحة توقيع', 'بناء عليه أنا محضر محكمة أسيوط قد انتقلت وأعلنت', 'السيد / محمد عبد الرحمن والمقيم بناحية الوليدية مركز أسيوط', 'وسلمته صورة الإعلان للعلم وبموجب عقد البيع الابتدائي', 'المؤرخ في 10/1/2020 باع المعلن إليه للطالب العقار المبين', 'بمبلغ وقدره 150000 جنيه مصري لا غير']
+        .forEach((l, i) => { g.font = (i ? '44px' : 'bold 56px') + ' "DejaVu Sans"'; g.fillText(l, 1600, 150 + i * 140); });
+      return c.toDataURL('image/png');
+    });
+    return Buffer.from(url.split(',')[1], 'base64');
+  }
+  await step('printed page: the kind call says PRINTED → the real on-device OCR reads it, one Sonnet correction with one image, no reads/judge/numbers; a photo that the OCR cannot read falls back to the full pipeline', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ, K: 'دعوى صحة توقيع\nPRINTED', P: SIHHA_READ }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => window.__test.dict().load());
+    await page.setInputFiles('#file', { name: 'typed.png', mimeType: 'image/png', buffer: await printedPng(page) });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
+    await page.waitForSelector('#done:not([hidden])', { timeout: 90000 });
+    assert.deepStrictEqual(calls.slice().sort(), ['kind', 'printed'], 'one kind call + one correction: ' + calls.join(','));
+    const pc = calls.claude.find(c => c.kind === 'printed');
+    assert.ok(pc.model === 'claude-sonnet-5-5' && pc.images === 1 && pc.effort === 'low', 'economy: Sonnet, low effort, the whole page only');
+    assert.ok(/محكمة/.test(pc.ocr) && /أسيوط/.test(pc.ocr) && /150000/.test(pc.ocr), 'the real OCR text went to Claude: ' + pc.ocr);
+    assert.ok(pc.system.includes('STANDARD FORMULAS'), 'the correction gets the formula bank');
+    assert.match(await page.textContent('#readerInfo'), /1 صفحة مطبوعة قُرئت بالقارئ المجاني/);
+    assert.match(await page.textContent('#pagesBox .sheet'), /مينا سامي/);
+    /* a page wrongly called PRINTED whose OCR output is not usable (scribbles) → the normal reads run */
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    calls.length = 0; calls.claude = [];
+    const scribble = Buffer.from((await page.evaluate(() => {
+      const c = document.createElement('canvas'); c.width = 1200; c.height = 900; const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = '#222'; g.lineWidth = 3;
+      let s = 7; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+      for (let i = 0; i < 60; i++) { g.beginPath(); g.moveTo(rnd() * 1200, rnd() * 900); for (let k = 0; k < 6; k++) g.lineTo(rnd() * 1200, rnd() * 900); g.stroke(); }
+      return c.toDataURL('image/png');
+    })).split(',')[1], 'base64');
+    await page.setInputFiles('#file', { name: 'scribble.png', mimeType: 'image/png', buffer: scribble });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
+    await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
+    assert.ok(calls.includes('read') && calls.includes('read2') && !calls.includes('printed'), 'fallback to the full pipeline: ' + calls.join(','));
+    /* switched off in the settings → never used */
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#settingsBtn'); await page.waitForSelector('#settings:not([hidden])');
+    assert.ok(await page.isChecked('#setOcr')); await page.uncheck('#setOcr');
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    calls.length = 0; calls.claude = [];
+    await page.setInputFiles('#file', { name: 'typed.png', mimeType: 'image/png', buffer: await printedPng(page) });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
+    await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
+    assert.ok(calls.includes('read') && !calls.includes('printed'), 'OCR off: ' + calls.join(','));
+  }));
+
+  const DICT_DOUBT = DICT_TEXT.replace('**كريم عادل**', '**⟦كريم⟧ عادل**');
+  await step('dictionary: a word no dictionary, formula or confirmation knows is marked with its own reason; in economy mode the proofreading call runs for such a word and is skipped once the page has at most two doubts and no such word; confirming the word teaches it', () => runMode(browser, base, 'kateb.html', { A: DICT_DOUBT, B: DICT_DOUBT }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => { localStorage.setItem('kateb.learn', '1'); return window.__test.dict().load(); });
+    assert.ok(await page.evaluate(() => window.__test.dict().size() > 290000), 'the dictionary loaded in the page');
+    await convert(page);
+    assert.ok(calls.includes('check'), 'one doubt + an unknown word → the proofreading call runs: ' + calls.join(','));
+    const m = page.locator('#pagesBox mark');
+    assert.strictEqual(await m.count(), 2, 'the reader\'s doubt and the made-up word');
+    const whys = await m.evaluateAll(l => l.map(x => x.dataset.why + ':' + x.textContent));
+    assert.ok(whys.includes('model:كريم') && whys.some(w => /^dict:والدفاعز/.test(w)), whys.join(' | '));
+    await page.click('#nextDoubt'); assert.match(await page.textContent('#whyNote'), /غير متأكد/);
+    await page.click('#nextDoubt'); assert.match(await page.textContent('#whyNote'), /ليست في القاموس العربي/, 'the dictionary\'s own reason');
+    /* the names after السيد / and the formula words are never marked; confirm both → learned */
+    for (let i = 0; i < 3 && await page.locator('#pagesBox mark').count(); i++) { await page.click('#nextDoubt'); await page.click('#okDoubt'); await page.waitForTimeout(100); }
+    await settled(page);
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 0);
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    calls.length = 0; calls.claude = [];
+    await convert(page);
+    const whys2 = await page.locator('#pagesBox mark').evaluateAll(l => l.map(x => x.dataset.why + ':' + x.textContent));
+    assert.deepStrictEqual(whys2, ['model:كريم'], 'the confirmed word is known now, the reader\'s doubt stays: ' + whys2.join(' | '));
+    assert.ok(!calls.includes('check'), 'one doubt and no unknown word → the proofreading call is skipped: ' + calls.join(','));
+    /* switched off → no dictionary marks, and the proofreading call is back for the page with a doubt */
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#settingsBtn'); await page.waitForSelector('#settings:not([hidden])');
+    assert.ok(await page.isChecked('#setDict')); await page.uncheck('#setDict');
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.evaluate(() => { localStorage.setItem('kateb.learn', '0'); });
+    calls.length = 0; calls.claude = [];
+    await convert(page);
+    assert.ok(calls.includes('check'), 'dictionary off: the old rule again: ' + calls.join(','));
+    assert.ok((await page.locator('#pagesBox mark').evaluateAll(l => l.map(x => x.dataset.why))).every(w => w !== 'dict'));
   }));
 
   /* ---------- KATEB20: smart scanner, share, voice dictation, audio files ---------- */
