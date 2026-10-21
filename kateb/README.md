@@ -55,6 +55,18 @@ Layout rules on top of the office formats (v17, `office.js`):
 
     python tests/tools/build_templates.py <folder of one source .docx per type> kateb/templates <office corpus folder>
 
+## Legal Arabic spelling and case formulas (v26)
+- `bank/lexicon.json` — the office's spelling, learned from its ~2,100 papers (`tests/tools/build_lexicon.py`): bare
+  form → standard spelling (`std`), the ه → ة cases that cannot be pronouns (`sureH`), and every word form the office
+  types (`seen`). Words only — names are left out.
+- `Dict.fix` (dict.js) corrects every legal page after the reads: a word in no dictionary whose one spelling variant is
+  known, the lexicon's standard form when the hunspell dictionary agrees, and the office's common slips (الي → إلى،
+  علي طلب → على طلب، المدعي عليه → المدعى عليه، بالاتي → بالآتي). Never names, numbers or ⟦yellow⟧ words.
+- `bank/cases.json` + `bank/case_<kind>.json` — standard wording of 23 case kinds (صحة توقيع، صحة ونفاذ، تأمينات،
+  قائمة منقولات، نفقة، خلع، تطليق، حضانة، طرد، ريع، فسخ، تعويض، إخلاء، أداء، مستعجل، منازعة تنفيذ، استئناف، إنذار،
+  إعلان، جنحة مباشرة، شيك/أمانة، مذكرة، وراثة), written from published Egyptian forms (`tests/tools/build_cases.py`).
+  The paper's title picks the kind; its lines go in the cached system prompt and feed `Bank.snap`.
+
 ## The office's master template (v25)
 Every lawyer file of the office is made in one master Word template (Zeyad's .dotx, 2026-10-21): page 1 has the
 بسم الله picture, the marble stamp box (مكتب / lawyer / المحامي), the left side column (الموضوع / subject /

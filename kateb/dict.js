@@ -137,6 +137,71 @@ var Dict = (function () {
     ws.forEach(function (w) { if (correct(w)) ok++; });
     return ws.length ? ok / ws.length : 0;
   }
+  /* ---------- v26: automatic spelling correction (Zeyad: «الأخطاء الإملائية عايزها تتصحح أوتوماتيك») ----------
+     fix(text, opts) changes a word only when the change is sure:
+       - the word is in no dictionary (hunspell, the legal lexicon) but exactly one of its spelling variants is
+         (ة/ه and ى/ي at the end, the hamza of the first alif, also after و ف ب ك ل ال): الهيئه → الهيئة، اداره → إدارة؛
+       - or it is one of the office's common slips that are real words in another sense (الي → إلى، اليه → إليه،
+         علي → على before a word or after بناء، المدعي عليه → المدعى عليه، دعوه/دعوي → دعوى، بالاتي → بالآتي).
+     Never: inside ⟦ ⟧ (the reviewer decides), in a name (after السيد / … and the words of the names given), in a
+     number, in Latin text. Returns the text and the list of changes. */
+  var SLIPS = { 'وقدرة': 'وقدره', 'جنية': 'جنيه', 'الي': 'إلى', 'الى': 'إلى', 'إلي': 'إلى', 'والى': 'وإلى', 'اليه': 'إليه', 'اليها': 'إليها', 'اليهم': 'إليهم', 'اليهما': 'إليهما', 'الينا': 'إلينا', 'وإلي': 'وإلى', 'والي': 'وإلى',
+    'دعوه': 'دعوى', 'دعوي': 'دعوى', 'الدعوه': 'الدعوى', 'الدعوي': 'الدعوى', 'بالدعوي': 'بالدعوى', 'بالدعوه': 'بالدعوى', 'للدعوي': 'للدعوى', 'والدعوي': 'والدعوى',
+    'بالاتي': 'بالآتي', 'الاتي': 'الآتي', 'بالأتي': 'بالآتي', 'الأتي': 'الآتي', 'الاتية': 'الآتية', 'الاتيه': 'الآتية', 'الأتية': 'الآتية', 'الأتيه': 'الآتية',
+    'مسئوليته': 'مسئوليته', 'إنتقلت': 'انتقلت', 'إنتقل': 'انتقل', 'إستئناف': 'استئناف', 'الإستئناف': 'الاستئناف', 'إستلام': 'استلام', 'إعتبارا': 'اعتبارا', 'إعتباراً': 'اعتباراً',
+    'لاجل': 'لأجل', 'ولاجل': 'ولأجل', 'ولأجل': 'ولأجل', 'إبتدائي': 'ابتدائي', 'الإبتدائية': 'الابتدائية', 'الإبتدائيه': 'الابتدائية', 'إختصاص': 'اختصاص', 'الإختصاص': 'الاختصاص' };
+  var ALA_BEFORE = /^(بناء|بناءً|وبناء|وبناءً|ترتب|ويترتب|يترتب|حصل|نص|ينص|تنص|نصت|اعتمادا|اعتماداً|استنادا|استناداً|تأسيسا|تأسيساً|علاوة|علاوةً|حرصا|حرصاً|قياسا|قياساً|بالتوقيع|التوقيع|وقع|وقّع|اطلع|اطلاعه|حكم|الحكم|يحكم|تعدى|اعتدى|وجب|يجب|واجب|يتعين|ويتعين|بالتصديق|التصديق|المصادقة|بالمصادقة|موافقة|الموافقة|حفاظا|حفاظاً)$/;
+  var NAME_LEAD = /^(السيد|السيدة|السيده|الأستاذ|الاستاذ|الأستاذة|الاستاذة|الدكتور|الدكتورة|الحاج|الحاجة|المهندس|المهندسة|المرحوم|المرحومة|ورثة|ورثه|القاصر|القاصرة|نجل|كريمة|كريمه|زوج|زوجة|زوجه|المستشار|القاضي|القاضى)$/;
+  function bareOf(w) { return w.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي'); }
+  function markCount(w) { return (w.match(/[أإآةىؤئ]/g) || []).length; }
+  /* the lexicon's standard form, only when it is sure: the dictionary knows it and not the plain form, or the
+     ه → ة case where «…ه» cannot be a pronoun (sureH: after ال, or a stem that is no word of these papers) */
+  function lexFix(w, lex, isKnown) {
+    var b = bareOf(w), s = lex.std[b];
+    if (!s || s === w || markCount(s) <= markCount(w) || !words || !lookup(s)) return null;
+    if (!lookup(w)) return s;
+    if (!lex._h) { lex._h = {}; (lex.sureH || []).forEach(function (x) { lex._h[x] = 1; }); }
+    if (lex._h[b] && /ه$/.test(w) && /ة$/.test(s) && w.slice(0, -1).replace(/[أإآ]/g, 'ا') === s.slice(0, -1).replace(/[أإآ]/g, 'ا')) return s.slice(0, -1).replace(/[أإآ]/g, function (c, i) { return w.charAt(i) === 'ا' ? c : w.charAt(i); }) === s.slice(0, -1) ? s : w.slice(0, -1) + 'ة';
+    return null;
+  }
+  function seenOf(lex) { if (!lex._seen) { lex._seen = {}; String(lex.seen || '').split(' ').forEach(function (x) { if (x) lex._seen[x] = 1; }); } return lex._seen; }
+  function fix(text, opts) {
+    opts = opts || {};
+    var known = opts.known, protect = {}, changes = [];
+    (opts.names || []).forEach(function (n) { String(n).split(/\s+/).forEach(function (w) { if (w) protect[w.replace(IGNORE, '')] = 1; }); });
+    function isKnown(w) { return (words && lookup(w)) || (known && known(w)); }
+    var out = String(text || '').split('\n').map(function (line) {
+      if (/^\s*\[FIG/.test(line)) return line;
+      var parts = line.split(/(⟦[^⟧]*⟧)/), nameLeft = 0, prev = '';
+      return parts.map(function (part, pi) {
+        if (pi % 2) { nameLeft = 0; prev = ''; return part; }
+        return part.replace(/[ء-يًٌٍَُِّْـٰ]+|\/|[^ء-يًٌٍَُِّْـٰ\/]+/g, function (tok) {
+          if (tok === '/') { if (NAME_LEAD.test(prev)) nameLeft = 4; return tok; }
+          if (!/[ء-ي]/.test(tok)) { if (/[\n\t]|[.،,:;()\-–]/.test(tok)) nameLeft = Math.min(nameLeft, 0); return tok; }
+          var w = tok.replace(IGNORE, ''), p = prev; prev = w;
+          if (nameLeft > 0) { nameLeft--; return tok; }
+          if (w === 'علي' && ALA_BEFORE.test(p)) { changes.push([w, 'على']); return 'على'; }   // «بناء علي طلب» is the preposition even if a name has علي
+          if (protect[w] || w.length < 2) return tok;
+          if (NAME_LEAD.test(w)) { var lt = opts.lexicon && opts.lexicon.std ? lexFix(w, opts.lexicon, isKnown) : null; if (lt) { changes.push([w, lt]); return lt; } return tok; }
+          var to = null;
+          if (w === 'علي') { if (ALA_BEFORE.test(p)) to = 'على'; }
+          else if (SLIPS[w] && SLIPS[w] !== w) to = SLIPS[w];
+          else if (w === 'المدعي' || w === 'المدعيه' || w === 'المدعية') { /* «المدعى عليه»: decided when the next word is seen */ }
+          else if (opts.lexicon && opts.lexicon.std && (to = lexFix(w, opts.lexicon, isKnown))) { /* the office's standard spelling */ }
+          else if (words && !isKnown(w) && !(opts.lexicon && seenOf(opts.lexicon)[w])) {   // a form the office itself types (جنيه، وقدره) is its own
+            var vs = variants(w).slice(1).filter(function (v, i, a) { return a.indexOf(v) === i && isKnown(v); });
+            if (vs.length === 1) to = vs[0];
+          }
+          if (!to || to === w) return tok;
+          changes.push([w, to]);
+          return to;
+        });
+      }).join('').replace(/(^|[\s(])((?:[وف])?(?:ال|لل)?)مدعي(\s+)(عليه|عليها|عليهم|عليهما)(?=[\s.،,:)]|$)/g, function (m, a, pre, sp, b) {
+        changes.push(['المدعي ' + b, 'المدعى ' + b]); return a + (pre || '') + 'مدعى' + sp + b;
+      });
+    }).join('\n');
+    return { text: out, changes: changes };
+  }
   function loadText(aff, dic) { parseAff(aff); return parseDic(dic, false); }
   function load(base) {
     if (loading) return loading;
@@ -150,6 +215,6 @@ var Dict = (function () {
   }
   function ready() { return !!words; }
   function size() { return words ? words.size : 0; }
-  return { load: load, loadText: loadText, ready: ready, failed: function () { return failed; }, size: size, correct: correct, unknown: unknown, mark: mark, share: share, variants: variants };
+  return { fix: fix, lookup: function (w) { return !!words && lookup(String(w).replace(IGNORE, '')); }, load: load, loadText: loadText, ready: ready, failed: function () { return failed; }, size: size, correct: correct, unknown: unknown, mark: mark, share: share, variants: variants };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Dict;

@@ -228,6 +228,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(r2.model === 'claude-sonnet-5-5' && r2.effort === 'low' && !r2.cache, 'economy: reading 2 on Sonnet (a different model, half the price), low effort');
     assert.ok(reads.every(x => x.system.includes('STANDARD FORMULAS')), 'the formula bank is the cached system block');
     assert.ok(reads.every(x => x.system.includes('STANDARD FORMULAS') && x.system.includes('دعوى صحة توقيع')), 'both reads get the sihha bank');
+    assert.ok(reads.every(x => x.system.includes('STANDARD WORDING OF «صحة توقيع» CASES') && x.system.includes('PLACES AND INSTITUTIONS')), 'v26: the case-kind formulas and the area memory go with the reads');
     assert.ok(nums.model === 'claude-sonnet-5-5' && nums.effort === 'low' && !nums.system, 'economy: numbers pass on Sonnet, low effort, no bank');
     assert.match(await page.textContent('#readerInfo'), /claude-opus-5-5/, 'review screen shows the real model used');
     assert.strictEqual(judge.model, 'claude-opus-5-5');

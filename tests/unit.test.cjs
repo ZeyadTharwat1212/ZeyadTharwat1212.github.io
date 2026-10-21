@@ -170,14 +170,14 @@ test('every template builds a well-formed file', async () => {
 /* ---------- formula bank (kateb/bank.js + kateb/bank/*.json) ---------- */
 const Bank = require('../kateb/bank.js');
 test('bank files hold formulas with placeholders, never a client name or number', () => {
-  const files = fs.readdirSync(path.join(REPO, 'kateb/bank')).filter(f => f.endsWith('.json') && f !== 'spelling.json' && f !== 'memory.json');
+  const files = fs.readdirSync(path.join(REPO, 'kateb/bank')).filter(f => f.endsWith('.json') && !['spelling.json', 'memory.json', 'lexicon.json', 'cases.json'].includes(f));
   assert.ok(files.length >= 10);
   for (const f of files) {
     const b = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank', f), 'utf8'));
     assert.ok(b.lines.length > 5, f);
     for (const l of b.lines) {
-      assert.ok(!/[0-9٠-٩]/.test(l.t), f + ': digits must be # → ' + l.t);
-      assert.ok(!/(السيد|السيدة|الأستاذ|الاستاذ|الدكتور)\s*\/\s*(?!\{\{NAME\}\})\S/.test(l.t), f + ': unmasked name → ' + l.t);
+      if (!/^case_/.test(f)) assert.ok(!/[0-9٠-٩]/.test(l.t), f + ': digits must be # → ' + l.t);   // published case forms keep their law and article numbers
+      assert.ok(!/(السيد|السيدة|الأستاذ|الاستاذ|الدكتور)\s*\/\s*(?!\{\{NAME\}\}|(?:وكيل|رئيس|مدير|وزير|النائب|المحامي العام|قاضي|المستشار|محافظ|مأمور|ممثل|الممثل)\s)\S/.test(l.t), f + ': unmasked name → ' + l.t);   // an office title after «/» is not a name
       assert.strictEqual(l.o.length, Bank.words(l.t).length, f + ': original tokens align with normalised words → ' + l.t);
     }
   }
@@ -499,4 +499,28 @@ test('v23b: page 1 text wraps beside the side column (it no longer runs under it
     }
     assert.ok(/<w10:wrap type="square" side="largest"\/>/.test(doc), k + ': the Word 2007 fallback wraps too');
   }
+});
+test('v26: automatic spelling — standard legal spelling, never names, yellow words or the office\'s pronoun forms', () => {
+  const D = require('../kateb/dict.js');
+  if (!D.ready()) D.loadText(fs.readFileSync(path.join(REPO, 'kateb/dict/ar.aff.txt'), 'utf8'), fs.readFileSync(path.join(REPO, 'kateb/dict/ar.dic.txt'), 'utf8'));
+  const lex = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank/lexicon.json'), 'utf8'));
+  const t = 'بناء علي طلب السيد / علي حسن محمد\nانتقلت انا معاون تنفيذ محكمه عابدين الي مقر الهيئه القوميه واعلنته بالاتي\nمع الزام المدعي عليه بالمصروفات ومقابل اتعاب المحاماه لسنه ١٩٨٠\nمبلغ وقدره ٥٠٠ جنيه قيد طلبه ⟦الهيئه⟧ ولاجل العلم';
+  const r = D.fix(t, { lexicon: lex, names: ['علي حسن محمد'] });
+  for (const w of ['بناء على طلب', 'السيد / علي حسن', 'أنا', 'محكمة', 'إلى', 'الهيئة القومية', 'وأعلنته بالآتي', 'إلزام المدعى عليه', 'أتعاب المحاماة', 'لسنة', 'ولأجل'])
+    assert.ok(r.text.includes(w), w + ' ← ' + r.text);
+  assert.ok(r.text.includes('وقدره ٥٠٠ جنيه') && r.text.includes('طلبه') && r.text.includes('⟦الهيئه⟧'), 'pronoun forms and yellow words untouched: ' + r.text);
+  const lexText = JSON.stringify(lex), { hasName } = require('./privacy.cjs');
+  const ws = lex.seen.split(' ');
+  assert.ok(!ws.some((w, i) => hasName(ws.slice(Math.max(0, i - 2), i + 3).join(' '))) && !/جرجس|بطرس|ألون/.test(lexText), 'no names in the public lexicon');
+});
+test('v26: the paper title picks the formulas of its case kind', () => {
+  const idx = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank/cases.json'), 'utf8')).kinds;
+  const kind = t => { t = t.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي'); const k = idx.find(k => new RegExp(k.re).test(t)); return k && k.key; };
+  assert.strictEqual(kind('دعوى إلزام بصرف مستحقات تأمينية'), 'tameen');
+  assert.strictEqual(kind('دعوى صحة توقيع'), 'sihha');
+  assert.strictEqual(kind('دعوى تبديد قائمة منقولات زوجية'), 'qaima');
+  assert.strictEqual(kind('دعوى نفقة زوجية وصغار'), 'nafaqa');
+  assert.strictEqual(kind('صحيفة استئناف'), 'istinaf');
+  assert.strictEqual(kind('إعادة إعلان'), 'ilan');
+  assert.ok(idx.length >= 20 && idx.every(k => fs.existsSync(path.join(REPO, 'kateb/bank/case_' + k.key + '.json'))));
 });
