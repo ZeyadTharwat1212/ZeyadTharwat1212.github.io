@@ -222,6 +222,8 @@
      detected paper type, Verify.guard marks what the reads did not agree on, Bank.snap fixes doubtful words
      that sit inside a known formula. */
   var CLAUDE = Engine.provider(KEY) === 'claude', SHORT = CLAUDE && !EXAM;     // SHORT: the short judge (only the disputed places)
+  /* a reply that is an apology instead of the page («I can't transcribe…») */
+  function refusal(t) { var x = String(t || '').replace(/^\s*ROT:\s*\d+\s*/, '').slice(0, 400); return /\b(I can'?t|I cannot|I'm unable|I am unable|unable to (read|transcribe)|can'?t (produce|transcribe|read))\b/i.test(x); }
   function rotOf(t) { var m = /^\s*ROT:\s*(0|90|180|270)/.exec(t || ''); return m ? +m[1] : 0; }
   function stripRot(t) { return String(t || '').replace(/^\s*ROT:\s*\d+\s*\n?/, ''); }
   /* v23 legal pages: reading 1 on Opus with its images cached (the judge reuses them at 5% of the price), reading 2
@@ -300,22 +302,46 @@
   }
   function caseText(cb) { return cb && PROMPTS.caseSystem ? PROMPTS.caseSystem(cb.label, Bank.promptText(cb, econ() ? 120 : 250)) : ''; }
   var TYPE_LABEL = { sihha: 'دعوى صحة توقيع', reannounce: 'إعادة إعلان', announce: 'إعلان بأصل الصحيفة', warning: 'إنذار', sahifa: 'صحيفة دعوى / استئناف', inherit_announce: 'إعلان في مادة الوراثة', inherit_request: 'طلب وراثة', sale: 'عقد بيع', gift: 'عقد هبة', price: 'إقرار سعر', iqrar: 'إقرار', memo: 'مذكرة' };
+  /* v30: which way up? (a real sideways photo was turned the wrong way, read 4 times and came out «I can't transcribe»)
+     The page is turned both possible ways and a small model is asked which picture reads upright — a choice between two
+     pictures is reliable, a guessed number of degrees was not. */
+  function toJpeg(c) { return new Promise(function (res) { c.toBlob(res, 'image/jpeg', 0.85); }); }
+  async function pickUpright(base, degs) {
+    var blobs = [];
+    for (var i = 0; i < degs.length; i++) blobs.push(await toJpeg(Engine.scaled(Engine.rotated(base, degs[i]), 900)));
+    var nums = degs.map(function (d, i) { return i + 1; }).join(degs.length > 2 ? ', ' : ' or ');
+    var q = "Images " + nums + " are the same photo of a paper, turned " + degs.length + " different ways. In which one is the writing UPRIGHT — horizontal lines that read normally, not sideways and not upside down? Reply with only the number (" + nums + ").";
+    for (var t = 0; t < 2; t++) {
+      try {
+        var r = await Engine.generate(KEY, q, blobs, { fast: t === 0, signal: sig(), effort: 'low', maxTokens: 1500 });
+        var m = /\b([1-4])\b/.exec(Engine.clean(r.text)); if (m && degs[+m[1] - 1] !== undefined) return degs[+m[1] - 1];
+      } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit' || e.code === 'cancelled')) throw e; }
+    }
+    return null;
+  }
   async function readPage(p, label, step) {
     var t0 = Date.now();
     step(0, 'جارٍ تجهيز ' + label + '…');
     var side = CLAUDE ? 1568 : 3072;                       // Claude reads at 1568px; bigger only slows the upload
     p.canvas = p.base;
+    /* a landscape photo of a portrait paper is sideways: straighten it before anything is read */
+    if (CLAUDE && p.base.width > p.base.height * 1.1) {
+      step(0, 'الصورة بالعرض: جارٍ تعديل اتجاه الورقة…');
+      var up = await pickUpright(p.base, [0, 90, 270]);                  // a wide photo may also be upright already
+      if (up) p.canvas = Engine.rotated(p.base, up);
+    }
     var bands = CLAUDE ? (econ() ? 4 : 5) : 3;            // more strips = more pixels per line of handwriting (and more image tokens)
     var imgs = await Engine.pageImages(p.canvas, bands, side);
     /* a quick look at the title tells the paper type, so both full reads get the office's formulas for it */
     var type = null, bank = null, printed = false, kl0 = '';
     if (!EXAM && CLAUDE && typeof Office !== 'undefined') {
       try {
-        var k = await Engine.generate(KEY, PROMPTS.kind(), [imgs.blobs[0]], { fast: true, signal: sig(), effort: 'low', maxTokens: 120 });
+        var k = await Engine.generate(KEY, PROMPTS.kind(), [imgs.blobs[0]], { fast: true, signal: sig(), effort: 'low', maxTokens: 1500 });   // v30: 120 was too few: it failed on every page
         var kl = Engine.clean(k.text).split('\n'); kl0 = kl[0]; var kr = /ROT\s*:?\s*(90|180|270)/i.exec(kl.slice(1).join(' '));
         type = Office.detect('[H] ' + kl[0]);
         printed = /PRINTED/i.test(kl.slice(1).join(' '));
-        if (kr) { p.canvas = Engine.rotated(p.base, +kr[1]); imgs = await Engine.pageImages(p.canvas, bands, side); }   // turned before the reads: no second pair of reads
+        if (kr && +kr[1] === 180) { p.canvas = Engine.rotated(p.canvas, 180); imgs = await Engine.pageImages(p.canvas, bands, side); }   // upside down: turned before the reads
+        else if (kr) { var up2 = await pickUpright(p.canvas, [90, 270]); if (up2 !== null) { p.canvas = Engine.rotated(p.canvas, up2); imgs = await Engine.pageImages(p.canvas, bands, side); } }
       } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
     }
     if (plainRun) type = null;                                            // «نص فقط»: no paper type, no formulas
@@ -341,8 +367,14 @@
     if (!ocrUsed) {
       step(1, 'جارٍ قراءة ' + label + ' (قراءتان معاً' + (bank ? ' بصيغ «' + (TYPE_LABEL[type] || type) + '»' : '') + ')…');
       var pair = await readTwice(imgs, system, ctx);
-      var rot = rotOf(pair.a) || rotOf(pair.b);
-      if (rot) { p.canvas = Engine.rotated(p.canvas, rot); imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system, ctx); }
+      /* turned again only when both reads say the page is not upright (or reading 1 could not read it at all); which way
+         is decided by the two-picture check, never by a model's guessed degrees */
+      var ra = rotOf(pair.a), rb = pair.b ? rotOf(pair.b) : ra;
+      if ((ra && ra === rb) || (refusal(pair.a) && (ra || rb))) {
+        var turn = (ra || rb) === 180 ? 180 : await pickUpright(p.canvas, [90, 270]);
+        if (turn) { p.canvas = Engine.rotated(p.canvas, turn); imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system, ctx); }
+      }
+      if (refusal(pair.a) && (!pair.b || refusal(pair.b))) throw { code: 'unreadable' };   // never a document made of an apology
       a = stripRot(pair.a); b = pair.b ? stripRot(pair.b) : null;
       step(2, 'جارٍ مراجعة ' + label + ' مع الأصل والصيغ المعتادة…');
     }
@@ -369,11 +401,11 @@
       else if (b && !d.same) {
         var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
         if (rj.model) usedModels[rj.model] = 1;
-        var tj = Engine.clean(rj.text); if (tj.length > Math.min(a.length, b.length) * 0.6 && !rj.truncated) final = tj;
+        var tj = Engine.clean(rj.text); if (tj.length > Math.min(a.length, b.length) * 0.6 && !rj.truncated && !refusal(tj)) final = tj;
       } else if (!b || (bank && a.indexOf('⟦') >= 0 && !skipCheck(a, bank))) {
         /* one proofreading pass: second read failed, or both agree but doubts remain and the formulas may settle them */
         var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
-        var tc = Engine.clean(rc.text); if (tc.length > a.length * 0.6 && !rc.truncated) final = tc;
+        var tc = Engine.clean(rc.text); if (tc.length > a.length * 0.6 && !rc.truncated && !refusal(tc)) final = tc;
       }
     } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
     var learned = 0;
@@ -1625,7 +1657,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '29';
+  var APP_VER = '30';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

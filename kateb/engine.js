@@ -234,6 +234,7 @@ var Engine = (function () {
     RECITATION: 'تعذرت قراءة هذه الصفحة. جرّب صورة أخرى.'
   };
   ERR.cancelled = 'تم الإلغاء.';
+  ERR.unreadable = 'تعذّرت قراءة هذه الصورة. صوّر الورقة مرة أخرى: مستقيمة، كاملة داخل الصورة، وفي إضاءة جيدة.';
   function errText(e) { return (e && ERR[e.code]) || 'حصلت مشكلة. اضغط «حاول مرة أخرى».'; }
 
   /* ---------- Claude usage ledger (on this device): tokens per day per model → estimated cost ----------

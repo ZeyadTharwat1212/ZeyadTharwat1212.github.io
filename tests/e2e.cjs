@@ -52,15 +52,16 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
   await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
-    const kind = /OCR OUTPUT:/.test(prompt) ? 'printed' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    const kind = /OCR OUTPUT:/.test(prompt) ? 'printed' : /writing UPRIGHT/.test(prompt) ? 'orient' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
     calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, p: prompt.slice(0, 6000), model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta, ocr: kind === 'printed' ? prompt.split('OCR OUTPUT:\n')[1] : undefined });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
     const short = /MARKED PLACES/.test(prompt);
-    const text = short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    if (kind === 'orient') calls.rotDone = true;
+    const text = kind === 'orient' ? (answers.UP || '1') : short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
     calls.claude[calls.claude.length - 1].short = short; calls.claude[calls.claude.length - 1].cache = body.messages[0].content.some(c => c.cache_control);
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
-    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: (kind === 'read' && answers.ROT ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: ((kind === 'read' || kind === 'read2') && answers.ROT && !calls.rotDone ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
   });
   await context.route(/generativelanguage\.googleapis\.com/, async r => {
     const url = r.request().url();
@@ -243,8 +244,9 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(txt.includes('٧/١/٢٠٢٦'), 'year completed from the numbers pass (shown with Arabic digits): ' + txt);
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'the completed number is yellow for the eye');
   }, 'sk-ant-test'));
-  await step('Claude: a sideways page is rotated from the ROT line and read again', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ, ROT: 90 }, async (page, calls) => {
+  await step('Claude: when both reads say the page is not upright, the two-picture check decides the turn and it is read again', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ, ROT: 90 }, async (page, calls) => {
     assert.ok(calls.filter(k => k === 'read').length >= 2, 'read again after rotating');
+    assert.ok(calls.includes('orient'), 'the turn was chosen by the upright check');
     assert.ok(!(await page.textContent('#pagesBox .sheet')).includes('ROT:'));
   }, 'sk-ant-test'));
 
@@ -259,6 +261,16 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     const txt = (await page.textContent('#pagesBox .sheet')).replace(/\u200F/g, '');
     assert.ok(txt.includes('باع المعلن إليه') && txt.includes('٨/١/٢٠٢٦') && !txt.includes('؟'), 'the unreadable word filled, the FIX line applied: ' + txt);
   }, 'sk-ant-test'));
+
+  await step('v30 real-photo fixes: a landscape photo is straightened by the upright check BEFORE the reads; the title step gets enough room; an apology («I can\'t transcribe») never becomes a document', () => runMode(browser, base, 'kateb.html', { A: "I can't transcribe this page. The text is not legible.", B: "I can't transcribe this page." }, null, 'sk-ant-test', async (page, calls) => {
+    const wide = await (async () => { const p = await browser.newPage({ viewport: { width: 900, height: 500 } }); await p.setContent('<body style="margin:0;background:#fff;font:30px serif;padding:30px">دعوى صحة توقيع</body>'); const b = await p.screenshot(); await p.close(); return b; })();
+    await page.setInputFiles('#file', { name: 'wide.png', mimeType: 'image/png', buffer: wide });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
+    await page.waitForSelector('#fail:not([hidden])', { timeout: 20000 });
+    assert.match(await page.textContent('#failMsg'), /صوّر الورقة مرة أخرى/, 'a clear message, not a document of apologies');
+    const c = calls.claude; const oi = c.findIndex(x => x.kind === 'orient'), ri = c.findIndex(x => x.kind === 'read');
+    assert.ok(oi >= 0 && oi < ri, 'straightened before the first read: ' + c.map(x => x.kind).join(','));
+  }));
 
   await step('camera tray: two shots cleaned to white pages, removed/kept, read together as two pages', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ }, async (page, calls) => {}, 'sk-ant-test', async (page) => {
     const dark = await (async () => { const p = await browser.newPage({ viewport: { width: 500, height: 700 } }); await p.setContent('<body style="margin:0;background:#8a8070;font:34px serif;padding:40px;color:#222">دعوى صحة توقيع<br>بناء علي طلب السيد</body>'); const b = await p.screenshot(); await p.close(); return b; })();
@@ -761,7 +773,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.setInputFiles('#file', { name: 'typed.png', mimeType: 'image/png', buffer: await printedPng(page) });
     await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
     await page.waitForSelector('#done:not([hidden])', { timeout: 90000 });
-    assert.deepStrictEqual(calls.slice().sort(), ['kind', 'printed'], 'one kind call + one correction: ' + calls.join(','));
+    assert.deepStrictEqual(calls.filter(k => k !== 'orient').sort(), ['kind', 'printed'], 'one kind call + one correction (+ the upright check for a wide photo): ' + calls.join(','));
     const pc = calls.claude.find(c => c.kind === 'printed');
     assert.ok(pc.model === 'claude-sonnet-5-5' && pc.images === 1 && pc.effort === 'low', 'economy: Sonnet, low effort, the whole page only');
     assert.ok(/محكمة/.test(pc.ocr) && /أسيوط/.test(pc.ocr) && /150000/.test(pc.ocr), 'the real OCR text went to Claude: ' + pc.ocr);
