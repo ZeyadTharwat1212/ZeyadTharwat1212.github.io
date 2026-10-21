@@ -233,7 +233,10 @@
     var short = SHORT && econ();
     var eff = CLAUDE && !econ() ? 'high' : 'medium';       // the same effort as the judge: a different effort would miss the image cache
     var pa = Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: eff, best: true, cacheImages: SHORT, system: system, context: ctx });
-    var pb = Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: econ() ? 'low' : eff, best: !short, system: system, context: ctx })
+    /* v31: in economy the second read is gone for legal pages — on real handwriting Sonnet gave up («.....» gaps), every gap
+       became a yellow «disagreement» (39 on one page) and forced a full rewrite. One careful Opus read; its own doubts
+       get the short check. «🎯 أقصى دقة» keeps two Opus reads and the judge. */
+    var pb = short ? Promise.resolve(null) : Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: econ() ? 'low' : eff, best: !short, system: system, context: ctx })
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return r.truncated ? null : Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     var ra = await pa, b = await pb;
     if (ra.model) usedModels[ra.model] = 1;
@@ -349,19 +352,18 @@
     var cb = plainRun ? null : await caseBank(kl0);                                         // v26: the published wording of this kind of case
     var system = ((bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '') + caseText(cb) + (await glossaryPrompt())) || undefined, ctx = (caseContext() + learnPrompt() + (!EXAM && !plainRun && typeof Memory !== 'undefined' ? Memory.privatePrompt() : '')) || undefined;
     var a = null, b = null, ocrUsed = false;
-    /* a printed page: the free on-device OCR reads it and Claude corrects that text against one image — one call
-       instead of two reads, a judge and a numbers pass; anything short of a usable OCR falls back to the full read */
-    if (printed && CLAUDE && ocrOn() && typeof Ocr !== 'undefined' && Ocr.supported() && PROMPTS.printed) {
+    /* v31 a printed page: ONE Sonnet read of the page and its strips. (The free on-device OCR was tried on a real paper:
+       it mixed the side column into the body and put words and lines in the wrong order, and one text correction did
+       not repair the order — the picture has to be read.) Typed text needs no second read or judge; its doubts get one
+       short check below. ~$0.05 a page. */
+    var printedRead = false;
+    if (printed && CLAUDE && ocrOn()) {
       try {
-        step(1, 'الورقة مطبوعة: جارٍ قراءتها على الجهاز بالقارئ المجاني…');
-        var o = await Ocr.read(p.canvas, { signal: sig(), onProgress: function (t, pr) { if (t) step(1, t + (pr !== null && pr < 1 ? ' ' + Math.round(pr * 100) + '٪' : '')); } });
-        if (ocrGood(o)) {
-          step(2, 'جارٍ تصحيح القراءة مع الصورة (طلب واحد)…');
-          var rp = await Engine.generate(KEY, PROMPTS.printed(o.text), [imgs.blobs[0]], { onWait: onWait, signal: sig(), temperature: 0.1, effort: econ() ? 'low' : 'medium', best: !econ(), system: system, context: ctx });
-          if (rp.model) usedModels[rp.model] = 1;
-          var tp = stripRot(Engine.clean(rp.text));
-          if (tp.length > o.text.length * 0.5 && !rp.truncated) { a = tp; ocrUsed = true; }
-        }
+        step(1, 'الورقة مطبوعة: قراءة واحدة سريعة…');
+        var rp = await Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: 'medium', cacheImages: true, system: system, context: ctx });
+        if (rp.model) usedModels[rp.model] = 1;
+        var tp = Engine.clean(rp.text), rr = rotOf(tp);
+        if (!rp.truncated && !refusal(tp) && !rr && stripRot(tp).length > 150) { a = stripRot(tp); ocrUsed = true; printedRead = true; }
       } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit' || e.code === 'cancelled')) throw e; }
     }
     if (!ocrUsed) {
@@ -388,8 +390,16 @@
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
     try {
       var mk = SHORT && !ocrUsed ? Verify.marks(a, b || null) : null;
-      if (ocrUsed) { /* the correction already saw the image: no judge, no second proofreading */ }
-      else if (mk && b && (mk.disputes || (mk.doubts && (!d.same || !skipCheck(a, bank))) || /⟦\s*؟+\s*⟧/.test(a))) {
+      if (ocrUsed) {
+        /* a printed page read once: only its own doubts are looked at again, by the same model with the cached images */
+        var mp = printedRead && a.indexOf('⟦') >= 0 ? Verify.marks(a, null) : null;
+        if (mp && mp.doubts) {
+          var rq = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mp.prompt, false), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: 'medium', cacheImages: true, maxTokens: 4096 });
+          if (rq.model) usedModels[rq.model] = 1;
+          if (!rq.truncated) final = Verify.decide(mp, Engine.clean(rq.text)).text;
+        }
+      }
+      else if (mk && (b ? (mk.disputes || (mk.doubts && (!d.same || !skipCheck(a, bank)))) : (mk.doubts && !skipCheck(a, bank))) || (mk && /⟦\s*؟+\s*⟧/.test(a))) {
         /* the short judge: Opus looks only at the marked places (the disputes, and reading 1's doubts) and the numbers,
            and answers in a few lines instead of rewriting the page — a fraction of the time and of the price */
         step(2, 'جارٍ حسم ' + (mk.disputes ? mk.disputes + ' موضع اختلاف' : mk.doubts + ' كلمة غير مؤكدة') + ' مع الأصل…');
@@ -402,7 +412,7 @@
         var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
         if (rj.model) usedModels[rj.model] = 1;
         var tj = Engine.clean(rj.text); if (tj.length > Math.min(a.length, b.length) * 0.6 && !rj.truncated && !refusal(tj)) final = tj;
-      } else if (!b || (bank && a.indexOf('⟦') >= 0 && !skipCheck(a, bank))) {
+      } else if ((!b && !SHORT) || (b && bank && a.indexOf('⟦') >= 0 && !skipCheck(a, bank))) {
         /* one proofreading pass: second read failed, or both agree but doubts remain and the formulas may settle them */
         var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
         var tc = Engine.clean(rc.text); if (tc.length > a.length * 0.6 && !rc.truncated && !refusal(tc)) final = tc;
@@ -429,6 +439,7 @@
       /* v26: the automatic spelling corrector — standard spelling of ordinary and legal words (الهيئه → الهيئة،
          علي طلب → على طلب، المدعي عليه → المدعى عليه، الزام → إلزام), never names, numbers or yellow words */
       if (typeof Dict !== 'undefined' && Dict.fix) {
+        if (!Dict.ready() && Dict.load) { try { await Promise.race([Dict.load(), new Promise(function (r) { setTimeout(r, 12000); })]); } catch (e) {} }   // v31: the first paper waited for nothing
         var lex = typeof Bank !== 'undefined' ? await Bank.load('lexicon') : null; lexiconBank = lex;
         var sp = Dict.fix(text, { lexicon: lex, names: typeof Fields !== 'undefined' ? Fields.extract(text).names : [] });
         text = sp.text; spellFixed = sp.changes.length;
@@ -1657,7 +1668,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '30';
+  var APP_VER = '31';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -1724,6 +1735,7 @@
     "- NOTHING IS LEFT UNREAD: never write ⟦؟⟧, never leave a gap, never drop a word because it is hard. A word you cannot read is filled with the word the context demands — the sentence, the formula of this paper type, the earlier pages, the office memory — and wrapped in ⟦ ⟧ so the reviewer checks it. Names, numbers, dates and case numbers too: the best reading from the visible strokes, the earlier pages and the office memory, always in ⟦ ⟧ when not certain.\n" +
     "- SPELLING IS CORRECTED AUTOMATICALLY: the typed paper must have no spelling mistakes. A slip of the hand in an ordinary word is written in the office's correct spelling (hamza forms أ إ آ ء ئ ؤ، ة not ه، ى not ي at the end, a missing or doubled letter, دعوه → دعوى، الى → إلى، علي → على where it means «on»). NEVER correct names of people, families or places, numbers, dates, amounts or case numbers — those stay exactly as the ink shows. The wording itself is not changed.\n" +
     "- Leave out: words crossed out or scribbled over (if they hid a name or field, write ........ in their place), stamps, seals, signatures, page numbers, handwritten court notes in the margins.\n" +
+    "- Leave out the office's LEFT MARGIN COLUMN (الموضوع / the subject / كطلب الطالب وتحت مسئوليته / وكيل الطالب / المحامي) and the lawyer's STAMP BOX at the top (مكتب … المحامي): the Word template prints them itself. The body text starts at the title or at «إنه في يوم».\n" +
     "- HOUSE STYLE OF THIS OFFICE (measured on 1,740 of its typed papers): ALL numbers and dates use Western digits 0-9, even when the hand wrote ٠-٩. Dates are day/month/year like 10/1/2020 or 7/10/2025 (never year first). Amounts like 250000 ج ( مائتان وخمسون ألف جنيه مصري لا غير ). Case references like رقم 2537 لسنة 2025. Keep the source's punctuation.\n" +
     "- Copy EVERY digit: a year has four digits (2022, not 202), an amount keeps all its zeros; read numbers from the strips digit by digit, never from memory.\n" +    "- Spelling is standard Egyptian legal Arabic as the office types it: دعوى (never دعوه or دعوة), إلى، على، بالآتي، صحة توقيع، محكمة، الأهلية القانونية، أسيوط. Final ة and ى are never written as ه or ي by mistake.\n" +
     "- Do not add, remove, summarize, translate or reword.\n" +

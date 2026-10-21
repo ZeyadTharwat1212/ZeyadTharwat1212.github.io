@@ -1,11 +1,11 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v30';
+var CACHE = 'kateb-v31';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=30', 'kateb/engine.js?v=30', 'kateb/verify.js?v=30', 'kateb/docx.js?v=30', 'kateb/exam.js?v=30', 'kateb/app.js?v=30',
-  'kateb/office.js?v=30', 'kateb/bank.js?v=30', 'kateb/arabic.js?v=30', 'kateb/scan.js?v=30', 'kateb/store.js?v=30', 'kateb/learn.js?v=30', 'kateb/fields.js?v=30', 'kateb/memory.js?v=30', 'kateb/bank/memory.json?v=30', 'kateb/speech.js?v=30', 'kateb/raster.js?v=30', 'kateb/dict.js?v=30', 'kateb/ocr.js?v=30', 'kateb/bank/glossary.json?v=30', 'kateb/templates/templates.json?v=30',
-  'kateb/templates/announce.docx?v=30', 'kateb/templates/gift.docx?v=30', 'kateb/templates/inherit_announce.docx?v=30', 'kateb/templates/inherit_request.docx?v=30', 'kateb/templates/iqrar.docx?v=30', 'kateb/templates/memo.docx?v=30', 'kateb/templates/price.docx?v=30', 'kateb/templates/reannounce.docx?v=30', 'kateb/templates/sahifa.docx?v=30', 'kateb/templates/sale.docx?v=30', 'kateb/templates/sihha.docx?v=30', 'kateb/templates/warning.docx?v=30',
+  'kateb/style.css?v=31', 'kateb/engine.js?v=31', 'kateb/verify.js?v=31', 'kateb/docx.js?v=31', 'kateb/exam.js?v=31', 'kateb/app.js?v=31',
+  'kateb/office.js?v=31', 'kateb/bank.js?v=31', 'kateb/arabic.js?v=31', 'kateb/scan.js?v=31', 'kateb/store.js?v=31', 'kateb/learn.js?v=31', 'kateb/fields.js?v=31', 'kateb/memory.js?v=31', 'kateb/bank/memory.json?v=31', 'kateb/speech.js?v=31', 'kateb/raster.js?v=31', 'kateb/dict.js?v=31', 'kateb/ocr.js?v=31', 'kateb/bank/glossary.json?v=31', 'kateb/templates/templates.json?v=31',
+  'kateb/templates/announce.docx?v=31', 'kateb/templates/gift.docx?v=31', 'kateb/templates/inherit_announce.docx?v=31', 'kateb/templates/inherit_request.docx?v=31', 'kateb/templates/iqrar.docx?v=31', 'kateb/templates/memo.docx?v=31', 'kateb/templates/price.docx?v=31', 'kateb/templates/reannounce.docx?v=31', 'kateb/templates/sahifa.docx?v=31', 'kateb/templates/sale.docx?v=31', 'kateb/templates/sihha.docx?v=31', 'kateb/templates/warning.docx?v=31',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',

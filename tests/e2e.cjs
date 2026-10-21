@@ -93,7 +93,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, serviceWorkers: 'block', permissions: ['microphone'] });
   const calls = [];
   await fakeWorld(context, answers, calls);
-  await context.addInitScript(k => { try { localStorage.setItem('kateb.apikey', k); } catch (e) {} window.__printed = 0; window.print = () => { window.__printed++; }; }, key || 'test-key');
+  await context.addInitScript(([k, m]) => { try { localStorage.setItem('kateb.apikey', k); if (m) localStorage.setItem('kateb.mode', m); } catch (e) {} window.__printed = 0; window.print = () => { window.__printed++; }; }, [key || 'test-key', answers && answers.MODE]);
   const page = await context.newPage();
   const errors = []; page.on('pageerror', e => errors.push(String(e)));
   page.on('dialog', d => d.accept());
@@ -219,25 +219,18 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   }));
 
   const SIHHA_B = SIHHA_READ.replace('مينا سامي', 'مينا سامح').replace('باع المعلن', 'باع ⟦المعلز⟧');
-  await step('Claude: reading 1 on Opus + reading 2 on Sonnet in parallel, the short Opus judge on the disputed places with the صحة توقيع formula bank, snap fixes a formula word', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_B, J: SIHHA_B, ROT: 0 }, async (page, calls) => {
-    assert.deepStrictEqual(calls.slice().sort(), ['judge', 'kind', 'numbers', 'read', 'read2']);
-    const c = calls.claude, reads = c.filter(x => x.kind === 'read' || x.kind === 'read2'), judge = c.find(x => x.kind === 'judge'), nums = c.find(x => x.kind === 'numbers'), kindCall = c.find(x => x.kind === 'kind');
+  await step('v31 Claude economy: ONE careful Opus read with the صحة توقيع formula bank (images cached), the numbers pass on Sonnet, a lone doubt inside a formula is settled by the formula (no extra call)', () => runMode(browser, base, 'kateb.html', { A: SIHHA_B, B: SIHHA_B, D: '1 | ⟦المعلز⟧', ROT: 0 }, async (page, calls) => {
+    assert.deepStrictEqual(calls.slice().sort(), ['kind', 'numbers', 'read'], 'one doubt the dictionary and formulas can settle → no extra check: ' + calls.join(','));
+    const c = calls.claude, r1 = c.find(x => x.kind === 'read'), nums = c.find(x => x.kind === 'numbers'), kindCall = c.find(x => x.kind === 'kind');
     assert.ok(kindCall.model === 'claude-haiku-5-5' && kindCall.images === 1, 'type detection: one small Haiku call');
-    const r1 = c.find(x => x.kind === 'read'), r2 = c.find(x => x.kind === 'read2');
-    assert.ok(reads.every(x => x.images === 5 && !x.fast), 'both reads see the whole page + 4 strips (economy mode)');
-    assert.ok(r1.model === 'claude-opus-5-5' && r1.effort === 'medium' && r1.cache, 'reading 1 on Opus, its images cached for the judge');
-    assert.ok(r2.model === 'claude-sonnet-5-5' && r2.effort === 'low' && !r2.cache, 'economy: reading 2 on Sonnet (a different model, half the price), low effort');
-    assert.ok(reads.every(x => x.system.includes('STANDARD FORMULAS')), 'the formula bank is the cached system block');
-    assert.ok(reads.every(x => x.system.includes('STANDARD FORMULAS') && x.system.includes('دعوى صحة توقيع')), 'both reads get the sihha bank');
-    assert.ok(reads.every(x => x.system.includes('STANDARD WORDING OF «صحة توقيع» CASES') && x.system.includes('PLACES AND INSTITUTIONS')), 'v26: the case-kind formulas and the area memory go with the reads');
+    assert.ok(r1.model === 'claude-opus-5-5' && r1.effort === 'medium' && r1.cache && r1.images === 5 && !r1.fast, 'one Opus read, the page + 4 strips, images cached');
+    assert.ok(r1.system.includes('STANDARD FORMULAS') && r1.system.includes('دعوى صحة توقيع') && r1.system.includes('STANDARD WORDING OF «صحة توقيع» CASES') && r1.system.includes('PLACES AND INSTITUTIONS'), 'formula bank, case formulas and area memory');
+    assert.ok(/LEFT MARGIN COLUMN/.test(r1.p), 'the side column and the stamp box are not transcribed');
     assert.ok(nums.model === 'claude-sonnet-5-5' && nums.effort === 'low' && !nums.system, 'economy: numbers pass on Sonnet, low effort, no bank');
     assert.match(await page.textContent('#readerInfo'), /claude-opus-5-5/, 'review screen shows the real model used');
-    assert.strictEqual(judge.model, 'claude-opus-5-5');
-    assert.ok(judge.system.includes('STANDARD FORMULAS') && judge.system.includes('دعوى صحة توقيع'), 'judge gets the sihha bank');
-    assert.ok(judge.effort === 'medium' && judge.cache && judge.short && judge.images === 5, 'economy: the short judge at medium (same effort as reading 1, so the images come from the cache)');
     const txt = await page.textContent('#pagesBox .sheet');
     assert.ok(txt.includes('باع المعلن إليه'), 'snap restored the formula word: ' + txt);
-    assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'only the disputed name stays yellow');
+    assert.strictEqual(await page.locator('#pagesBox mark').count(), 0, 'nothing left yellow');
   }, 'sk-ant-test'));
   await step('Claude: the numbers pass completes a truncated year and flags a number it did not see', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ.replace('7/1/2026', '7/1/202'), B: SIHHA_READ.replace('7/1/2026', '7/1/202'), N: '2026 | الموافق\n7/1/2026 | بيع مؤرخ في' }, async (page) => {
     const txt = (await page.textContent('#pagesBox .sheet')).replace(/\u200F/g, '');
@@ -252,7 +245,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
 
   await step('Claude: the Haiku title call also reports a sideways page, so it is turned BEFORE the reads (no second pair of reads)', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ, K: 'دعوى صحة توقيع\nHANDWRITTEN\nROT: 90' }, async (page, calls) => {
     assert.strictEqual(calls.filter(k => k === 'read').length, 1, 'one reading 1: ' + calls.join(','));
-    assert.strictEqual(calls.filter(k => k === 'read2').length, 1, 'one reading 2: ' + calls.join(','));
+    assert.strictEqual(calls.filter(k => k === 'read2').length, 0, 'economy: one careful read only: ' + calls.join(','));
   }, 'sk-ant-test'));
   await step('Claude: reads that agree with no doubt → no judge at all; an unreadable word → one short proofreading call that fills it from the context', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ.replace('باع المعلن', 'باع ⟦؟⟧'), B: SIHHA_READ.replace('باع المعلن', 'باع ⟦؟⟧'), D: '1 | المعلن\nFIX | 7/1/2026 | 8/1/2026' }, async (page, calls) => {
     const ck = calls.claude.find(c => c.kind === 'check');
@@ -409,7 +402,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(await page.locator('#backBtn').isHidden(), 'no «رجوع» on the main screen');
   }));
 
-  await step('review: undo / redo (buttons, Ctrl+Z, confirmations), «نسخ سابقة», «استرجاع النص الأول», reopening keeps the edits, «ملف جديد»', () => runMode(browser, base, 'kateb.html', LEGAL, null, 'sk-ant-test', async (page) => {
+  await step('review: undo / redo (buttons, Ctrl+Z, confirmations), «نسخ سابقة», «استرجاع النص الأول», reopening keeps the edits, «ملف جديد»', () => runMode(browser, base, 'kateb.html', Object.assign({ MODE: 'best' }, LEGAL), null, 'sk-ant-test', async (page) => {
     await convert(page);
     await page.waitForFunction(() => /ok/.test(document.getElementById('saveStatus').className));
     assert.ok(await page.locator('#undoBtn').isDisabled() && await page.locator('#redoBtn').isDisabled());
@@ -551,7 +544,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(await page.getAttribute('#outList [data-out="plain"]', 'aria-pressed'), 'true');
     await convert(page);
     const reads = calls.claude.filter(c => c.kind === 'read' || c.kind === 'read2');
-    assert.ok(reads.length === 2 && reads.every(r => /as plain text/.test(r.p) && !/STANDARD FORMULAS|STANDARD WORDING|COMMON EXPRESSIONS/.test(r.system)), 'plain reads without the legal banks');
+    assert.ok(reads.length >= 1 && reads.every(r => /as plain text/.test(r.p) && !/STANDARD FORMULAS|STANDARD WORDING|COMMON EXPRESSIONS/.test(r.system)), 'plain reads without the legal banks');
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
     const doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
     assert.ok(!doc.includes('rIdKM1') && !doc.includes('{{') && doc.includes('مينا سامي'), 'a plain white Word page with the text');
@@ -722,7 +715,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     /* a word the two reads disagreed on says so */
   }));
 
-  await step('intelligence: a guard-added mark says the reads disagreed; «بيانات الورقة» lists case number, names, dates, amounts and warns on a one-digit case difference; a chip jumps to the text', () => runMode(browser, base, 'kateb.html', { A: LEGAL.A.replace('في القضية رقم 1234 لسنة ٢٠٢٤ ⟦مدني⟧ كلي', 'في القضية رقم 1234 لسنة ٢٠٢٤ ⟦مدني⟧ كلي أمام محكمة أسيوط الابتدائية بمبلغ 5000 جنيه\nالاستئناف رقم 1235 لسنة 2024'), B: LEGAL.B.replace('في القضية رقم 1284 لسنة ٢٠٢٤ مدني كلي', 'في القضية رقم 1284 لسنة ٢٠٢٤ مدني كلي أمام محكمة أسيوط الابتدائية بمبلغ 5000 جنيه\nالاستئناف رقم 1235 لسنة 2024'), J: LEGAL.J.replace('في القضية رقم 1234 لسنة ٢٠٢٤ مدني كلي', 'في القضية رقم 1234 لسنة ٢٠٢٤ مدني كلي أمام محكمة أسيوط الابتدائية بمبلغ 5000 جنيه\nالاستئناف رقم 1235 لسنة 2024') }, async (page) => {
+  await step('intelligence («🎯 أقصى دقة», two reads): a guard-added mark says the reads disagreed; «بيانات الورقة» lists case number, names, dates, amounts and warns on a one-digit case difference; a chip jumps to the text', () => runMode(browser, base, 'kateb.html', { MODE: 'best', A: LEGAL.A.replace('في القضية رقم 1234 لسنة ٢٠٢٤ ⟦مدني⟧ كلي', 'في القضية رقم 1234 لسنة ٢٠٢٤ ⟦مدني⟧ كلي أمام محكمة أسيوط الابتدائية بمبلغ 5000 جنيه\nالاستئناف رقم 1235 لسنة 2024'), B: LEGAL.B.replace('في القضية رقم 1284 لسنة ٢٠٢٤ مدني كلي', 'في القضية رقم 1284 لسنة ٢٠٢٤ مدني كلي أمام محكمة أسيوط الابتدائية بمبلغ 5000 جنيه\nالاستئناف رقم 1235 لسنة 2024'), J: LEGAL.J.replace('في القضية رقم 1234 لسنة ٢٠٢٤ مدني كلي', 'في القضية رقم 1234 لسنة ٢٠٢٤ مدني كلي أمام محكمة أسيوط الابتدائية بمبلغ 5000 جنيه\nالاستئناف رقم 1235 لسنة 2024') }, async (page) => {
     const whys = await page.locator('#pagesBox mark').evaluateAll(ms => ms.map(m => m.textContent + ':' + m.dataset.why));
     assert.ok(whys.includes('محمد:disagree') && whys.includes('١٢٣٤:disagree'), 'disputed name and number carry the reason: ' + whys);
     await page.click('#nextDoubt'); assert.match(await page.textContent('#whyNote'), /اختلفتا/);
@@ -768,42 +761,16 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     });
     return Buffer.from(url.split(',')[1], 'base64');
   }
-  await step('printed page: the kind call says PRINTED → the real on-device OCR reads it, one Sonnet correction with one image, no reads/judge/numbers; a photo that the OCR cannot read falls back to the full pipeline', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ, K: 'دعوى صحة توقيع\nPRINTED', P: SIHHA_READ }, null, 'sk-ant-test', async (page, calls) => {
+  await step('v31 printed page: the kind call says PRINTED → ONE Sonnet read of the page and its strips (no second read, judge or numbers pass), images cached; its doubts get one short check by the same model', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ.replace('باع المعلن', 'باع ⟦المعلن⟧'), B: SIHHA_READ, K: 'دعوى صحة توقيع\nPRINTED', D: '1 | المعلن' }, null, 'sk-ant-test', async (page, calls) => {
     await page.evaluate(() => window.__test.dict().load());
     await page.setInputFiles('#file', { name: 'typed.png', mimeType: 'image/png', buffer: await printedPng(page) });
     await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
     await page.waitForSelector('#done:not([hidden])', { timeout: 90000 });
-    assert.deepStrictEqual(calls.filter(k => k !== 'orient').sort(), ['kind', 'printed'], 'one kind call + one correction (+ the upright check for a wide photo): ' + calls.join(','));
-    const pc = calls.claude.find(c => c.kind === 'printed');
-    assert.ok(pc.model === 'claude-sonnet-5-5' && pc.images === 1 && pc.effort === 'low', 'economy: Sonnet, low effort, the whole page only');
-    assert.ok(/محكمة/.test(pc.ocr) && /أسيوط/.test(pc.ocr) && /150000/.test(pc.ocr), 'the real OCR text went to Claude: ' + pc.ocr);
-    assert.ok(pc.system.includes('STANDARD FORMULAS'), 'the correction gets the formula bank');
-    assert.match(await page.textContent('#readerInfo'), /1 صفحة مطبوعة قُرئت بالقارئ المجاني/);
+    assert.deepStrictEqual(calls.filter(k => k !== 'orient').sort(), ['check', 'kind', 'read'], 'title + one read + one short check: ' + calls.join(','));
+    const rd = calls.claude.find(c => c.kind === 'read'), ck = calls.claude.find(c => c.kind === 'check');
+    assert.ok(rd.model === 'claude-sonnet-5-5' && rd.cache && rd.images >= 3 && rd.system.includes('STANDARD FORMULAS'), 'Sonnet, the page and its strips, the formula bank, cached images');
+    assert.ok(ck.model === 'claude-sonnet-5-5' && ck.short && ck.effort === rd.effort, 'the doubts checked by the same model at the same effort (cache hit)');
     assert.match(await page.textContent('#pagesBox .sheet'), /مينا سامي/);
-    /* a page wrongly called PRINTED whose OCR output is not usable (scribbles) → the normal reads run */
-    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
-    calls.length = 0; calls.claude = [];
-    const scribble = Buffer.from((await page.evaluate(() => {
-      const c = document.createElement('canvas'); c.width = 1200; c.height = 900; const g = c.getContext('2d');
-      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = '#222'; g.lineWidth = 3;
-      let s = 7; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-      for (let i = 0; i < 60; i++) { g.beginPath(); g.moveTo(rnd() * 1200, rnd() * 900); for (let k = 0; k < 6; k++) g.lineTo(rnd() * 1200, rnd() * 900); g.stroke(); }
-      return c.toDataURL('image/png');
-    })).split(',')[1], 'base64');
-    await page.setInputFiles('#file', { name: 'scribble.png', mimeType: 'image/png', buffer: scribble });
-    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
-    await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
-    assert.ok(calls.includes('read') && calls.includes('read2') && !calls.includes('printed'), 'fallback to the full pipeline: ' + calls.join(','));
-    /* switched off in the settings → never used */
-    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
-    await page.click('#settingsBtn'); await page.waitForSelector('#settings:not([hidden])');
-    assert.ok(await page.isChecked('#setOcr')); await page.uncheck('#setOcr');
-    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
-    calls.length = 0; calls.claude = [];
-    await page.setInputFiles('#file', { name: 'typed.png', mimeType: 'image/png', buffer: await printedPng(page) });
-    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
-    await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
-    assert.ok(calls.includes('read') && !calls.includes('printed'), 'OCR off: ' + calls.join(','));
   }));
 
   const DICT_DOUBT = DICT_TEXT.replace('**كريم عادل**', '**⟦كريم⟧ عادل**');
