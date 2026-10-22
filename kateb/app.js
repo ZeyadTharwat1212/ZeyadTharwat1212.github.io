@@ -1547,7 +1547,7 @@
     if (EXAM) {
       kindChoice = examKind();
       list.innerHTML = EXAM_KINDS.map(function (k) { return '<button class="kind" type="button" data-kind="' + k.key + '" aria-pressed="' + (k.key === kindChoice) + '"><span class="ki">' + k.icon + '</span><span><b>' + k.label + '</b><small>' + k.hint + '</small></span></button>'; }).join('');
-      extra.innerHTML = '<label class="tplrow">عنوان الورقة<input id="kindTitle" dir="ltr" autocomplete="off"></label><label class="chk"><input type="checkbox" id="kindHead"> رأس الصفحة (المحافظة والمدرسة، والمادة والصف والزمن)</label>';
+      extra.innerHTML = FILE_ROW + '<label class="tplrow">عنوان الورقة<input id="kindTitle" dir="ltr" autocomplete="off"></label><label class="chk"><input type="checkbox" id="kindHead"> رأس الصفحة (المحافظة والمدرسة، والمادة والصف والزمن)</label>';
       $('kindHead').checked = headOn(kindChoice);
       $('kindTitle').value = (curDoc && curDoc.kindTitle) || EXAM_KINDS.filter(function (k) { return k.key === kindChoice; })[0].title();
       $('kindHint').textContent = 'اختاري نوع الورقة ليخرج الملف بالرأس والشكل المناسبين.';
@@ -1556,21 +1556,25 @@
       kindChoice = tplKey() || '';
       var opts = [{ key: '', label: 'ملف عادي (بدون شكل المكتب)', icon: '📄' }].concat(TPLS.map(function (t) { return { key: t.key, label: t.label, icon: '📜', stamp: t.stamp }; }));
       list.innerHTML = opts.map(function (o) { return '<button class="kind" type="button" data-kind="' + o.key + '" aria-pressed="' + (o.key === kindChoice) + '"><span class="ki">' + o.icon + '</span><span><b>' + escH(o.label) + '</b>' + (o.key && o.key === detected ? '<small>المقترح من قراءة الورقة</small>' : '') + '</span></button>'; }).join('');
-      extra.innerHTML = '<div class="tplrow2" id="kindLaw"><label class="tplrow">اسم المحامي في الختم<input id="kindLawName" autocomplete="off"></label><label class="tplrow">الصفة<select id="kindLawTitle"><option>المحامي</option><option>المحامية</option></select></label></div>';
+      extra.innerHTML = FILE_ROW + '<div class="tplrow2" id="kindLaw"><label class="tplrow">اسم المحامي في الختم<input id="kindLawName" autocomplete="off"></label><label class="tplrow">الصفة<select id="kindLawTitle"><option>المحامي</option><option>المحامية</option></select></label></div>';
       $('kindLawName').value = $('lawName').value; $('kindLawTitle').value = $('lawTitle').value;
       $('kindHint').textContent = 'اختر نوع الورقة ليخرج Word و PDF بشكل المكتب لهذا النوع: الخطوط والهوامش والختم.';
       kindExtraLegal();
     }
+    /* v37: the file's own name, typed freely (a paper type that is not in the list still gets its right name) */
+    $('kindFile').value = curDoc ? curDoc.name : ''; kindFileAuto = !curDoc || curDoc.name === curDoc.nameAuto;
     $('kindDlg').hidden = false;
     var sel = list.querySelector('[aria-pressed="true"]'); if (sel) sel.focus();
   }
+  var FILE_ROW = '<label class="tplrow">📝 اسم الملف (اكتب أي اسم — مثلًا نوع ورقة غير موجود في القائمة)<input id="kindFile" autocomplete="off" placeholder="مثلًا: دعوى ريع — أحمد محمد"></label>', kindFileAuto = true;
   function kindExtraLegal() { var t = tplOf(kindChoice); if ($('kindLaw')) $('kindLaw').hidden = !(t && t.stamp); }
   if ($('kindDlg')) {
+    $('kindExtra').addEventListener('input', function (e) { if (e.target.id === 'kindFile') kindFileAuto = false; });
     $('kindList').addEventListener('click', function (e) {
       var b = e.target.closest('[data-kind]'); if (!b) return;
       kindChoice = b.dataset.kind;
       Array.prototype.forEach.call($('kindList').querySelectorAll('[data-kind]'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
-      if (EXAM) { var k = EXAM_KINDS.filter(function (x) { return x.key === kindChoice; })[0]; if (k && $('kindTitle')) $('kindTitle').value = k.title(); if ($('kindHead')) { $('kindHead').checked = headPref(kindChoice); $('kindHead').disabled = kindChoice === 'plain'; } } else kindExtraLegal();
+      if (EXAM) { var k = EXAM_KINDS.filter(function (x) { return x.key === kindChoice; })[0]; if (k && $('kindTitle')) $('kindTitle').value = k.title(); if ($('kindHead')) { $('kindHead').checked = headPref(kindChoice); $('kindHead').disabled = kindChoice === 'plain'; } } else { kindExtraLegal(); if (kindFileAuto && kindChoice && $('kindFile')) $('kindFile').value = autoName(kindChoice); }
     });
     $('kindCancel').addEventListener('click', function () { $('kindDlg').hidden = true; kindThen = null; });
     $('kindOk').addEventListener('click', function () {
@@ -1580,6 +1584,8 @@
           $('tplSel').value = kindChoice; tplHint(); $('lawName').value = $('kindLawName').value; $('lawTitle').value = $('kindLawTitle').value; Engine.lsSet('kateb.lawName', $('lawName').value.trim()); Engine.lsSet('kateb.lawTitle', $('lawTitle').value);
           if (kindChoice && curDoc.name === curDoc.nameAuto) { curDoc.name = curDoc.nameAuto = autoName(kindChoice); $('docName').value = curDoc.name; }
         }
+        var fname = ($('kindFile') && $('kindFile').value || '').replace(/\s+/g, ' ').trim();
+        if (fname && fname !== curDoc.name) { curDoc.name = fname; curDoc.nameAuto = kindFileAuto ? fname : null; if ($('docName')) $('docName').value = fname; }
         curDoc.kindOk = true; queueSave();
       }
       kindLabel(); $('kindDlg').hidden = true;
@@ -1790,7 +1796,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '36';
+  var APP_VER = '37';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

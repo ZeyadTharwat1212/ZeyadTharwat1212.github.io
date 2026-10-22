@@ -564,7 +564,16 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
     assert.ok(await page.locator('#kindDlg').isHidden(), 'the second export does not ask again');
     assert.match(dl.suggestedFilename(), /\.docx$|^download$/);
-    await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])'); await page.click('#kindCancel');
+    await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])');
+    /* v37: a paper type that is not in the list: «ملف عادي» + the file's own name, typed */
+    assert.strictEqual(await page.inputValue('#kindFile'), 'مذكرة مينا سامي', 'the name box shows the current name');
+    await page.click('#kindList [data-kind=""]'); await page.fill('#kindFile', 'دعوى ريع — مينا سامي'); await page.click('#kindOk');
+    assert.strictEqual(await page.inputValue('#docName'), 'دعوى ريع — مينا سامي');
+    const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    assert.match(dl2.suggestedFilename(), /^دعوى ريع — مينا سامي\.docx$|^download$/, dl2.suggestedFilename());
+    await page.click('#kindBtn'); await page.waitForSelector('#kindDlg:not([hidden])'); await page.click('#kindList [data-kind="memo"]');
+    assert.strictEqual(await page.inputValue('#kindFile'), 'دعوى ريع — مينا سامي', 'a typed name is not replaced when the type changes');
+    await page.click('#kindCancel');
   }));
 
   await step('v28 «نص فقط» (lawyer app): the start-screen choice reads the page as plain text — no paper type, no formulas, no office template, nothing asked — and is remembered', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ, B: SIHHA_READ }, null, 'sk-ant-test', async (page, calls) => {
