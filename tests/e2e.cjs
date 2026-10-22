@@ -89,6 +89,33 @@ async function exportVia(page, btn) {
 }
 const exportWord = page => exportVia(page, '#wordBtn'), exportPdf = page => exportVia(page, '#pdfBtn');
 
+/* v35: a private GitHub repository in memory, shared by every browser context (the family's devices) */
+function fakeGitHubRepo(opts) {
+  const files = new Map(); let n = 0; const log = [];
+  const sha = () => 's' + (++n).toString(16).padStart(39, '0');
+  return { files, log, opts: opts || {}, async attach(context) {
+    await context.route(/api\.github\.com\/repos\//, async r => {
+      const req = r.request(), u = new URL(req.url()), m = u.pathname.match(/^\/repos\/[^/]+\/[^/]+(\/.*)?$/), rest = (m && m[1]) || '', meth = req.method();
+      log.push(meth + ' ' + rest);
+      const ok = (b, st) => r.fulfill({ status: st || 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(b) });
+      if (req.headers()['authorization'] !== 'Bearer github_pat_test') return ok({ message: 'Bad credentials' }, 401);
+      if (!rest && meth === 'GET') return ok({ private: !this.opts.public, permissions: { push: true } });
+      if (rest === '/git/trees/HEAD' && meth === 'GET') { if (!files.size) return ok({ message: 'Git Repository is empty.' }, 409); return ok({ tree: [...files].map(([path, f]) => ({ path, type: 'blob', sha: f.sha })) }); }
+      let b = rest.match(/^\/git\/blobs\/(\w+)$/);
+      if (b) { const f = [...files.values()].find(x => x.sha === b[1]); return f ? ok({ content: f.content, encoding: 'base64' }) : ok({ message: 'Not Found' }, 404); }
+      b = rest.match(/^\/contents\/(.+)$/);
+      if (b) {
+        const path = decodeURIComponent(b[1]), f = files.get(path);
+        if (meth === 'GET') return f ? ok({ content: f.content, sha: f.sha }) : ok({ message: 'Not Found' }, 404);
+        const body = JSON.parse(req.postData() || '{}');
+        if (meth === 'PUT') { if (f && body.sha !== f.sha) return ok({ message: 'sha' }, f && !body.sha ? 422 : 409); const nf = { content: body.content, sha: sha() }; files.set(path, nf); return ok({ content: { sha: nf.sha, path } }, f ? 200 : 201); }
+        if (meth === 'DELETE') { if (!f || body.sha !== f.sha) return ok({ message: 'sha' }, f ? 409 : 404); files.delete(path); return ok({ commit: {} }); }
+      }
+      return ok({ message: 'Not Found' }, 404);
+    });
+  } };
+}
+
 async function runMode(browser, base, file, answers, check, key, drive) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, serviceWorkers: 'block', permissions: ['microphone'] });
   const calls = [];
@@ -975,6 +1002,74 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     const fmt = calls.claude.find(c => c.kind === 'format'); assert.ok(fmt && /مينا سامح بالغ سن الرشد/.test(fmt.p), 'laid out by Claude from the corrected box');
     assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.liveDraft')), null, 'the draft is cleared once converted');
   }));
+
+  await step('v35 «ملفاتي» shared by every device: setup makes the link with the private repository (encrypted); device A makes a file → device B opens the same link and finds it with its photo; B\'s own older file goes to A too; a rename, a trash and a delete for good on one device reach the other; GitHub only holds unreadable bytes; a public repository is refused', async () => {
+    const gh = fakeGitHubRepo(), calls = [];
+    async function device(withKey) {
+      const c = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
+      await fakeWorld(c, { A: LEGAL.J, B: LEGAL.J }, calls); await gh.attach(c);
+      if (withKey) await c.addInitScript(() => { try { if (!localStorage.getItem('kateb.apikey')) localStorage.setItem('kateb.apikey', 'sk-ant-test'); } catch (e) {} });
+      const p = await c.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e))); p.errs = errs; p.on('dialog', d => d.accept(p.answer || undefined)); return { c, p };
+    }
+    async function makeDoc(p) {
+      await p.setInputFiles('#file', { name: 'page1.png', mimeType: 'image/png', buffer: await pagePhoto(browser) });
+      await p.waitForSelector('#tray:not([hidden])'); await p.click('#goBtn'); await p.waitForSelector('#done:not([hidden])', { timeout: 30000 });
+      await p.waitForFunction(() => /ok/.test(document.getElementById('saveStatus').className));
+      return p.evaluate(() => window.__test.doc().id);
+    }
+    async function files(p) { await p.evaluate(() => Sync.sync()); if (!(await p.isVisible('#start'))) { if (await p.isVisible('#homeBtn')) await p.click('#homeBtn'); else await p.evaluate(() => window.__test.show('start')); }
+      try { await p.waitForSelector('#start:not([hidden])', { timeout: 5000 }); } catch (e) { throw new Error('screen: ' + await p.evaluate(() => { const v = [...document.querySelectorAll('section')].find(x => !x.hidden); return v ? v.id + ' ' + v.textContent.slice(0, 300) : ''; }) + ' errors ' + p.errs); } await p.click('#filesBtn'); await p.waitForSelector('#files:not([hidden])'); await p.evaluate(() => Sync.sync()); await p.waitForTimeout(300); return p.$$eval('.doc .dname', a => a.map(x => x.textContent)); }
+    /* setup: a public repository is refused, the private one gives a link with «&s=» */
+    const S = await device(false);
+    await S.p.goto(base + '/setup.html');
+    gh.opts.public = true;
+    await S.p.fill('#key', 'sk-ant-test'); await S.p.fill('#stok', 'github_pat_test'); await S.p.fill('#pw1', 'family1'); await S.p.fill('#pw2', 'family1'); await S.p.click('#go');
+    await S.p.waitForSelector('#err:not([hidden])'); assert.match(await S.p.textContent('#err'), /خاص/);
+    gh.opts.public = false; await S.p.click('#go'); await S.p.waitForSelector('#out:not([hidden])', { timeout: 20000 });
+    const link = (await S.p.textContent('#l1')).trim();
+    assert.match(link, /kateb\.html#k=[\w-]+&s=[\w-]+$/); assert.ok(gh.files.has('kateb-sync.json'), 'the repository remembers its salt');
+    /* the same password again later gives the same files key; another password is refused (old files would be unreadable) */
+    await S.p.fill('#pw1', 'other22'); await S.p.fill('#pw2', 'other22'); await S.p.click('#go'); await S.p.waitForSelector('#err:not([hidden])'); assert.match(await S.p.textContent('#err'), /نفس كلمة السر/);
+    await S.c.close();
+    const url = link.replace(/^https?:\/\/[^/]+/, base);
+    /* device B: used before the sync, it already has a file of its own */
+    const B = await device(true); await B.p.goto(base + '/kateb.html'); await B.p.waitForSelector('#start:not([hidden])');
+    const oldB = await makeDoc(B.p); await B.p.evaluate(() => Store.renameDoc(window.__test.doc().id, 'ملف قديم على جهاز بابا'));
+    /* device A opens the link: password once */
+    const A = await device(false); await A.p.goto(url); await A.p.waitForSelector('#lock:not([hidden])');
+    await A.p.fill('#pw', 'family1'); await A.p.click('#pwBtn'); await A.p.waitForSelector('#start:not([hidden])');
+    const idA = await makeDoc(A.p); await A.p.evaluate(id => Store.renameDoc(id, 'دعوى من جهاز زياد'), idA);
+    await A.p.evaluate(() => Sync.sync());
+    const paths = [...gh.files.keys()];
+    assert.ok(paths.some(x => x === 'docs/legal/' + idA + '.json') && paths.some(x => /^blobs\/[0-9a-f]{32}$/.test(x)), 'the file and its photo are in the repository: ' + paths.join(', '));
+    const raw = [...gh.files.values()].map(f => Buffer.from(f.content, 'base64').toString('latin1')).join('');
+    assert.ok(!/دعوى|JFIF|"pages"|"name"/.test(raw) && !/\xd8\xaf\xd8\xb9\xd9\x88\xd9\x89/.test(raw), 'GitHub holds only encrypted bytes (no text, no photo, no file names)');
+    /* device B opens the same link: its old file and A's file are both there, on both */
+    await B.p.goto('about:blank'); await B.p.goto(url); await B.p.waitForSelector('#lock:not([hidden])');
+    await B.p.fill('#pw', 'family1'); await B.p.click('#pwBtn'); await B.p.waitForSelector('#start:not([hidden])');
+    let nb = await files(B.p);
+    assert.ok(nb.includes('دعوى من جهاز زياد') && nb.includes('ملف قديم على جهاز بابا'), 'B: ' + nb);
+    assert.match(await B.p.textContent('#syncNote'), /كل الأجهزة/);
+    assert.ok(await B.p.locator('.doc .dthumb img').count() >= 2, 'the photos came too');
+    await B.p.evaluate(id => Store.getDoc(id).then(d => { if (!d || !/^data:image\/jpeg;base64,/.test(d.pages[0].img)) throw new Error('photo missing on B'); }), idA);
+    let na = await files(A.p);
+    assert.ok(na.includes('ملف قديم على جهاز بابا'), 'A gets B\'s old file: ' + na);
+    /* rename on B → A */
+    await B.p.evaluate(id => Store.renameDoc(id, 'دعوى صحة توقيع — معدلة من بابا'), idA); await B.p.evaluate(() => Sync.sync());
+    na = await files(A.p);
+    assert.ok(na.includes('دعوى صحة توقيع — معدلة من بابا'), 'rename reached A: ' + na);
+    /* trash on A → B's trash; delete for good on B → gone on A and in the repository */
+    await A.p.evaluate(id => Store.trashDoc(id), oldB); await A.p.evaluate(() => Sync.sync());
+    nb = await files(B.p); assert.ok(!nb.includes('ملف قديم على جهاز بابا'), 'trashed on A → not in B\'s files');
+    await B.p.click('#trashBtn'); await B.p.waitForSelector('#trash:not([hidden])'); await B.p.waitForSelector('#trashList .doc');
+    await B.p.click('#trashList .doc [data-act="purge"]'); await B.p.waitForSelector('#trashEmpty:not([hidden])');
+    await B.p.evaluate(() => Sync.sync());
+    assert.ok(!gh.files.has('docs/legal/' + oldB + '.json'), 'deleted for good → removed from the repository');
+    await A.p.evaluate(() => Sync.sync());
+    assert.strictEqual(await A.p.evaluate(id => Store.getDoc(id), oldB), null, 'and from A');
+    assert.deepStrictEqual(A.p.errs.concat(B.p.errs), [], 'no page errors');
+    await A.c.close(); await B.c.close();
+  });
 
   await step('v33 live dictation by the audio key: the browser engine is not used; what is said is cut at the pause, sent as a WAV to the key and written into the box in order; stop writes the last words before the buttons; convert uses the box', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: 'بناء على طلب السيد مينا سامي', FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
     await page.evaluate(() => {

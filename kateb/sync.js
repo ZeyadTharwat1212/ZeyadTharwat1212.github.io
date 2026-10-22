@@ -1,0 +1,259 @@
+/* «ملفاتي» shared by every device of the app (Zeyad: «الملفات تبقى موحدة للكاتب في أي جهاز»).
+   No server: the files live in Zeyad's own PRIVATE GitHub repository, reached from the browser with a token that
+   setup.html locks with the family's password into the link («&s=…»). Every file is encrypted on the device
+   (AES-GCM, 256-bit key derived from the password) before it leaves it: GitHub only ever holds unreadable bytes.
+     docs/<mode>/<id>.json  the document (text, versions, name, dates, trash state) without its pictures
+     blobs/<hash>           each page photo / recording once (the hash is keyed, so it reveals nothing)
+   Each device keeps its own full copy (IndexedDB, as before) and syncs in the background: on opening, every minute
+   while open, and a few seconds after any change. A file changed on two devices keeps the newer one; the other
+   text is kept in its versions. A file removed for good on one device is removed everywhere. */
+var Sync = (function () {
+  'use strict';
+  var API = 'https://api.github.com', LS_CFG = 'kateb.sync', LS_STATE = 'kateb.sync.state.', LS_DEL = 'kateb.sync.del.';
+  var MODE = 'legal', keyP = null, keyRaw = null, running = null, again = false, timer = null, soonT = null;
+  var st = { state: 'off', at: 0, msg: '' }, listeners = [], pulledL = [];
+
+  /* ---------- small helpers ---------- */
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function jget(k, d) { try { return JSON.parse(lsGet(k) || '') || d; } catch (e) { return d; } }
+  function cfg() { var c = jget(LS_CFG, null); return c && c.r && c.t && c.k ? c : null; }
+  function setCfg(c) { lsSet(LS_CFG, JSON.stringify(c)); keyP = null; }
+  function b64(bytes) { var s = '', CH = 0x8000; for (var i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH)); return btoa(s); }
+  function unb64(s) { var bin = atob(String(s).replace(/\s+/g, '')), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+  function b64u(bytes) { return b64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64u(s) { s = String(s).replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return unb64(s); }
+  var enc8 = new TextEncoder(), dec8 = new TextDecoder();
+
+  /* ---------- the files key: PBKDF2(password, the repository's salt) — the same on every device ---------- */
+  async function deriveRaw(password, saltB64) {
+    var base = await crypto.subtle.importKey('raw', enc8.encode(password), 'PBKDF2', false, ['deriveBits']);
+    var bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: unb64u(saltB64), iterations: 310000, hash: 'SHA-256' }, base, 256);
+    return b64u(new Uint8Array(bits));
+  }
+  function key() {
+    var c = cfg(); if (!c) return Promise.reject({ code: 'sync_off' });
+    if (!keyP) { keyRaw = unb64u(c.k); keyP = crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['encrypt', 'decrypt']); }
+    return keyP;
+  }
+  async function seal(bytes, k) {
+    var iv = crypto.getRandomValues(new Uint8Array(12)), ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, k || await key(), bytes));
+    var all = new Uint8Array(12 + ct.length); all.set(iv, 0); all.set(ct, 12); return all;
+  }
+  async function open(all, k) { return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: all.subarray(0, 12) }, k || await key(), all.subarray(12))); }
+  async function hashOf(bytes) {
+    await key(); var x = new Uint8Array(keyRaw.length + bytes.length); x.set(keyRaw, 0); x.set(bytes, keyRaw.length);
+    var h = new Uint8Array(await crypto.subtle.digest('SHA-256', x)), s = '';
+    for (var i = 0; i < 16; i++) s += (h[i] < 16 ? '0' : '') + h[i].toString(16);
+    return s;
+  }
+
+  /* ---------- GitHub ---------- */
+  async function gh(method, path, body, c) {
+    c = c || cfg();
+    var h = { Authorization: 'Bearer ' + c.t, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+    if (body) h['Content-Type'] = 'application/json';
+    var r;
+    try { r = await fetch(API + '/repos/' + c.r + path, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }); }
+    catch (e) { throw { code: 'sync_net' }; }
+    if (r.status === 401 || (r.status === 403 && !/rate limit/i.test(await r.clone().text().catch(function () { return ''; })))) throw { code: 'sync_auth', status: r.status };
+    if (r.status === 403 || r.status === 429) throw { code: 'sync_rate', status: r.status };
+    if (r.status === 404) return null;
+    if (r.status === 409 && /git\/trees/.test(path)) return { tree: [] };          // a new, empty repository
+    if (r.status === 409 || r.status === 422) throw { code: 'sync_conflict', status: r.status };
+    if (!r.ok) throw { code: 'sync_http', status: r.status };
+    return r.status === 204 ? {} : r.json();
+  }
+  function pathOf(id) { return 'docs/' + MODE + '/' + id + '.json'; }
+  async function tree() {
+    var t = await gh('GET', '/git/trees/HEAD?recursive=1'), docs = {}, blobs = {};
+    if (!t) t = { tree: [] };
+    var re = new RegExp('^docs/' + MODE + '/([A-Za-z0-9_-]+)\\.json$');
+    (t.tree || []).forEach(function (e) {
+      if (e.type !== 'blob') return;
+      var m = re.exec(e.path); if (m) docs[m[1]] = e.sha;
+      var b = /^blobs\/([0-9a-f]{32})$/.exec(e.path); if (b) blobs[b[1]] = e.sha;
+    });
+    return { docs: docs, blobs: blobs };
+  }
+  async function readFile(sha) { var j = await gh('GET', '/git/blobs/' + sha); if (!j) throw { code: 'sync_missing' }; return open(unb64(j.content)); }
+  async function writeFile(path, bytes, sha) {
+    var body = { message: 'kateb', content: b64(await seal(bytes)) }; if (sha) body.sha = sha;
+    var j = await gh('PUT', '/contents/' + path, body);
+    return j && j.content && j.content.sha;
+  }
+  async function removeFile(path, sha) { try { await gh('DELETE', '/contents/' + path, { message: 'kateb', sha: sha }); } catch (e) { if (e.code !== 'sync_conflict') throw e; } }
+
+  /* ---------- a document without its pictures, and back ---------- */
+  function isBig(v) { return (typeof Blob !== 'undefined' && v instanceof Blob) || (typeof v === 'string' && v.length > 1500 && /^data:[\w\/+.-]+;base64,/.test(v)); }
+  async function bytesOf(v) {
+    if (typeof v === 'string') { var i = v.indexOf(','); return { mime: v.slice(5, v.indexOf(';')), bytes: unb64(v.slice(i + 1)), kind: 'url' }; }
+    return { mime: v.type || 'application/octet-stream', bytes: new Uint8Array(await v.arrayBuffer()), kind: 'blob' };
+  }
+  function packBlob(mime, bytes) { var head = enc8.encode(mime + '\n'), all = new Uint8Array(head.length + bytes.length); all.set(head, 0); all.set(bytes, head.length); return all; }
+  function unpackBlob(all) { var n = all.indexOf(10); return { mime: dec8.decode(all.subarray(0, n)), bytes: all.subarray(n + 1) }; }
+  async function pack(doc) {
+    var blobs = {};
+    async function out(v) { var b = await bytesOf(v), h = await hashOf(b.bytes); blobs[h] = packBlob(b.mime, b.bytes); return { $ref: h, kind: b.kind, mime: b.mime }; }
+    var d = {}, ks = Object.keys(doc);
+    for (var i = 0; i < ks.length; i++) { var k = ks[i], v = doc[k]; d[k] = isBig(v) ? await out(v) : v; }
+    if (Array.isArray(doc.pages)) {
+      d.pages = [];
+      for (var p = 0; p < doc.pages.length; p++) {
+        var pg = doc.pages[p], q = {}, pk = Object.keys(pg || {});
+        for (var j = 0; j < pk.length; j++) q[pk[j]] = isBig(pg[pk[j]]) ? await out(pg[pk[j]]) : pg[pk[j]];
+        d.pages.push(q);
+      }
+    }
+    return { json: enc8.encode(JSON.stringify(d)), blobs: blobs };
+  }
+  async function unpack(bytes, getBlob) {
+    var d = JSON.parse(dec8.decode(bytes));
+    async function back(v) {
+      if (!v || typeof v !== 'object' || !v.$ref) return v;
+      var b = await getBlob(v.$ref); if (!b) return undefined;
+      return v.kind === 'blob' ? new Blob([b.bytes], { type: b.mime }) : 'data:' + b.mime + ';base64,' + b64(b.bytes);
+    }
+    var ks = Object.keys(d);
+    for (var i = 0; i < ks.length; i++) d[ks[i]] = await back(d[ks[i]]);
+    if (Array.isArray(d.pages)) for (var p = 0; p < d.pages.length; p++) { var pg = d.pages[p]; for (var k in pg) pg[k] = await back(pg[k]); }
+    return d;
+  }
+
+  /* ---------- the two versions of one file ---------- */
+  function sameText(a, b) { return JSON.stringify((a.pages || []).map(function (p) { return p.html; })) === JSON.stringify((b.pages || []).map(function (p) { return p.html; })); }
+  function merge(l, r) {
+    var win = (r.updated || 0) > (l.updated || 0) ? r : l, lose = win === r ? l : r, seen = {}, vs = [];
+    (l.versions || []).concat(r.versions || []).forEach(function (v) { var k = v.t + '|' + JSON.stringify(v.pages); if (!seen[k]) { seen[k] = 1; vs.push(v); } });
+    if (!sameText(win, lose)) vs.push({ t: lose.updated || Date.now(), label: 'other-device', pages: (lose.pages || []).map(function (p) { return { html: p.html }; }) });
+    vs.sort(function (a, b) { return a.t - b.t; });
+    var max = (typeof Store !== 'undefined' && Store.MAX_VERSIONS) || 20;
+    while (vs.length > max) vs.splice(1, 1);
+    return Object.assign({}, win, { versions: vs, updated: Math.max(l.updated || 0, r.updated || 0) });
+  }
+
+  /* ---------- one round ---------- */
+  function state() { return jget(LS_STATE + MODE, {}); }
+  function saveState(s) { lsSet(LS_STATE + MODE, JSON.stringify(s)); }
+  function dels() { return jget(LS_DEL + MODE, {}); }
+  function saveDels(d) { lsSet(LS_DEL + MODE, JSON.stringify(d)); }
+  function setStatus(s, msg) { st = { state: s, at: s === 'ok' ? Date.now() : st.at, msg: msg || '' }; listeners.forEach(function (f) { try { f(st); } catch (e) {} }); }
+
+  async function round() {
+    var tr = await tree(), S = state(), D = dels(), pulled = [], cache = {};
+    /* removed for good here: removed there too */
+    for (var id in D) { if (tr.docs[id]) await removeFile(pathOf(id), tr.docs[id]); delete tr.docs[id]; delete D[id]; delete S[id]; saveDels(D); saveState(S); }
+    var locals = (await Store.all('docs')).filter(function (d) { return d.mode === MODE; }), L = {};
+    locals.forEach(function (d) { L[d.id] = d; });
+    async function getBlob(h) {
+      if (cache[h]) return cache[h];
+      if (!tr.blobs[h]) return null;
+      return (cache[h] = unpackBlob(await readFile(tr.blobs[h])));
+    }
+    async function localBlobs(d) {                     // pictures this device already has are not downloaded again
+      if (!d) return;
+      var vals = Object.keys(d).map(function (k) { return d[k]; });
+      (d.pages || []).forEach(function (p) { Object.keys(p || {}).forEach(function (k) { vals.push(p[k]); }); });
+      for (var i = 0; i < vals.length; i++) if (isBig(vals[i])) { var b = await bytesOf(vals[i]); cache[await hashOf(b.bytes)] = { mime: b.mime, bytes: b.bytes }; }
+    }
+    async function pull(id) { await localBlobs(L[id]); return unpack(await readFile(tr.docs[id]), getBlob); }
+    async function push(d, sha) {
+      var pk = await pack(d);
+      for (var h in pk.blobs) if (!tr.blobs[h]) { tr.blobs[h] = await writeFile('blobs/' + h, pk.blobs[h], null) || 'x'; }
+      var ns = await writeFile(pathOf(d.id), pk.json, sha);
+      tr.docs[d.id] = ns; S[d.id] = { sha: ns, at: d.updated }; saveState(S);
+    }
+    async function keep(d, sha) { await Store.put('docs', d); S[d.id] = { sha: sha, at: d.updated }; saveState(S); pulled.push(d.id); }
+    var ids = Object.keys(tr.docs);
+    for (var i = 0; i < ids.length; i++) {
+      var k = ids[i], rs = tr.docs[k], l = L[k], s = S[k];
+      try {
+        if (!l) await keep(await pull(k), rs);                                     // new from another device
+        else if (s && s.sha === rs) { if (l.updated !== s.at) await push(l, rs); } // changed here only
+        else {
+          var r = await pull(k);
+          if (s && l.updated === s.at) await keep(r, rs);                          // changed there only
+          else {                                                                   // changed on both (or first meeting)
+            var m = merge(l, r);
+            if (m.updated === r.updated && sameText(m, r) && (m.versions || []).length === (r.versions || []).length && m.name === r.name && m.deletedAt === r.deletedAt) await keep(r, rs);
+            else { await Store.put('docs', m); await push(m, rs); pulled.push(k); }
+          }
+        }
+      } catch (e) { if (e.code === 'sync_conflict') again = true; else throw e; }
+    }
+    for (var j = 0; j < locals.length; j++) {
+      var d = locals[j]; if (tr.docs[d.id] || ids.indexOf(d.id) >= 0) continue;
+      try {
+        if (S[d.id] && d.updated === S[d.id].at) { await Store.del('docs', d.id); delete S[d.id]; saveState(S); pulled.push(d.id); }   // removed for good on another device
+        else await push(d, null);                                                  // new here (or this device's files, first time)
+      } catch (e) { if (e.code === 'sync_conflict') again = true; else throw e; }
+    }
+    return pulled;
+  }
+  var MSG = {
+    sync_net: 'لا يوجد إنترنت الآن — الملفات محفوظة على هذا الجهاز وتُرفع تلقائيًا عند عودة الإنترنت.',
+    sync_auth: 'رمز المزامنة لم يعد يعمل (انتهى أو حُذف). زياد يعمل رابطًا جديدًا من صفحة التجهيز.',
+    sync_rate: 'GitHub طلب الانتظار قليلًا — تُستكمل المزامنة بعد دقائق.',
+    sync_http: 'تعذرت المزامنة الآن — تُعاد المحاولة تلقائيًا.'
+  };
+  function sync() {
+    if (!cfg() || typeof Store === 'undefined') return Promise.resolve([]);
+    if (running) return running.then(function () { return sync(); });   // a change made during a round gets its own round
+    setStatus('busy');
+    running = round().then(function (pulled) {
+      running = null; setStatus('ok');
+      if (pulled.length) pulledL.forEach(function (f) { try { f(pulled); } catch (e) {} });
+      if (again) { again = false; soon(1500); }
+      return pulled;
+    }, function (e) {
+      running = null; setStatus('err', MSG[e && e.code] || MSG.sync_http);
+      return [];
+    });
+    return running;
+  }
+  function soon(ms) { clearTimeout(soonT); soonT = setTimeout(sync, ms == null ? 3000 : ms); }
+  function start(mode) {
+    MODE = mode || MODE;
+    if (!cfg()) { setStatus('off'); return; }
+    if (typeof Store !== 'undefined') {
+      Store.hooks.change = function () { soon(); };
+      Store.hooks.purge = function (id) { var S = state(); if (S[id]) { var D = dels(); D[id] = S[id].sha; saveDels(D); } soon(); };
+    }
+    sync();
+    clearInterval(timer);
+    timer = setInterval(function () { if (typeof document === 'undefined' || document.visibilityState !== 'hidden') sync(); }, 60000);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') soon(300); });
+    if (typeof window !== 'undefined') window.addEventListener('online', function () { soon(300); });
+  }
+  /* «&s=…» in the link: the repository, the token and the files key, locked with the family's password */
+  function fromHash(hash) { var m = /[&#]s=([A-Za-z0-9_-]+)/.exec(hash || ''); return m ? m[1] : null; }
+
+  /* ---------- for setup.html: check the repository and make (or recover) the files key ---------- */
+  async function prepare(repo, token, password) {
+    var c = { r: repo, t: token, k: '' };
+    var info = await gh('GET', '', null, c);
+    if (!info) throw { code: 'sync_norepo' };
+    if (!info.private) throw { code: 'sync_public' };
+    if (info.permissions && !info.permissions.push) throw { code: 'sync_readonly' };
+    var f = await gh('GET', '/contents/kateb-sync.json', null, c), meta;
+    if (f && f.content) {
+      meta = JSON.parse(dec8.decode(unb64(f.content)));
+      c.k = await deriveRaw(password, meta.salt);
+      var k = await crypto.subtle.importKey('raw', unb64u(c.k), 'AES-GCM', false, ['encrypt', 'decrypt']);
+      try { if (dec8.decode(await open(unb64u(meta.check), k)) !== 'kateb') throw 0; } catch (e) { throw { code: 'sync_password' }; }
+    } else {
+      meta = { v: 1, salt: b64u(crypto.getRandomValues(new Uint8Array(16))) };
+      c.k = await deriveRaw(password, meta.salt);
+      var k2 = await crypto.subtle.importKey('raw', unb64u(c.k), 'AES-GCM', false, ['encrypt', 'decrypt']);
+      meta.check = b64u(await seal(enc8.encode('kateb'), k2));
+      await gh('PUT', '/contents/kateb-sync.json', { message: 'kateb: sync set up (files are encrypted)', content: b64(enc8.encode(JSON.stringify(meta))) }, c);
+    }
+    return JSON.stringify(c);
+  }
+
+  return { start: start, sync: sync, soon: soon, cfg: cfg, setCfg: setCfg, fromHash: fromHash, prepare: prepare, status: function () { return st; },
+    onStatus: function (f) { listeners.push(f); }, onPulled: function (f) { pulledL.push(f); }, on: function () { return !!cfg(); },
+    off: function () { try { localStorage.removeItem(LS_CFG); } catch (e) {} keyP = null; clearInterval(timer); setStatus('off'); },
+    _merge: merge, _pack: pack, _unpack: unpack };
+})();
+if (typeof module !== 'undefined' && module.exports) module.exports = Sync;

@@ -21,6 +21,7 @@
       try { history.pushState({ k: id }, '', location.href); } catch (e) {}
     }
     curScreen = id;
+    if (id === 'files' || id === 'settings') paintSync(typeof Sync !== 'undefined' ? Sync.status() : null);
     SCREENS.forEach(function (s) { if ($(s)) $(s).hidden = s !== id; });
     document.body.classList.toggle('wide', id === 'done');
     $('doubtBar').hidden = id !== 'done' || !marks().length;
@@ -64,6 +65,9 @@
     if (blob && blob !== Engine.lsGet('kateb.blob')) { KEY = null; show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
     var gb = Engine.audioBlobFromHash();
     if (gb && gb !== Engine.lsGet('kateb.gblob') && Engine.savedKey()) { KEY = Engine.savedKey(); show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
+    /* v35 «&s=…»: the shared «ملفاتي» (sync.js) — a link with it asks for the password once on each device */
+    var sb = typeof Sync !== 'undefined' ? Sync.fromHash(location.hash) : null;
+    if (sb && sb !== Engine.lsGet('kateb.sblob') && Engine.savedKey()) { KEY = Engine.savedKey(); show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
     KEY = Engine.savedKey();
     if (KEY) { toStart(); return; }
     if (blob) { show('lock'); setTimeout(function () { $('pw').focus(); }, 50); return; }
@@ -84,6 +88,8 @@
       KEY = await Engine.unlock(Engine.blobFromHash(), pw); Engine.saveKey(KEY); Engine.lsSet('kateb.blob', Engine.blobFromHash()); Engine.lsSet('kateb.model', ''); CLAUDE = Engine.provider(KEY) === 'claude';
       var gb2 = Engine.audioBlobFromHash();
       if (gb2) { try { Engine.setAudioKey(await Engine.unlock(gb2, pw)); Engine.lsSet('kateb.gblob', gb2); } catch (eg) {} }
+      var sb2 = typeof Sync !== 'undefined' ? Sync.fromHash(location.hash) : null;
+      if (sb2) { try { Sync.setCfg(JSON.parse(await Engine.unlock(sb2, pw))); Engine.lsSet('kateb.sblob', sb2); } catch (es) {} }
       toStart();
     }
     catch (err) { $('pwErr').hidden = false; $('pw').select(); }
@@ -99,6 +105,29 @@
     if (d) $('resumeWhen').textContent = new Date(d.t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
     show('start');
     homeCards();
+    startSync();
+  }
+  /* v35: «ملفاتي» shared by every device (sync.js). Files changed elsewhere appear here by themselves. */
+  var syncStarted = false;
+  function syncText(x) {
+    if (!x || x.state === 'off') return '';
+    if (x.state === 'busy') return '☁️ جارٍ مزامنة الملفات مع باقي الأجهزة…';
+    if (x.state === 'err') return '⚠️ ' + x.msg;
+    return '☁️ ملفاتك واحدة على كل الأجهزة — آخر مزامنة ' + new Date(x.at).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' });
+  }
+  function paintSync(x) {
+    ['syncNote', 'setSyncNote'].forEach(function (id) { var el = $(id); if (!el) return; var t = syncText(x); el.textContent = t || (id === 'setSyncNote' ? 'غير مفعّلة على هذا الجهاز: افتح رابط الكاتب الجديد من زياد واكتب كلمة السر مرة واحدة.' : ''); el.hidden = !el.textContent; el.className = 'small center syncnote' + (x && x.state === 'err' ? ' warn' : ''); });
+    if ($('syncNow')) $('syncNow').hidden = !(typeof Sync !== 'undefined' && Sync.on());
+  }
+  function startSync() {
+    if (syncStarted || typeof Sync === 'undefined') return;
+    syncStarted = true;
+    Sync.onStatus(paintSync);
+    Sync.onPulled(function (ids) {
+      homeCards();
+      if (curScreen === 'files') renderFiles(); else if (curScreen === 'trash') renderTrash(); else if (curScreen === 'settings') renderSettings();
+    });
+    Sync.start(MODE); paintSync(Sync.status());
   }
   /* the three cards under the camera: files count, learning state */
   function homeCards() {
@@ -109,7 +138,7 @@
       $('resumeBtn').hidden = false; $('resumeWhen').textContent = doc.name;
     }).catch(function () {});
   }
-  if ($('filesBtn')) $('filesBtn').addEventListener('click', renderFiles);
+  if ($('filesBtn')) $('filesBtn').addEventListener('click', function () { renderFiles(); if (typeof Sync !== 'undefined') Sync.soon(0); });
   if ($('learnBtn')) $('learnBtn').addEventListener('click', renderLearn);
   if ($('settingsBtn')) $('settingsBtn').addEventListener('click', renderSettings);
   if ($('voiceBtn')) $('voiceBtn').addEventListener('click', voiceScreen);
@@ -1170,11 +1199,13 @@
       $('audioKeyClear').addEventListener('click', function () { if (window.confirm('حذف مفتاح الصوت من هذا الجهاز؟')) { Engine.setAudioKey(''); audioKeyState(); } });
     }
     $('deleteAllBtn').addEventListener('click', function () {
-      if (!window.confirm('حذف كل الملفات المحفوظة على هذا الجهاز نهائيًا (بما فيها المحذوفات)؟ لا يمكن التراجع عن هذا.')) return;
+      var everywhere = typeof Sync !== 'undefined' && Sync.on();
+      if (!window.confirm(everywhere ? 'حذف كل الملفات نهائيًا من كل الأجهزة (الملفات مشتركة بين كل أجهزة الكاتب)، بما فيها المحذوفات؟ لا يمكن التراجع عن هذا.' : 'حذف كل الملفات المحفوظة على هذا الجهاز نهائيًا (بما فيها المحذوفات)؟ لا يمكن التراجع عن هذا.')) return;
       Store.listDocs(MODE).then(function (ds) { return Store.listTrash(MODE).then(function (ts) { return Promise.all(ds.concat(ts).map(function (d) { return Store.purgeDoc(d.id); })); }); })
         .then(function () { try { localStorage.removeItem(DRAFT); localStorage.removeItem(LAST); } catch (e) {} curDoc = null; results = []; renderSettings(); });
     });
     $('deleteLearnBtn').addEventListener('click', deleteLearn);
+    if ($('syncNow')) $('syncNow').addEventListener('click', function () { if (typeof Sync !== 'undefined') Sync.sync(); });
   }
   function deleteLearn() {
     if (!window.confirm('حذف كل ما تعلّمه التطبيق من تصحيحاتك (' + profileLabel() + ' وغيره)؟ القراءة ترجع كما كانت قبل التعلم.')) return;
@@ -1746,7 +1777,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '34';
+  var APP_VER = '35';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

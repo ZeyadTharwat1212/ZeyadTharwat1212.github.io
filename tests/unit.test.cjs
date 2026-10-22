@@ -528,3 +528,16 @@ test('v26: the paper title picks the formulas of its case kind', () => {
   assert.strictEqual(kind('إعادة إعلان'), 'ilan');
   assert.ok(idx.length >= 20 && idx.every(k => fs.existsSync(path.join(REPO, 'kateb/bank/case_' + k.key + '.json'))));
 });
+
+test('v35 sync: a file changed on two devices keeps the newer one, the other text stays in its versions; a picture-free copy round-trips', async () => {
+  const Sync = require('../kateb/sync.js');
+  const base = { id: 'a1', mode: 'legal', name: 'ملف', created: 1, versions: [{ t: 1, label: 'first', pages: [{ html: 'أول' }] }] };
+  const here = Object.assign({}, base, { updated: 100, pages: [{ html: 'نص الجهاز الأول' }] });
+  const there = Object.assign({}, base, { name: 'اسم جديد', updated: 200, pages: [{ html: 'نص الجهاز الثاني' }] });
+  const m = Sync._merge(here, there);
+  assert.strictEqual(m.name, 'اسم جديد'); assert.strictEqual(m.pages[0].html, 'نص الجهاز الثاني'); assert.strictEqual(m.updated, 200);
+  assert.ok(m.versions.some(v => v.label === 'other-device' && v.pages[0].html === 'نص الجهاز الأول'), 'the older text is kept as a version');
+  assert.strictEqual(m.versions.filter(v => v.label === 'first').length, 1, 'shared versions are not doubled');
+  const same = Sync._merge(here, Object.assign({}, here));
+  assert.ok(!same.versions.some(v => v.label === 'other-device'), 'no extra version when the text is the same');
+});

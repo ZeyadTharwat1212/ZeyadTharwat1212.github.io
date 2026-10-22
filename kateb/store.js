@@ -88,7 +88,10 @@ var Store = (function () {
     return Object.assign({ id: uid(), mode: mode, name: name, created: t, updated: t, pages: pages, status: 'draft', deletedAt: null,
       versions: [{ t: t, label: 'first', pages: pages.map(function (p) { return { html: p.html }; }) }], learned: [] }, extra || {});
   }
-  function saveDoc(doc) { doc.updated = Date.now(); return put('docs', doc); }
+  /* v35: the sync (sync.js) hears every change made here; its own writes go through put/del and are not heard */
+  var hooks = { change: null, purge: null };
+  function heard(kind, id) { try { if (hooks[kind]) hooks[kind](id); } catch (e) {} }
+  function saveDoc(doc) { doc.updated = Date.now(); return put('docs', doc).then(function (r) { heard('change', doc.id); return r; }); }
   function listDocs(mode) {
     return all('docs').then(function (ds) {
       return ds.filter(function (d) { return d.mode === mode && !d.deletedAt; }).sort(function (a, b) { return b.updated - a.updated; });
@@ -101,9 +104,9 @@ var Store = (function () {
   }
   function getDoc(id) { return get('docs', id); }
   function renameDoc(id, name) { return getDoc(id).then(function (d) { if (!d) return null; d.name = name; return saveDoc(d); }); }
-  function trashDoc(id) { return getDoc(id).then(function (d) { if (!d) return null; d.deletedAt = Date.now(); return put('docs', d); }); }
-  function restoreDoc(id) { return getDoc(id).then(function (d) { if (!d) return null; d.deletedAt = null; return put('docs', d); }); }
-  function purgeDoc(id) { return del('docs', id); }
+  function trashDoc(id) { return getDoc(id).then(function (d) { if (!d) return null; d.deletedAt = Date.now(); return saveDoc(d); }); }
+  function restoreDoc(id) { return getDoc(id).then(function (d) { if (!d) return null; d.deletedAt = null; return saveDoc(d); }); }
+  function purgeDoc(id) { heard('purge', id); return del('docs', id); }
   function emptyTrash(mode) { return listTrash(mode).then(function (ds) { return Promise.all(ds.map(function (d) { return purgeDoc(d.id); })); }); }
   /* recently deleted documents older than 30 days are removed for good (run on each open) */
   function purgeOld(now) {
@@ -135,6 +138,6 @@ var Store = (function () {
   return { open: open, put: put, get: get, del: del, all: all, clear: clear, uid: uid,
     newDoc: newDoc, saveDoc: saveDoc, listDocs: listDocs, listTrash: listTrash, getDoc: getDoc, renameDoc: renameDoc, trashDoc: trashDoc, restoreDoc: restoreDoc,
     purgeDoc: purgeDoc, emptyTrash: emptyTrash, purgeOld: purgeOld, daysLeft: daysLeft, addVersion: addVersion, usage: usage, which: which, _reset: _reset,
-    TRASH_DAYS: TRASH_DAYS, MAX_VERSIONS: MAX_VERSIONS };
+    TRASH_DAYS: TRASH_DAYS, MAX_VERSIONS: MAX_VERSIONS, hooks: hooks };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Store;
