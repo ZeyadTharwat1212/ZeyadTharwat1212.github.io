@@ -425,7 +425,7 @@
     }
     if (!type && !EXAM && !plainRun && typeof Office !== 'undefined') {
       type = Office.detect(a);
-      if (type && typeof Bank !== 'undefined') { bank = await Bank.load(type); system = recogSystem(bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '', cb, await glossaryPrompt()); }
+      if (type && typeof Bank !== 'undefined') { bank = await Bank.load(type); }   // v39: the system stays as the read had it — a changed system missed the image cache in the check (paid twice)
     }
     var final = a, d = b ? Verify.disagreements(a, b) : null;
     /* the numbers pass runs beside the judge: every number, date and amount read once more on its own */
@@ -437,7 +437,7 @@
         /* a printed page read once: only its own doubts are looked at again, by the same model with the cached images */
         var mp = printedRead && a.indexOf('⟦') >= 0 ? Verify.marks(a, null) : null;
         if (mp && mp.doubts) {
-          var rq = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mp.prompt, false), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: 'low', best: true, cacheImages: true, maxTokens: 4096 });
+          var rq = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mp.prompt, false), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: 'low', best: true, cacheImages: true, maxTokens: Math.min(20000, 4096 + 60 * (mp.doubts || 0)) });
           if (rq.model) usedModels[rq.model] = 1;
           if (!rq.truncated) final = Verify.decide(mp, Engine.clean(rq.text)).text;
         }
@@ -446,10 +446,11 @@
         /* the short judge: Opus looks only at the marked places (the disputes, and reading 1's doubts) and the numbers,
            and answers in a few lines instead of rewriting the page — a fraction of the time and of the price */
         step(2, 'جارٍ حسم ' + (mk.disputes ? mk.disputes + ' موضع اختلاف' : mk.doubts + ' كلمة غير مؤكدة') + ' مع الأصل…');
-        var rs = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mk.prompt, mk.disputes > 0), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true, cacheImages: true, maxTokens: 4096 });
+        var rs = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mk.prompt, mk.disputes > 0), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true, cacheImages: true, maxTokens: Math.min(20000, 6000 + 60 * ((mk.disputes || 0) + (mk.doubts || 0))) });   // v39: 4096 cut a real page's answer off after a third of its doubts
         if (rs.model) usedModels[rs.model] = 1;
-        var ds = Verify.decide(mk, Engine.clean(rs.text));
-        if (!rs.truncated) final = ds.text;
+        var rsT = Engine.clean(rs.text); if (rs.truncated) rsT = rsT.replace(/\n[^\n]*$/, '');   // v39: a cut-off answer still settles what it reached (its last, partial line is dropped)
+        var ds = Verify.decide(mk, rsT);
+        if (!rs.truncated || ds.answered) final = ds.text;
       }
       else if (b && !d.same) {
         var rj = await Engine.generate(KEY, PROMPTS.judge(imgs.bands, a, b, d), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
@@ -1848,7 +1849,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '39';
+  var APP_VER = '40';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
