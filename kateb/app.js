@@ -1271,36 +1271,102 @@
   /* the transcript for the layout step: the box as the person left it */
   function liveText() { return $('liveEdit') ? $('liveEdit').value.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() : ''; }
   if ($('recStart')) {
+    /* v33 live dictation that works everywhere. On the family's Chrome (PC and phone) the browser's own speech engine
+       failed with «network» and the app restarted it silently forever: nothing was ever written.
+       - with the free audio key (Gemini): the app writes the words itself — every short pause (or 12 s) the newest
+         seconds go to the key and the text is added in order, a few seconds behind the voice;
+       - without it: the browser's engine, and if it fails the person is told at once and shown the keyboard's 🎤. */
+    var liveQ = Promise.resolve(), liveQuiet = 0, liveT = null, livePending = 0, liveFail = 0, liveMode = '';
+    function showPending() { if (liveMode === 'key') $('liveInterim').textContent = livePending ? '✍️ جارٍ كتابة ما قلته…' : ''; }
+    function sendSeg(aKey, wav) {
+      if (!wav) return;
+      livePending++; showPending();
+      var job = (async function () {
+        try {
+          var ms = await Engine.audioModels(aKey);
+          var r = await Engine.generate(aKey, PROMPTS.transcribe(1, 1, $('cmdChk') ? $('cmdChk').checked : true), [wav], { models: ms, temperature: 0.1, maxTokens: 2048 });
+          return Engine.clean(r.text).replace(/^\s*(لا يوجد كلام|لا شيء)\.?\s*$/gm, '').trim();
+        } catch (e) { return { err: e }; }
+      })();
+      liveQ = liveQ.then(function () { return job; }).then(function (t) {
+        livePending--;
+        if (t && t.err) { liveFail++; $('liveInterim').textContent = 'تعذّرت كتابة جزء من الكلام (' + Engine.errText(t.err) + ') — سيُكتب كاملًا من التسجيل عند «إنهاء التسجيل».'; return; }
+        if (t) { liveParts.push({ text: t }); liveInsert({ text: t }); }
+        showPending();
+      });
+    }
+    function liveTick(aKey) {
+      if (!rec || !rec.pcmReady || !rec.pcmReady() || rec.state() !== 'recording') return;
+      var pend = rec.pending(); liveQuiet = rec.level() < 0.02 ? liveQuiet + 1 : 0;
+      if (pend >= 12 || (pend >= 3 && liveQuiet >= 2)) { liveQuiet = 0; sendSeg(aKey, rec.cut(0.8)); }   // a pause between phrases (0.6 s quiet), or 12 s at most
+    }
+    function liveBrowserFailed(code) {
+      var why = code === 'network' ? 'المتصفح لم يستطع الوصول لخدمة تحويل الكلام' : code === 'not-allowed' || code === 'service-not-allowed' ? 'المتصفح منع استخدام الميكروفون للكتابة' : 'خدمة الكلام في المتصفح لا تعمل الآن';
+      $('liveInterim').textContent = '⚠️ الكتابة المباشرة لا تعمل هنا (' + why + '). الحل الأسهل: اضغط داخل المربع واستخدم زر الميكروفون 🎤 في لوحة المفاتيح، أو أضف «مفتاح الصوت» المجاني من ⚙️ الإعدادات فيكتب البرنامج كلامك بنفسه.';
+      $('liveInterim').className = 'liveinterim warn';
+    }
+    /* without an audio key and with the browser's engine, no sound file is needed (the phone's microphone is then free
+       for the engine, which some phones do not share with a recording) */
+    function textOnlyRec(onTick) {
+      var t0 = 0, pTot = 0, pAt = 0, st = 'inactive', tm = null;
+      function el() { return ((st === 'paused' ? pAt : Date.now()) - t0 - pTot) / 1000; }
+      return { mime: '', state: function () { return st; }, elapsed: el, level: function () { return 0; },
+        start: function () { t0 = Date.now(); st = 'recording'; tm = setInterval(function () { onTick(el(), 0); }, 200); },
+        pause: function () { if (st === 'recording') { st = 'paused'; pAt = Date.now(); } },
+        resume: function () { if (st === 'paused') { pTot += Date.now() - pAt; st = 'recording'; } },
+        stop: function () { clearInterval(tm); var s2 = el(); st = 'inactive'; return Promise.resolve({ blob: new Blob([], { type: 'audio/webm' }), seconds: s2 }); } };
+    }
+    /* the keyboard's own microphone (Gboard / iPhone / Windows Win+H) writes straight into the box, with no key at all */
+    if ($('kbMic')) $('kbMic').addEventListener('click', function () {
+      $('liveBox').hidden = false; $('liveInterim').className = 'liveinterim';
+      $('liveInterim').textContent = /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'اضغط زر الميكروفون 🎤 في لوحة المفاتيح وتكلّم. عند الانتهاء اضغط «تحويل النص إلى Word».' : 'على الكمبيوتر: اضغط زر ويندوز + H وتكلّم، فيُكتب الكلام في المربع. عند الانتهاء اضغط «تحويل النص إلى Word».';
+      var ta = $('liveEdit'); ta.focus(); try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+      $('liveConvert').hidden = !ta.value.trim();
+    });
     $('recStart').addEventListener('click', async function () {
-      $('voiceErr').hidden = true;
-      try { rec = await Speech.recorder({ onTick: function (sec, lvl) { $('recTime').textContent = Speech.fmtTime(sec); liveHist.push(lvl); if (liveHist.length > 400) liveHist.shift(); }, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } }); }
-      catch (e) { $('voiceErr').hidden = false; $('voiceErr').textContent = Engine.errText({ code: 'mic' }); rec = null; return; }
-      liveParts = []; liveHist = []; $('liveConvert').hidden = true;
-      liveRec = Speech.live({ lang: 'ar-EG',
+      $('voiceErr').hidden = true; $('liveInterim').className = 'liveinterim';
+      var aKey = Engine.audioKey(KEY), onTick = function (sec, lvl) { $('recTime').textContent = Speech.fmtTime(sec); liveHist.push(lvl); if (liveHist.length > 400) liveHist.shift(); };
+      liveMode = aKey ? 'key' : Speech.liveSupported() ? 'browser' : 'none';
+      try {
+        if (liveMode === 'browser' && /Android|iPhone|iPad/i.test(navigator.userAgent)) rec = textOnlyRec(onTick);
+        else rec = await Speech.recorder({ pcm: liveMode === 'key', onTick: onTick, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } });
+      } catch (e) { $('voiceErr').hidden = false; $('voiceErr').textContent = Engine.errText({ code: 'mic' }); rec = null; return; }
+      liveParts = []; liveHist = []; liveFail = 0; livePending = 0; liveQ = Promise.resolve(); $('liveConvert').hidden = true;
+      liveRec = liveMode !== 'browser' ? null : Speech.live({ lang: EXAM ? 'en-US' : 'ar-EG',
         onInterim: function (t) { $('liveInterim').textContent = t; },
         onFinal: function (t) { var p = $('cmdChk').checked ? Speech.command(t) : { text: t }; liveParts.push(p); $('liveInterim').textContent = ''; liveInsert(p); },
-        onError: function (code) { if (code === 'not-allowed' || code === 'service-not-allowed') $('recNote').textContent = 'النص المباشر غير متاح؛ سيُفرَّغ التسجيل بعد الانتهاء.'; } });
-      $('liveBox').hidden = false; $('liveInterim').textContent = liveRec ? '' : 'الكتابة المباشرة غير متاحة في هذا المتصفح؛ سيُفرَّغ التسجيل بعد الانتهاء (يمكنك الكتابة في المربع بنفسك).';
+        onFatal: function (code) { liveBrowserFailed(code); } });
+      $('liveBox').hidden = false;
+      $('liveInterim').textContent = liveMode === 'key' ? 'تكلّم… الكلام يُكتب بعد كل وقفة قصيرة.' : liveMode === 'none' ? 'الكتابة المباشرة غير متاحة في هذا المتصفح: اضغط داخل المربع واستخدم ميكروفون لوحة المفاتيح 🎤، أو أضف مفتاح الصوت من الإعدادات.' : '';
       rec.start(); if (liveRec) liveRec.start();
+      if (liveMode === 'key') liveT = setInterval(function () { liveTick(aKey); }, 300);
       $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…';
       $('recStart').hidden = true; $('recPause').hidden = false; $('recStop').hidden = false; $('recDone').hidden = true;
       waveT = setInterval(function () { Speech.drawWave($('wave'), liveHist, rec && rec.state() === 'recording'); }, 100);
     });
-    $('recPause').addEventListener('click', function () { if (!rec) return; rec.pause(); if (liveRec) liveRec.pause(); $('recStat').className = 'recstat paused'; $('recState').textContent = 'متوقف مؤقتًا — صحّح النص إن أردت ثم استكمل'; $('recPause').hidden = true; $('recResume').hidden = false; $('liveInterim').textContent = ''; $('liveConvert').hidden = !liveText(); });
+    $('recPause').addEventListener('click', function () {
+      if (!rec) return;
+      if (liveMode === 'key') sendSeg(Engine.audioKey(KEY), rec.cut(0.5));          // what was said before the pause is written now
+      rec.pause(); if (liveRec) liveRec.pause(); $('recStat').className = 'recstat paused'; $('recState').textContent = 'متوقف مؤقتًا — صحّح النص إن أردت ثم استكمل'; $('recPause').hidden = true; $('recResume').hidden = false; if (liveMode !== 'key') $('liveInterim').textContent = ''; $('liveConvert').hidden = !liveText();
+    });
     $('recResume').addEventListener('click', function () { if (!rec) return; rec.resume(); if (liveRec) liveRec.resume(); $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…'; $('recPause').hidden = false; $('recResume').hidden = true; $('liveConvert').hidden = true; });
     $('recStop').addEventListener('click', async function () {
       if (!rec) return;
       $('recStop').disabled = true;
       if (liveRec) liveRec.stop();
+      clearInterval(liveT); liveT = null;
+      if (liveMode === 'key') { sendSeg(Engine.audioKey(KEY), rec.cut(0.5)); $('recState').textContent = 'جارٍ كتابة آخر جملة…'; }
       var r = await rec.stop(); rec = null; clearInterval(waveT); Speech.drawWave($('wave'), liveHist, false);
+      await liveQ;                                                                   // the last words are in the box before anything else
       recBlob = r.blob; recSecs = r.seconds;
       $('recStop').disabled = false; $('recStat').className = 'recstat'; $('recState').textContent = 'انتهى التسجيل (' + Speech.fmtTime(recSecs) + ')';
       $('recPause').hidden = true; $('recResume').hidden = true; $('recStop').hidden = true; $('recStart').hidden = true;
-      if (!recBlob.size || recSecs < 1) { $('voiceErr').hidden = false; $('voiceErr').textContent = 'لم يُسجَّل شيء. تأكد من الميكروفون وجرّب مرة أخرى.'; $('recStart').hidden = false; return; }
-      recAudioUrl = URL.createObjectURL(recBlob); $('recAudio').src = recAudioUrl; $('recDone').hidden = false;
       var hasLive = !!liveText(), aKey = Engine.audioKey(KEY);
-      $('recConvert').hidden = !hasLive && !aKey; if ($('recExact')) $('recExact').hidden = !(hasLive && aKey);
-      $('recNote').textContent = hasLive ? 'راجع النص في المربع وصحّح ما تريد، ثم اضغط «تحويل النص إلى Word» — يُنسَّق كما كتبته.' : aKey ? 'اضغط «تحويل» ليُفرَّغ التسجيل ثم يُنسَّق كمستند.' : 'لا يوجد نص ولا مفتاح صوت: اكتب في المربع أو أضف مفتاح الصوت من الإعدادات.';
+      if ((!recBlob.size && !hasLive) || recSecs < 1) { $('voiceErr').hidden = false; $('voiceErr').textContent = 'لم يُكتب ولم يُسجَّل شيء. تأكد من الميكروفون، أو تكلّم بزر الميكروفون 🎤 في لوحة المفاتيح داخل المربع.'; $('recStart').hidden = false; return; }
+      if (recBlob.size) { recAudioUrl = URL.createObjectURL(recBlob); $('recAudio').src = recAudioUrl; $('recAudio').hidden = false; } else $('recAudio').hidden = true;
+      $('recDone').hidden = false;
+      $('recConvert').hidden = !hasLive && !aKey; if ($('recExact')) $('recExact').hidden = !(recBlob.size && aKey && (hasLive || liveFail));
+      $('recNote').textContent = hasLive ? 'راجع النص في المربع وصحّح ما تريد، ثم اضغط «تحويل النص إلى Word» — يُنسَّق كما كتبته.' : aKey ? 'اضغط «تحويل» ليُفرَّغ التسجيل ثم يُنسَّق كمستند.' : 'لم يُكتب شيء ولا يوجد مفتاح صوت: اضغط داخل المربع وتكلّم بميكروفون لوحة المفاتيح 🎤، أو أضف «مفتاح الصوت» المجاني من ⚙️ الإعدادات.';
     });
     /* the edited box is the transcript (no second transcription: the person's corrections stay, and it costs less);
        without any text the recording itself is transcribed by the audio key */
@@ -1680,7 +1746,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '32';
+  var APP_VER = '33';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

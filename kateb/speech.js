@@ -21,13 +21,23 @@ var Speech = (function () {
       }
       if (opt.onInterim) opt.onInterim(interim.trim());
     };
-    rec.onerror = function (e) { if (e.error === 'no-speech' || e.error === 'aborted') return; if (opt.onError) opt.onError(e.error); };
+    /* v33: a real failure («network» on the person's Chrome and phone: the browser could not reach its speech service,
+       «not-allowed», «audio-capture», …) stops the engine and is reported — it used to restart silently forever while
+       nothing was written */
+    var fatal = null, got = false;
+    rec.onerror = function (e) {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      if (/^(network|not-allowed|service-not-allowed|audio-capture|language-not-supported|bad-grammar)$/.test(e.error)) { fatal = e.error; on = false; if (opt.onFatal) opt.onFatal(e.error, got); }
+      if (opt.onError) opt.onError(e.error);
+    };
+    var onres = rec.onresult; rec.onresult = function (e) { got = true; onres(e); };
     /* the engine stops by itself after silence: start again while the person is still recording */
-    rec.onend = function () { if (on) { clearTimeout(restartT); restartT = setTimeout(function () { try { rec.start(); } catch (e) {} }, 250); } else if (opt.onEnd) opt.onEnd(finals.slice()); };
+    rec.onend = function () { if (on && !fatal) { clearTimeout(restartT); restartT = setTimeout(function () { try { rec.start(); } catch (e) {} }, 250); } else if (opt.onEnd) opt.onEnd(finals.slice()); };
     return {
       start: function () { on = true; try { rec.start(); } catch (e) {} },
       pause: function () { on = false; try { rec.stop(); } catch (e) {} },
-      resume: function () { on = true; try { rec.start(); } catch (e) {} },
+      resume: function () { if (fatal) return; on = true; try { rec.start(); } catch (e) {} },
+      failed: function () { return fatal; },
       stop: function () { on = false; clearTimeout(restartT); try { rec.stop(); } catch (e) {} },
       finals: function () { return finals.slice(); }
     };
@@ -45,6 +55,26 @@ var Speech = (function () {
     var mime = pickMime(), mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined), chunks = [], startT = 0, pausedAt = 0, pausedTotal = 0, timer = null;
     var ctx = null, an = null, src = null;
     try { ctx = new (window.AudioContext || window.webkitAudioContext)(); src = ctx.createMediaStreamSource(stream); an = ctx.createAnalyser(); an.fftSize = 256; src.connect(an); } catch (e) { an = null; }
+    /* v33 live transcription by the audio key: the raw samples are kept so the newest few seconds can be sent as a WAV */
+    var pcm = [], pcmLen = 0, cutAt = 0, proc = null;
+    if (opt.pcm && ctx && src) {
+      try {
+        proc = ctx.createScriptProcessor(4096, 1, 1);
+        proc.onaudioprocess = function (ev) { if (mr.state !== 'recording') return; var d = ev.inputBuffer.getChannelData(0); pcm.push(new Float32Array(d)); pcmLen += d.length; };
+        src.connect(proc); proc.connect(ctx.destination); if (ctx.state === 'suspended' && ctx.resume) ctx.resume();
+      } catch (e) { proc = null; }
+    }
+    function pcmSince(from) {
+      var out = new Float32Array(pcmLen - from), o = 0, pos = 0;
+      for (var i = 0; i < pcm.length; i++) { var b = pcm[i], end = pos + b.length; if (end > from) { var st = Math.max(0, from - pos); out.set(b.subarray(st), o); o += b.length - st; } pos = end; }
+      return out;
+    }
+    function to16k(x, rate) {
+      if (rate === RATE) return x;
+      var ratio = rate / RATE, n = Math.floor(x.length / ratio), y = new Float32Array(n);
+      for (var i = 0; i < n; i++) { var a = Math.floor(i * ratio), b = Math.min(x.length, Math.floor((i + 1) * ratio)), s = 0; for (var k = a; k < b; k++) s += x[k]; y[i] = b > a ? s / (b - a) : x[a] || 0; }
+      return y;
+    }
     mr.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
     stream.getAudioTracks().forEach(function (t) { t.onended = function () { if (opt.onLost) opt.onLost(); }; });
     function elapsed() { return (Date.now() - startT - pausedTotal) / 1000; }
@@ -60,11 +90,23 @@ var Speech = (function () {
       pause: function () { if (mr.state === 'recording') { mr.pause(); pausedAt = Date.now(); } },
       resume: function () { if (mr.state === 'paused') { mr.resume(); pausedTotal += Date.now() - pausedAt; } },
       elapsed: elapsed, level: level, analyser: function () { return an; }, state: function () { return mr.state; },
+      /* the samples recorded since the last cut, as a 16 kHz WAV (null when shorter than minSec) */
+      pcmReady: function () { return !!proc; },
+      pending: function () { return ctx ? (pcmLen - cutAt) / ctx.sampleRate : 0; },
+      cut: function (minSec) {
+        if (!proc || !ctx) return null;
+        if ((pcmLen - cutAt) / ctx.sampleRate < (minSec || 0.8)) return null;
+        var x = pcmSince(cutAt); pcm = []; pcmLen = 0; cutAt = 0;          // what was sent is not kept (memory stays small)
+        var e = 0; for (var i = 0; i < x.length; i += 4) e += x[i] * x[i];
+        if (Math.sqrt(e / Math.max(1, x.length / 4)) < 0.004) return null;  // only silence: nothing to send
+        return wavBlob(normalise(to16k(x, ctx.sampleRate)), RATE);
+      },
       stop: function () {
         return new Promise(function (res) {
           clearInterval(timer);
           var done = function () {
             stream.getTracks().forEach(function (t) { t.stop(); });
+            try { if (proc) proc.disconnect(); } catch (e) {}
             try { if (ctx) ctx.close(); } catch (e) {}
             res({ blob: new Blob(chunks, { type: mr.mimeType || mime || 'audio/webm' }), seconds: elapsed() });
           };

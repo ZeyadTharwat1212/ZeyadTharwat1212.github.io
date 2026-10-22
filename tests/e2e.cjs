@@ -896,8 +896,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
 
   await step('voice dictation: record (fake microphone) with live text and spoken commands, pause/resume, stop → playback → transcribed by the audio key (WAV chunk) → laid out by Claude → review with the recording kept on the document', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: TRANSCRIPT, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
     await page.evaluate(() => {
-      localStorage.setItem('kateb.audiokey', 'AIza-test');
-      /* a fake browser recogniser: a few phrases, interim then final */
+      /* a fake browser recogniser: a few phrases, interim then final (no audio key: the browser's engine writes) */
       const phrases = ['عنوان إعادة إعلان في الدعوى', 'أنه في يوم الاثنين الموافق تسعة عشر أكتوبر ألفين وستة وعشرين نقطة', 'فقرة جديدة', 'بناء علي طلب السيد مينا سامي'];
       window.SpeechRecognition = window.webkitSpeechRecognition = function () {
         const self = this; let i = 0, t = null, on = false;
@@ -920,6 +919,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('#recPause'); assert.ok(await page.locator('.recstat.paused').count());
     await page.click('#recResume'); assert.ok(await page.locator('.recstat.on').count());
     await page.waitForTimeout(1500);
+    await page.evaluate(() => localStorage.setItem('kateb.audiokey', 'AIza-test'));      // added later: the recording can still be transcribed exactly
     await page.click('#recStop'); await page.waitForSelector('#recDone:not([hidden])', { timeout: 10000 });
     assert.match(await page.textContent('#recState'), /انتهى التسجيل/);
     assert.ok((await page.getAttribute('#recAudio', 'src') || '').startsWith('blob:'), 'playback of the recording');
@@ -944,7 +944,6 @@ async function runMode(browser, base, file, answers, check, key, drive) {
 
   await step('v27 live dictation you can edit: the words are written into the box while speaking; pause, correct a word, put the cursor in the middle, resume → the new words go at the cursor; convert uses the corrected box (no second transcription) and the draft survives a reload', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
     await page.evaluate(() => {
-      localStorage.setItem('kateb.audiokey', 'AIza-test');
       window.__phrases = ['بناء علي طلب السيد مينا سامي', 'ومحله المختار مكتب الأستاذ'];
       window.SpeechRecognition = window.webkitSpeechRecognition = function () {
         const self = this; let t = null, on = false;
@@ -975,6 +974,55 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(!calls.audio || !calls.audio.length, 'no second transcription of the audio');
     const fmt = calls.claude.find(c => c.kind === 'format'); assert.ok(fmt && /مينا سامح بالغ سن الرشد/.test(fmt.p), 'laid out by Claude from the corrected box');
     assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.liveDraft')), null, 'the draft is cleared once converted');
+  }));
+
+  await step('v33 live dictation by the audio key: the browser engine is not used; what is said is cut at the pause, sent as a WAV to the key and written into the box in order; stop writes the last words before the buttons; convert uses the box', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: 'بناء على طلب السيد مينا سامي', FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => {
+      localStorage.setItem('kateb.audiokey', 'AIza-test'); window.__srMade = 0;
+      window.SpeechRecognition = window.webkitSpeechRecognition = function () { window.__srMade++; this.start = this.stop = this.abort = () => {}; };
+    });
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
+    assert.match(await page.textContent('#liveInterim'), /وقفة/, 'the person is told the words come after each short pause');
+    await page.waitForTimeout(2000);
+    await page.click('#recPause');                                       // what was said so far goes out now
+    await page.waitForFunction(() => /مينا سامي/.test(document.getElementById('liveEdit').value), null, { timeout: 15000 });
+    assert.ok(calls.audio && calls.audio.length >= 1 && calls.audio[0].mime === 'audio/wav', 'a WAV piece went to the audio key: ' + JSON.stringify(calls.audio));
+    assert.strictEqual(await page.evaluate(() => window.__srMade), 0, 'the browser speech engine (fails with «network» on the family\'s Chrome) is not used');
+    await page.click('#recResume'); await page.waitForTimeout(1500);
+    const before = calls.audio.length;
+    await page.click('#recStop'); await page.waitForSelector('#recDone:not([hidden])', { timeout: 20000 });
+    assert.ok(calls.audio.length === before + 1, 'stop sends the last words too');
+    const v = await page.inputValue('#liveEdit');
+    assert.strictEqual((v.match(/مينا سامي/g) || []).length, 2, 'both pieces are in the box, in order: ' + v);
+    await page.click('#recConvert'); await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
+    assert.strictEqual(calls.audio.length, before + 1, 'converting uses the box: no second transcription');
+  }));
+
+  await step('v33 the browser speech engine fails («network», as on the family\'s Chrome and phone) and there is no audio key: the person is told at once what to do (keyboard 🎤 or the audio key) and the engine is not restarted forever; the keyboard-mic button opens the box', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => {
+      window.__starts = 0;
+      window.SpeechRecognition = window.webkitSpeechRecognition = function () {
+        const self = this;
+        this.start = () => { window.__starts++; setTimeout(() => { self.onerror && self.onerror({ error: 'network' }); self.onend && self.onend(); }, 80); };
+        this.stop = this.abort = () => {};
+      };
+    });
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
+    await page.waitForFunction(() => /لا تعمل هنا/.test(document.getElementById('liveInterim').textContent), null, { timeout: 5000 });
+    assert.match(await page.textContent('#liveInterim'), /لوحة المفاتيح/);
+    assert.match(await page.textContent('#liveInterim'), /مفتاح الصوت/);
+    await page.waitForTimeout(1500);
+    assert.strictEqual(await page.evaluate(() => window.__starts), 1, 'not restarted over and over');
+    await page.click('#recStop'); await page.waitForSelector('#recDone:not([hidden])', { timeout: 10000 });
+    assert.match(await page.textContent('#recNote'), /لوحة المفاتيح/);
+    assert.ok(await page.locator('#recConvert').isHidden(), 'nothing to convert without text or key');
+    await page.click('#kbMic');
+    assert.ok(await page.locator('#liveBox').isVisible(), 'the keyboard-mic button opens the box');
+    assert.ok(await page.evaluate(() => document.activeElement && document.activeElement.id === 'liveEdit'), 'and puts the cursor in it');
+    await page.fill('#liveEdit', 'بناء على طلب السيد مينا سامي'); await page.dispatchEvent('#liveEdit', 'input');
+    assert.ok(await page.locator('#liveConvert').isVisible(), 'typed or keyboard-dictated text can be converted');
   }));
 
   await step('audio file: upload → name and duration → convert needs the audio key (clear message), with it the file is decoded to WAV and transcribed; without Claude the transcript itself is the document', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: TRANSCRIPT, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {

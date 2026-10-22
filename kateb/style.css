@@ -464,3 +464,5 @@ body.wide{padding-bottom:110px}
 .outkinds{grid-template-columns:repeat(4,minmax(0,1fr))}
 .outkinds .kind{min-height:52px;justify-content:center}
 @media (max-width:520px){.outkinds{grid-template-columns:1fr 1fr}.outkinds .kind{flex-direction:column;gap:2px;text-align:center;padding:8px 4px}.outkinds .kind b{font-size:14px}}
+.liveinterim.warn{color:#8a4b00;background:#fff4dc;border-radius:8px;font-family:inherit;font-size:18px;padding:8px 10px}
+.livehelp{font-size:16px;color:#555;margin:6px 2px 0}
