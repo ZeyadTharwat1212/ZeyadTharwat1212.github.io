@@ -237,6 +237,10 @@ test('snap applies the office spelling inside a recognised formula', () => {
   assert.strictEqual(r.text, 'بالغ سن الرشد كامل الأهلية القانونية مقيم أسيوط', 'ة/ه slips take the office form');
   assert.strictEqual(r.styled, 2);
   assert.strictEqual(Bank.snap('بالغ سن الرشد كامل الاهلية القانونية مقيم أسيوط', bank).styled, 0, 'a hamza habit is not touched');
+  /* v31: an office formula that itself has «الماده» never undoes the corrected «المادة» (found on a real paper) */
+  const informal = { lines: [{ t: 'ولما كان نص الماده # من القانون رقم # لسنه #', n: 50, o: 'ولما كان نص الماده # من القانون رقم # لسنه #'.split(/\s+/) }] };
+  const r2 = Bank.snap('ولما كان نص المادة 9 من القانون رقم 112 لسنة 1980', informal);
+  assert.ok(r2.text.includes('المادة') && r2.text.includes('لسنة') && r2.styled === 0, 'correct spelling kept: ' + r2.text);
 });
 
 test('office spelling dictionary fixes دعوه → دعوى and ه/ة slips, never a different word', () => {

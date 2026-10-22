@@ -244,7 +244,7 @@
   }
   /* the pages already read of the same paper: names, case numbers and dates must agree across pages */
   function caseContext() {
-    var prev = results.map(function (r) { return r.text || ''; }).filter(Boolean);
+    var prev = results.filter(Boolean).map(function (r) { return r.text || ''; }).filter(Boolean);
     if (!prev.length) return '';
     var t = prev.join('\n----\n'); if (t.length > 6000) t = t.slice(-6000);
     return "\n\nEARLIER PAGES OF THE SAME PAPER (already transcribed; the same people, case number, court, dates and amounts recur — an unclear name or number on this page that matches one here is read the same way):\n" + t;
@@ -360,7 +360,8 @@
     if (printed && CLAUDE && ocrOn()) {
       try {
         step(1, 'الورقة مطبوعة: قراءة واحدة سريعة…');
-        var rp = await Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: 'medium', cacheImages: true, system: system, context: ctx });
+        /* v31b: Opus, light thinking — on a real typed page Sonnet put words and lines in the wrong order, Opus did not */
+        var rp = await Engine.generate(KEY, PROMPTS.read(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.1, effort: 'low', best: true, cacheImages: true, system: system, context: ctx });
         if (rp.model) usedModels[rp.model] = 1;
         var tp = Engine.clean(rp.text), rr = rotOf(tp);
         if (!rp.truncated && !refusal(tp) && !rr && stripRot(tp).length > 150) { a = stripRot(tp); ocrUsed = true; printedRead = true; }
@@ -394,7 +395,7 @@
         /* a printed page read once: only its own doubts are looked at again, by the same model with the cached images */
         var mp = printedRead && a.indexOf('⟦') >= 0 ? Verify.marks(a, null) : null;
         if (mp && mp.doubts) {
-          var rq = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mp.prompt, false), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: 'medium', cacheImages: true, maxTokens: 4096 });
+          var rq = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mp.prompt, false), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: 'low', best: true, cacheImages: true, maxTokens: 4096 });
           if (rq.model) usedModels[rq.model] = 1;
           if (!rq.truncated) final = Verify.decide(mp, Engine.clean(rq.text)).text;
         }
@@ -426,7 +427,7 @@
       final = ll.text; learned = lf.fixed + ll.cleared;
     }
     var g = Verify.guard(final, a, b || a, !EXAM), text = g.text, snapped = 0, spellFixed = 0;
-    curAdded = {}; (g.words || []).forEach(function (w) { curAdded[w] = 1; });     // marks the reads disagreed on (shown as such)
+    var myAdded = {}; (g.words || []).forEach(function (w) { myAdded[w] = 1; });     // marks the reads disagreed on (shown as such)
     var numbers = await numbersP;
     if (numbers) { var nc = Verify.checkNumbers(text, numbers); text = nc.text; }
     if (!EXAM) {
@@ -449,11 +450,12 @@
     if (!cb && !EXAM && !plainRun) cb = await caseBank(String(text).split('\n').slice(0, 3).join(' '));
     if (cb) { var sc = Bank.snap(text, cb); text = sc.text; snapped += sc.fixed; }
     /* the dictionary's own marks: a word nobody knows (no dictionary, no formula, never confirmed) is shown for review */
-    var dictWords = []; curDict = {};
+    var dictWords = [], myDict = {};
     if (!EXAM && dictOn() && typeof Dict !== 'undefined' && Dict.ready()) {
       var dm = Dict.mark(text, knownWord(bank, text)); text = dm.text; dictWords = dm.words;
-      dictWords.forEach(function (w) { curDict[Verify.norm(w)] = 1; });
+      dictWords.forEach(function (w) { myDict[Verify.norm(w)] = 1; });
     }
+    curAdded = myAdded; curDict = myDict;                  // v31: this page's own reasons (pages are read side by side)
     var r = await toResult(text);
     r.img = Engine.scaled(p.canvas, 1600).toDataURL('image/jpeg', 0.8);
     r.agree = d ? Math.round(d.agreement * 100) : null;
@@ -495,10 +497,20 @@
     if (!EXAM && dictOn() && typeof Dict !== 'undefined' && !Dict.ready()) Dict.load().catch(function () {});   // 1 MB once, in the background
     var n = pages.length, S = 3;
     try {
-      for (var i = 0; i < n; i++) {
-        var label = n > 1 ? ('صفحة ' + (i + 1) + ' من ' + n) : 'الورقة';
-        results.push(await readPage(pages[i], label, function (k, text) { setProgress(i * S + k, n * S, text); setStage(k); if (k) $('waitText').hidden = true; }));
-      }
+      /* v31: two pages are read side by side (a 2-page paper took 3 minutes one after the other); Gemini's free tier and
+         the exam layout keep one at a time */
+      var out = new Array(n), next = 0, prog = new Array(n).fill(0), lanes = CLAUDE && !EXAM ? Math.min(2, n) : 1;
+      results = out;
+      var worker = async function () {
+        while (next < n) {
+          var i = next++, label = n > 1 ? ('صفحة ' + (i + 1) + ' من ' + n) : 'الورقة';
+          out[i] = await readPage(pages[i], label, function (k, text) { prog[i] = k; setProgress(prog.reduce(function (a, b) { return a + b; }, 0), n * S, text); setStage(Math.min.apply(null, prog.filter(function (x, j) { return j < next; }))); if (k) $('waitText').hidden = true; });
+          prog[i] = S;
+        }
+      };
+      var ws = []; for (var w = 0; w < lanes; w++) ws.push(worker());
+      await Promise.all(ws);
+      results = out;
       setProgress(1, 1, 'تم'); setStage('all');
       finish();
     } catch (e) {
@@ -1668,7 +1680,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '31';
+  var APP_VER = '32';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -1828,7 +1840,7 @@
     decide: function (b, marked, two) {
       return (two ? "Two transcribers copied the attached page independently. You settle the places where they differ. " : "You are proofreading a transcription of the attached page against the page itself. ") + stripsNote(b) +
         "Below is reading 1. MARKED PLACES: " + (two ? "every place where reading 2 differs is written ⟪n| reading 1 ‖ reading 2⟫ (∅ = nothing there); " : "") + "a place reading 1 was unsure of is written ⟪n| ⟦…⟧⟫.\n" +
-        "For each marked place look closely at the ink of that line in the strips and write what the page really says — not what sounds better. A word the ink cannot settle is filled with the most likely word from the sentence, the formulas, the earlier pages and the office memory, wrapped in ⟦ ⟧ (never ⟦؟⟧, never empty when something is written there; ⟦a|b⟧ for two close readings). Ordinary words in the office's correct spelling; names, numbers and dates exactly as the ink shows.\n" +
+        "For each marked place look closely at the ink of that line in the strips and write what the page really says — not what sounds better. SETTLE what you can: an ordinary word that fits the sentence, the formula and the visible strokes is written WITHOUT ⟦ ⟧ even when the ink is poor (the reviewer should only have to look at what is truly uncertain). Keep ⟦ ⟧ only on names of people or places, numbers, dates and amounts you are not sure of, and on a place where two different words would both fit (⟦a|b⟧). Never ⟦؟⟧, never empty when something is written there. Ordinary words in the office's correct spelling; names, numbers and dates exactly as the ink shows.\n" +
         "Then check EVERY number, date, amount and case number of reading 1 against the strips digit by digit (a year has four digits), and every word that is plainly misread or misspelled: for each error outside the marked places write one FIX line.\n" +
         "Reply ONLY with lines in this format, no other text:\n<n> | <final text for place n>\nFIX | <the wrong text exactly as in reading 1, 1-5 words> | <the correct text>\n\n" +
         "READING 1 (with the marked places):\n" + marked;

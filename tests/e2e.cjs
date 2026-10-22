@@ -761,15 +761,15 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     });
     return Buffer.from(url.split(',')[1], 'base64');
   }
-  await step('v31 printed page: the kind call says PRINTED → ONE Sonnet read of the page and its strips (no second read, judge or numbers pass), images cached; its doubts get one short check by the same model', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ.replace('باع المعلن', 'باع ⟦المعلن⟧'), B: SIHHA_READ, K: 'دعوى صحة توقيع\nPRINTED', D: '1 | المعلن' }, null, 'sk-ant-test', async (page, calls) => {
+  await step('v31 printed page: the kind call says PRINTED → ONE Opus read (light effort) of the page and its strips (no second read, judge or numbers pass), images cached; its doubts get one short check by the same model', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ.replace('باع المعلن', 'باع ⟦المعلن⟧'), B: SIHHA_READ, K: 'دعوى صحة توقيع\nPRINTED', D: '1 | المعلن' }, null, 'sk-ant-test', async (page, calls) => {
     await page.evaluate(() => window.__test.dict().load());
     await page.setInputFiles('#file', { name: 'typed.png', mimeType: 'image/png', buffer: await printedPng(page) });
     await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
     await page.waitForSelector('#done:not([hidden])', { timeout: 90000 });
     assert.deepStrictEqual(calls.filter(k => k !== 'orient').sort(), ['check', 'kind', 'read'], 'title + one read + one short check: ' + calls.join(','));
     const rd = calls.claude.find(c => c.kind === 'read'), ck = calls.claude.find(c => c.kind === 'check');
-    assert.ok(rd.model === 'claude-sonnet-5-5' && rd.cache && rd.images >= 3 && rd.system.includes('STANDARD FORMULAS'), 'Sonnet, the page and its strips, the formula bank, cached images');
-    assert.ok(ck.model === 'claude-sonnet-5-5' && ck.short && ck.effort === rd.effort, 'the doubts checked by the same model at the same effort (cache hit)');
+    assert.ok(rd.model === 'claude-opus-5-5' && rd.effort === 'low' && rd.cache && rd.images >= 3 && rd.system.includes('STANDARD FORMULAS'), 'Opus at light effort (Sonnet scrambled the word order on a real typed page), the page and its strips, the formula bank, cached images');
+    assert.ok(ck.model === 'claude-opus-5-5' && ck.short && ck.effort === rd.effort, 'the doubts checked by the same model at the same effort (cache hit)');
     assert.match(await page.textContent('#pagesBox .sheet'), /مينا سامي/);
   }));
 

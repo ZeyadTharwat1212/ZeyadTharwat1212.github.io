@@ -103,7 +103,10 @@ var Bank = (function () {
           var mm = map[idx]; if (!mm) return tk;
           var ow = mm.h.line.o ? mm.h.line.o[mm.j] : null, bwx = mm.h.bw[mm.j];
           var f = function (x) { return x.replace(/ة/g, 'ه'); };     // ة/ه slips only; hamza and ى/ي stay as read
-          if (ow && !PLACE.test(bwx) && norm(core) === bwx && core !== ow && f(core) === f(ow) && !/[0-9٠-٩]/.test(core)) { styled++; return tk.replace(core, ow); }
+          /* v31: only towards the correct spelling (ه → ة): the office's files also hold «الماده»، «لسنه», and copying those
+             back undid the automatic spelling correction on a real paper */
+          var nT = function (x) { return (x.match(/ة/g) || []).length; };
+          if (ow && !PLACE.test(bwx) && norm(core) === bwx && core !== ow && f(core) === f(ow) && nT(ow) > nT(core) && !/[0-9٠-٩]/.test(core)) { styled++; return tk.replace(core, ow); }
           return tk;
         }
         if (/[0-9٠-٩]/.test(core)) { kept++; return tk; }        // numbers are never settled by a formula
