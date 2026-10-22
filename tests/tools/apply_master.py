@@ -12,7 +12,7 @@ court papers with a side column in the office files and keep their own layout.
 import io, json, os, re, sys, zipfile
 
 TYPES = ['sihha', 'reannounce', 'announce', 'warning', 'sahifa', 'inherit_announce']
-MEDIA = {'rId5': ('kmaster1.wmf', 'rIdKM1'), 'rId6': ('kmaster2.jpeg', 'rIdKM2'), 'rId7': ('kmaster3.jpeg', 'rIdKM3')}
+MEDIA = {'rId5': ('kmaster1.png', 'rIdKM1'), 'rId6': ('kmaster2.jpeg', 'rIdKM2'), 'rId7': ('kmaster3.jpeg', 'rIdKM3')}
 IMG_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 
 
@@ -84,12 +84,21 @@ def main(master, tdir):
         elif 'الموضوع' in x:
             x = fill_box(x, [('', '{{SUBJECT}}', 'الموضوع'), ('كطلب الطالب وتحت مسئوليته', '{{BYREQ}}', None), ('وكيل الطالب', '{{AGENTOF}}', None), ('المحامي', '{{AGENT}}', None)])
         a = {'role': 'master', 'at': 0, 'xml': x}
-        if '<pic:pic' in x: a['img'] = 'kateb/templates/basmala.png'
+        if '<pic:pic' in x:
+            a['img'] = 'kateb/templates/basmala.png'
+            # v34: the master's بسم الله is an old WMF with an odd frame; Word drew it shifted right, half off the page
+            # (Zeyad's screenshot). Now a PNG, pinned to the right margin (its place in the master: right edge = text edge).
+            x = re.sub(r'<wp:positionH relativeFrom="column">\s*<wp:posOffset>-?\d+</wp:posOffset>\s*</wp:positionH>',
+                       '<wp:positionH relativeFrom="margin"><wp:align>right</wp:align></wp:positionH>', x)
+            assert 'relativeFrom="margin"><wp:align>right' in x
+            x = x.replace(' cstate="print"', '')
+            a['xml'] = x
         anchors.append(a)
     sect = re.findall(r'<w:sectPr\b.*?</w:sectPr>', d, re.S)[-1]
     pgmar = re.search(r'<w:pgMar [^>]*/>', sect).group(0)
     page = {k: int(v) for k, v in re.findall(r'w:(top|right|bottom|left)="(\d+)"', pgmar)}
-    media = {name: z.read('word/media/' + {'rId5': 'image1.wmf', 'rId6': 'image2.jpeg', 'rId7': 'image3.jpeg'}[old]) for old, (name, _) in MEDIA.items()}
+    media = {name: z.read('word/media/' + {'rId6': 'image2.jpeg', 'rId7': 'image3.jpeg'}[old]) for old, (name, _) in MEDIA.items() if old != 'rId5'}
+    media['kmaster1.png'] = open(os.path.join(tdir, 'basmala.png'), 'rb').read()
 
     spec_path = os.path.join(tdir, 'templates.json')
     spec = json.load(open(spec_path, encoding='utf8'))
@@ -108,7 +117,7 @@ def main(master, tdir):
                 b = s.encode('utf8')
             elif it.filename == '[Content_Types].xml':
                 s = b.decode('utf8')
-                for ext, ct in (('wmf', 'image/x-wmf'), ('jpeg', 'image/jpeg')):
+                for ext, ct in (('png', 'image/png'), ('jpeg', 'image/jpeg')):
                     if 'Extension="%s"' % ext not in s: s = s.replace('<Default ', '<Default Extension="%s" ContentType="%s"/><Default ' % (ext, ct), 1)
                 b = s.encode('utf8')
             elif it.filename == 'word/document.xml':

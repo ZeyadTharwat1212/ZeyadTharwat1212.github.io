@@ -139,7 +139,7 @@ test('fills the صحة توقيع template: ornament, stamp, side box, original 
   assert.ok(/r:embed="rIdKM1"/.test(doc) && /w10:wrap type="square"/.test(doc), 'the master template: its بسم الله picture and the page-1 side column');
   assert.ok(!/Zokrofi/.test(doc), 'the old text ornament is not doubled with the master\'s بسم الله');
   const rels = parts['word/_rels/document.xml.rels'] || await zip.file('word/_rels/document.xml.rels').async('string');
-  assert.ok(/Id="rIdKM1"[^>]*media\/kmaster1\.wmf/.test(rels) && zip.file('word/media/kmaster2.jpeg'), 'the master\'s pictures travel with the file');
+  assert.ok(/Id="rIdKM1"[^>]*media\/kmaster1\.png/.test(rels) && /relativeFrom="margin"><wp:align>right/.test(doc) && zip.file('word/media/kmaster2.jpeg'), 'the master\'s pictures travel with the file');
   assert.match(doc, /ألون إبراهيم باشا/);                        // stamp + office line
   assert.match(doc, />دعوى صحة توقيع</);                          // side-box subject
   assert.match(doc, /كطلب الطالبة وتحت مسئوليتها/, 'client is female (ومحلها)');

@@ -375,6 +375,7 @@ var Office = (function () {
       var ph = /<wp:positionH relativeFrom="(\w+)">\s*<wp:(posOffset|align)>([^<]+)</.exec(a), pv = /<wp:positionV relativeFrom="(\w+)">\s*<wp:(posOffset|align)>([^<]+)</.exec(a);
       var x = ph && ph[2] === 'posOffset' ? +ph[3] : 0, y = pv && pv[2] === 'posOffset' ? +pv[3] : 0;
       if (ph && ph[1] === 'page') x -= (page.left || 0) * 635;                 // twips → EMU
+      if (ph && ph[2] === 'align' && ph[3] === 'right') x = ((page.width || 11906) - (page.left || 0) - (page.right || 0)) * 635 - w;   // v34: the بسم الله pinned to the right margin
       if (pv && (pv[1] === 'page' || pv[1] === 'margin')) y -= (page.top || 0) * 635;
       var prst = (/prst="(\w+)"/.exec(a) || [])[1] || 'rect', ln = /<a:ln\b([^>]*)>([\s\S]*?)<\/a:ln>/.exec(a);
       var lw = ln && /\bw="(\d+)"/.test(ln[1]) ? +/\bw="(\d+)"/.exec(ln[1])[1] / 12700 : (ln && /<a:noFill\/>/.test(ln[2]) ? 0 : 0.75);

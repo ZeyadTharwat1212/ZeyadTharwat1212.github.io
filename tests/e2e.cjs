@@ -200,7 +200,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
     const doc = await zip.file('word/document.xml').async('string');
     assert.ok(doc.includes('r:embed="rIdKM1"') && doc.includes('>دعوى صحة توقيع<') && doc.includes('ألون إبراهيم باشا') && !doc.includes('{{'), 'office Word file on the master template (بسم الله picture, stamp, side column)');
-    assert.ok(zip.file('word/media/kmaster2.jpeg') && zip.file('word/media/kmaster1.wmf'), 'the master\'s stamp texture and بسم الله travel with the file');
+    assert.ok(zip.file('word/media/kmaster2.jpeg') && zip.file('word/media/kmaster1.png'), 'the master\'s stamp texture and بسم الله travel with the file');
     assert.ok(doc.includes('٧/١/٢٠٢٦') && !/<w:t[^>]*>[^<]*[0-9][^<]*<\/w:t>/.test(doc), 'v23: Arabic digits in the office Word file');
     const stampP = (doc.match(/<w:p\b(?:(?!<\/w:p>)[\s\S])*?ألون إبراهيم باشا[\s\S]*?<\/w:p>/) || [''])[0];
     const sz = +((stampP.match(/<w:sz w:val="(\d+)"/) || [0, 99])[1]);
