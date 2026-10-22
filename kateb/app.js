@@ -108,7 +108,7 @@
     startSync();
   }
   /* v35: «ملفاتي» shared by every device (sync.js). Files changed elsewhere appear here by themselves. */
-  var syncStarted = false;
+  var syncStarted = false, syncHooked = false;
   function syncText(x) {
     if (!x || x.state === 'off') return '';
     if (x.state === 'busy') return '☁️ جارٍ مزامنة الملفات مع باقي الأجهزة…';
@@ -117,17 +117,19 @@
   }
   function paintSync(x) {
     ['syncNote', 'setSyncNote'].forEach(function (id) { var el = $(id); if (!el) return; var t = syncText(x); el.textContent = t || (id === 'setSyncNote' ? 'غير مفعّلة على هذا الجهاز: افتح رابط الكاتب الجديد من زياد واكتب كلمة السر مرة واحدة.' : ''); el.hidden = !el.textContent; el.className = 'small center syncnote' + (x && x.state === 'err' ? ' warn' : ''); });
-    if ($('syncNow')) $('syncNow').hidden = !(typeof Sync !== 'undefined' && Sync.on());
+    var on = typeof Sync !== 'undefined' && Sync.on();
+    if ($('syncNow')) $('syncNow').hidden = !on;
+    if ($('syncSetup')) $('syncSetup').hidden = on;
   }
   function startSync() {
     if (syncStarted || typeof Sync === 'undefined') return;
     syncStarted = true;
-    Sync.onStatus(paintSync);
-    Sync.onPulled(function (ids) {
+    if (!syncHooked) { syncHooked = true; Sync.onStatus(paintSync); Sync.onPulled(function (ids) {
       homeCards();
       if (curScreen === 'files') renderFiles(); else if (curScreen === 'trash') renderTrash(); else if (curScreen === 'settings') renderSettings();
-    });
-    Sync.start(MODE); paintSync(Sync.status());
+    }); }
+    paintSync(Sync.status());
+    Sync.autoJoin(KEY).then(function () { Sync.start(MODE); paintSync(Sync.status()); });     // v36: the other devices join by themselves
   }
   /* the three cards under the camera: files count, learning state */
   function homeCards() {
@@ -1206,6 +1208,17 @@
     });
     $('deleteLearnBtn').addEventListener('click', deleteLearn);
     if ($('syncNow')) $('syncNow').addEventListener('click', function () { if (typeof Sync !== 'undefined') Sync.sync(); });
+    /* v36: connect once with Zeyad's GitHub token, on one device; the others pick it up by themselves */
+    if ($('syncConnect')) $('syncConnect').addEventListener('click', async function () {
+      var t = ($('syncTok').value || '').trim(), btn = this; if (!t || typeof Sync === 'undefined') return;
+      btn.disabled = true; btn.textContent = 'جارٍ الربط…'; $('syncErr').hidden = true;
+      try {
+        var r = await Sync.connect(KEY, ($('syncRepo') && $('syncRepo').value.trim()) || '', t);
+        $('syncTok').value = ''; syncStarted = false; startSync(); await Sync.sync();
+        $('syncDone').hidden = false; $('syncDone').textContent = r.shared ? '✓ تم الربط. باقي الأجهزة (الكمبيوترات والموبايلات) تتربط وحدها أول ما تفتح الكاتب — بدون أي خطوة.' : '✓ تم الربط على هذا الجهاز. لربط باقي الأجهزة لازم الرمز يشمل مستودع الموقع كمان.';
+      } catch (e) { $('syncErr').hidden = false; $('syncErr').textContent = Sync.msg(e); }
+      btn.disabled = false; btn.textContent = 'ربط'; paintSync(Sync.status());
+    });
   }
   function deleteLearn() {
     if (!window.confirm('حذف كل ما تعلّمه التطبيق من تصحيحاتك (' + profileLabel() + ' وغيره)؟ القراءة ترجع كما كانت قبل التعلم.')) return;
@@ -1777,7 +1790,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '35';
+  var APP_VER = '36';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

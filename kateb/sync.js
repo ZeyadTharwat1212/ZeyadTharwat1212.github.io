@@ -194,7 +194,11 @@ var Sync = (function () {
     sync_net: 'لا يوجد إنترنت الآن — الملفات محفوظة على هذا الجهاز وتُرفع تلقائيًا عند عودة الإنترنت.',
     sync_auth: 'رمز المزامنة لم يعد يعمل (انتهى أو حُذف). زياد يعمل رابطًا جديدًا من صفحة التجهيز.',
     sync_rate: 'GitHub طلب الانتظار قليلًا — تُستكمل المزامنة بعد دقائق.',
-    sync_http: 'تعذرت المزامنة الآن — تُعاد المحاولة تلقائيًا.'
+    sync_http: 'تعذرت المزامنة الآن — تُعاد المحاولة تلقائيًا.',
+    sync_norepo: 'المستودع kateb-files غير موجود أو الرمز لا يصل إليه.',
+    sync_public: 'المستودع عام (Public) — لازم يكون خاص (Private).',
+    sync_readonly: 'الرمز بدون صلاحية الكتابة (Contents: Read and write).',
+    sync_otherkey: 'الملفات المشتركة اتعملت بمفتاح قراءة مختلف عن مفتاح هذا الجهاز.'
   };
   function sync() {
     if (!cfg() || typeof Store === 'undefined') return Promise.resolve([]);
@@ -212,9 +216,12 @@ var Sync = (function () {
     return running;
   }
   function soon(ms) { clearTimeout(soonT); soonT = setTimeout(sync, ms == null ? 3000 : ms); }
+  var started = false;
   function start(mode) {
     MODE = mode || MODE;
     if (!cfg()) { setStatus('off'); return; }
+    if (started) { sync(); return; }
+    started = true;
     if (typeof Store !== 'undefined') {
       Store.hooks.change = function () { soon(); };
       Store.hooks.purge = function (id) { var S = state(); if (S[id]) { var D = dels(); D[id] = S[id].sha; saveDels(D); } soon(); };
@@ -225,33 +232,53 @@ var Sync = (function () {
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') soon(300); });
     if (typeof window !== 'undefined') window.addEventListener('online', function () { soon(300); });
   }
-  /* «&s=…» in the link: the repository, the token and the files key, locked with the family's password */
+  /* «&s=…» in a link (older setup): the repository, the token and the files key, locked with the family's password */
   function fromHash(hash) { var m = /[&#]s=([A-Za-z0-9_-]+)/.exec(hash || ''); return m ? m[1] : null; }
 
-  /* ---------- for setup.html: check the repository and make (or recover) the files key ---------- */
-  async function prepare(repo, token, password) {
-    var c = { r: repo, t: token, k: '' };
+  /* ---------- v36: connect once, on ONE device — every other device joins by itself ----------
+     The device that has the token checks the private repository, takes (or makes) the files key — kept in the
+     repository wrapped with the app's own reading key — and publishes «kateb/sync.bin» on the site: the repository,
+     token and files key, encrypted with that reading key (AES-GCM, PBKDF2). Every device of the family already holds
+     the reading key (it is how they read papers), so each one opens sync.bin by itself; to anyone else it is noise. */
+  function siteRepo() {
+    var h = typeof location !== 'undefined' ? location.hostname : '';
+    var m = /^([A-Za-z0-9-]+)\.github\.io$/.exec(h); return m ? m[1] + '/' + m[1] + '.github.io' : 'ZeyadTharwat1212/ZeyadTharwat1212.github.io';
+  }
+  async function connect(mainKey, repo, token) {
+    var c = { r: repo || 'ZeyadTharwat1212/kateb-files', t: token, k: '' };
     var info = await gh('GET', '', null, c);
     if (!info) throw { code: 'sync_norepo' };
     if (!info.private) throw { code: 'sync_public' };
     if (info.permissions && !info.permissions.push) throw { code: 'sync_readonly' };
-    var f = await gh('GET', '/contents/kateb-sync.json', null, c), meta;
-    if (f && f.content) {
-      meta = JSON.parse(dec8.decode(unb64(f.content)));
-      c.k = await deriveRaw(password, meta.salt);
-      var k = await crypto.subtle.importKey('raw', unb64u(c.k), 'AES-GCM', false, ['encrypt', 'decrypt']);
-      try { if (dec8.decode(await open(unb64u(meta.check), k)) !== 'kateb') throw 0; } catch (e) { throw { code: 'sync_password' }; }
-    } else {
-      meta = { v: 1, salt: b64u(crypto.getRandomValues(new Uint8Array(16))) };
-      c.k = await deriveRaw(password, meta.salt);
-      var k2 = await crypto.subtle.importKey('raw', unb64u(c.k), 'AES-GCM', false, ['encrypt', 'decrypt']);
-      meta.check = b64u(await seal(enc8.encode('kateb'), k2));
-      await gh('PUT', '/contents/kateb-sync.json', { message: 'kateb: sync set up (files are encrypted)', content: b64(enc8.encode(JSON.stringify(meta))) }, c);
+    var f = await gh('GET', '/contents/kateb-sync.json', null, c), meta = f && f.content ? JSON.parse(dec8.decode(unb64(f.content))) : null;
+    if (meta && meta.kw) { try { c.k = await Engine.unlock(meta.kw, mainKey); } catch (e) { throw { code: 'sync_otherkey' }; } }
+    else {
+      c.k = b64u(crypto.getRandomValues(new Uint8Array(32)));
+      var body = { message: 'kateb: shared files set up (everything here is encrypted)', content: b64(enc8.encode(JSON.stringify({ v: 2, kw: await Engine.lock(c.k, mainKey) }))) };
+      if (f && f.sha) body.sha = f.sha;
+      await gh('PUT', '/contents/kateb-sync.json', body, c);
     }
-    return JSON.stringify(c);
+    var bundle = await Engine.lock(JSON.stringify(c), mainKey), shared = true;
+    try {                                                               // for the other devices: kateb/sync.bin on the site
+      var sc = { r: siteRepo(), t: token }, old = await gh('GET', '/contents/kateb/sync.bin', null, sc);
+      var put = { message: 'kateb: shared files link (encrypted)', content: b64(enc8.encode(bundle)) }; if (old && old.sha) put.sha = old.sha;
+      await gh('PUT', '/contents/kateb/sync.bin', put, sc);
+    } catch (e) { shared = false; }
+    setCfg(c); lsSet('kateb.sbin', bundle);
+    return { shared: shared };
+  }
+  /* every device, on opening: a new or changed sync.bin is taken in (a renewed token reaches all devices the same way) */
+  async function autoJoin(mainKey) {
+    if (!mainKey || typeof fetch === 'undefined') return false;
+    try {
+      var r = await fetch('kateb/sync.bin?x=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return false;
+      var b = (await r.text()).trim(); if (!/^[A-Za-z0-9_-]{40,}$/.test(b) || (b === lsGet('kateb.sbin') && cfg())) return false;
+      var c = JSON.parse(await Engine.unlock(b, mainKey)); if (!c.r || !c.t || !c.k) return false;
+      setCfg(c); lsSet('kateb.sbin', b); return true;
+    } catch (e) { return false; }
   }
 
-  return { start: start, sync: sync, soon: soon, cfg: cfg, setCfg: setCfg, fromHash: fromHash, prepare: prepare, status: function () { return st; },
+  return { start: start, sync: sync, soon: soon, cfg: cfg, setCfg: setCfg, fromHash: fromHash, connect: connect, autoJoin: autoJoin, msg: function (e) { return MSG[e && e.code] || MSG.sync_http; }, status: function () { return st; },
     onStatus: function (f) { listeners.push(f); }, onPulled: function (f) { pulledL.push(f); }, on: function () { return !!cfg(); },
     off: function () { try { localStorage.removeItem(LS_CFG); } catch (e) {} keyP = null; clearInterval(timer); setStatus('off'); },
     _merge: merge, _pack: pack, _unpack: unpack };

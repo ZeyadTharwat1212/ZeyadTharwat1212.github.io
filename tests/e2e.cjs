@@ -94,6 +94,7 @@ function fakeGitHubRepo(opts) {
   const files = new Map(); let n = 0; const log = [];
   const sha = () => 's' + (++n).toString(16).padStart(39, '0');
   return { files, log, opts: opts || {}, async attach(context) {
+    await context.route(/\/kateb\/sync\.bin/, r => { const f = files.get('kateb/sync.bin'); return f ? r.fulfill({ contentType: 'application/octet-stream', body: Buffer.from(f.content, 'base64') }) : r.fulfill({ status: 404, body: 'Not Found' }); });
     await context.route(/api\.github\.com\/repos\//, async r => {
       const req = r.request(), u = new URL(req.url()), m = u.pathname.match(/^\/repos\/[^/]+\/[^/]+(\/.*)?$/), rest = (m && m[1]) || '', meth = req.method();
       log.push(meth + ' ' + rest);
@@ -1003,7 +1004,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.liveDraft')), null, 'the draft is cleared once converted');
   }));
 
-  await step('v35 «ملفاتي» shared by every device: setup makes the link with the private repository (encrypted); device A makes a file → device B opens the same link and finds it with its photo; B\'s own older file goes to A too; a rename, a trash and a delete for good on one device reach the other; GitHub only holds unreadable bytes; a public repository is refused', async () => {
+  await step('v36 «ملفاتي» shared by every device: Zeyad pastes the GitHub token once on one device (a wrong token or a public repository is refused) → its files go up encrypted; another device opening the family link joins by itself and finds them with their photos; B\'s own older file goes to A too; a rename, a trash and a delete for good on one device reach the other; GitHub only holds unreadable bytes; a public repository is refused', async () => {
     const gh = fakeGitHubRepo(), calls = [];
     async function device(withKey) {
       const c = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
@@ -1019,34 +1020,37 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     }
     async function files(p) { await p.evaluate(() => Sync.sync()); if (!(await p.isVisible('#start'))) { if (await p.isVisible('#homeBtn')) await p.click('#homeBtn'); else await p.evaluate(() => window.__test.show('start')); }
       try { await p.waitForSelector('#start:not([hidden])', { timeout: 5000 }); } catch (e) { throw new Error('screen: ' + await p.evaluate(() => { const v = [...document.querySelectorAll('section')].find(x => !x.hidden); return v ? v.id + ' ' + v.textContent.slice(0, 300) : ''; }) + ' errors ' + p.errs); } await p.click('#filesBtn'); await p.waitForSelector('#files:not([hidden])'); await p.evaluate(() => Sync.sync()); await p.waitForTimeout(300); return p.$$eval('.doc .dname', a => a.map(x => x.textContent)); }
-    /* setup: a public repository is refused, the private one gives a link with «&s=» */
+    /* setup.html: a public repository is refused */
     const S = await device(false);
     await S.p.goto(base + '/setup.html');
     gh.opts.public = true;
     await S.p.fill('#key', 'sk-ant-test'); await S.p.fill('#stok', 'github_pat_test'); await S.p.fill('#pw1', 'family1'); await S.p.fill('#pw2', 'family1'); await S.p.click('#go');
     await S.p.waitForSelector('#err:not([hidden])'); assert.match(await S.p.textContent('#err'), /خاص/);
-    gh.opts.public = false; await S.p.click('#go'); await S.p.waitForSelector('#out:not([hidden])', { timeout: 20000 });
-    const link = (await S.p.textContent('#l1')).trim();
-    assert.match(link, /kateb\.html#k=[\w-]+&s=[\w-]+$/); assert.ok(gh.files.has('kateb-sync.json'), 'the repository remembers its salt');
-    /* the same password again later gives the same files key; another password is refused (old files would be unreadable) */
-    await S.p.fill('#pw1', 'other22'); await S.p.fill('#pw2', 'other22'); await S.p.click('#go'); await S.p.waitForSelector('#err:not([hidden])'); assert.match(await S.p.textContent('#err'), /نفس كلمة السر/);
-    await S.c.close();
+    gh.opts.public = false;
+    await S.p.fill('#stok', ''); await S.p.click('#go'); await S.p.waitForSelector('#out:not([hidden])', { timeout: 20000 });
+    const link = (await S.p.textContent('#l1')).trim(); await S.c.close();
     const url = link.replace(/^https?:\/\/[^/]+/, base);
-    /* device B: used before the sync, it already has a file of its own */
+    /* device B: used before, it has a file of its own. Zeyad pastes the token ONCE in its settings → connected */
     const B = await device(true); await B.p.goto(base + '/kateb.html'); await B.p.waitForSelector('#start:not([hidden])');
     const oldB = await makeDoc(B.p); await B.p.evaluate(() => Store.renameDoc(window.__test.doc().id, 'ملف قديم على جهاز بابا'));
-    /* device A opens the link: password once */
+    await B.p.evaluate(() => window.__test.show('settings')); await B.p.waitForSelector('#syncSetup:not([hidden])');
+    await B.p.fill('#syncTok', 'github_pat_wrong'); await B.p.click('#syncConnect'); await B.p.waitForSelector('#syncErr:not([hidden])');
+    await B.p.fill('#syncTok', 'github_pat_test'); await B.p.click('#syncConnect'); await B.p.waitForSelector('#syncDone:not([hidden])', { timeout: 20000 });
+    assert.match(await B.p.textContent('#syncDone'), /وحدها/);
+    assert.ok(gh.files.has('kateb-sync.json') && gh.files.has('kateb/sync.bin') && gh.files.has('docs/legal/' + oldB + '.json'), 'connected: files key, the join file for the others, and B\'s file uploaded');
+    assert.ok(!Buffer.from(gh.files.get('kateb/sync.bin').content, 'base64').toString().includes('github_pat_test'), 'the token is never readable in the public join file');
+    assert.strictEqual(await B.p.inputValue('#syncTok'), '', 'the token box is emptied');
+    /* device A: a new phone opens the family link (password once, as always) — it joins by itself, no token, no new link */
     const A = await device(false); await A.p.goto(url); await A.p.waitForSelector('#lock:not([hidden])');
     await A.p.fill('#pw', 'family1'); await A.p.click('#pwBtn'); await A.p.waitForSelector('#start:not([hidden])');
+    await A.p.waitForFunction(() => Sync.on(), null, { timeout: 10000 });
     const idA = await makeDoc(A.p); await A.p.evaluate(id => Store.renameDoc(id, 'دعوى من جهاز زياد'), idA);
     await A.p.evaluate(() => Sync.sync());
     const paths = [...gh.files.keys()];
     assert.ok(paths.some(x => x === 'docs/legal/' + idA + '.json') && paths.some(x => /^blobs\/[0-9a-f]{32}$/.test(x)), 'the file and its photo are in the repository: ' + paths.join(', '));
     const raw = [...gh.files.values()].map(f => Buffer.from(f.content, 'base64').toString('latin1')).join('');
     assert.ok(!/دعوى|JFIF|"pages"|"name"/.test(raw) && !/\xd8\xaf\xd8\xb9\xd9\x88\xd9\x89/.test(raw), 'GitHub holds only encrypted bytes (no text, no photo, no file names)');
-    /* device B opens the same link: its old file and A's file are both there, on both */
-    await B.p.goto('about:blank'); await B.p.goto(url); await B.p.waitForSelector('#lock:not([hidden])');
-    await B.p.fill('#pw', 'family1'); await B.p.click('#pwBtn'); await B.p.waitForSelector('#start:not([hidden])');
+    /* B sees A's file; A has B's old file */
     let nb = await files(B.p);
     assert.ok(nb.includes('دعوى من جهاز زياد') && nb.includes('ملف قديم على جهاز بابا'), 'B: ' + nb);
     assert.match(await B.p.textContent('#syncNote'), /كل الأجهزة/);
