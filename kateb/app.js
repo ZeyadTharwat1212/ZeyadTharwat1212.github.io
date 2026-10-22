@@ -153,12 +153,15 @@
   /* ---------- camera: one page per shot, cleaned, collected in a tray, read together ---------- */
   var shots = [], blur = [];
   function enhanceOn() { var c = $('enhanceChk'); return !c || c.checked; }
+  /* v39: a real messy handwritten paper was read far worse from the enhanced (black/white) image — thin strokes vanish.
+     The reader now gets the photo only straightened; the enhanced one is for the screen. */
+  function plainOf(c) { try { return typeof Scan !== 'undefined' && Scan.deskew ? Scan.deskew(c) : c; } catch (e) { return c; } }
   function cleaned(c) { try { return enhanceOn() && typeof Scan !== 'undefined' ? Scan.clean(c) : c; } catch (e) { return c; } }
   /* a photo → { orig, clean, quad }: the paper found and straightened (Scan.smart), then white paper / dark ink;
      a PDF page or a photo with enhancement off stays as it is */
   function shotOf(c, isPdf, quad) {
-    if (isPdf || !enhanceOn() || typeof Scan === 'undefined' || !Scan.smart) return { orig: c, clean: c, quad: null };
-    try { var sm = Scan.smart(c, quad); return { orig: c, clean: sm.canvas, quad: sm.quad }; } catch (e) { return { orig: c, clean: cleaned(c), quad: null }; }
+    if (isPdf || !enhanceOn() || typeof Scan === 'undefined' || !Scan.smart) return { orig: c, clean: c, plain: c, quad: null };
+    try { var sm = Scan.smart(c, quad); return { orig: c, clean: sm.canvas, plain: sm.plain || c, quad: sm.quad }; } catch (e) { return { orig: c, clean: cleaned(c), plain: c, quad: null }; }
   }
   var BLUR = 18;                                               // strongest-edge strength below this (crisp text ≈ 140, 2px blur ≈ 10): warn
   function sharp(c) { try { return typeof Scan !== 'undefined' ? Scan.sharpness(c) : 99; } catch (e) { return 99; } }
@@ -199,13 +202,13 @@
     $('goBtn').addEventListener('click', function () {
       if (!shots.length || running) return;
       if (blur.some(Boolean) && !window.confirm('فيه صورة غير واضحة وقد تُقرأ بأخطاء. هل تريد المتابعة؟')) return;
-      startCanvases(shots.map(function (sh) { return sh.clean; })); shots = []; blur = []; renderTray();
+      startCanvases(shots.map(function (sh) { return { base: sh.clean, raw: sh.plain || sh.orig }; })); shots = []; blur = []; renderTray();
     });
   }
   function startCanvases(cs) {
     show('work'); setProgress(0, 1, 'جارٍ تجهيز الصفحات…'); setStage(0); $('waitText').hidden = true; $('thumbs').innerHTML = '';
     if ($('cancelBtn')) $('cancelBtn').hidden = false;
-    pages = cs.map(function (c) { return { base: c }; });
+    pages = cs.map(function (c) { return c && c.base ? c : { base: c }; });
     pages.forEach(function (p) { var im = document.createElement('img'); im.alt = ''; im.src = Engine.scaled(p.base, 200).toDataURL('image/jpeg', 0.7); $('thumbs').appendChild(im); });
     run();
   }
@@ -239,7 +242,7 @@
     try {
       for (var i = 0; i < files.length; i++) {
         var isPdf = files[i].type === 'application/pdf' || /\.pdf$/i.test(files[i].name), cs = await Engine.fileToCanvases(files[i]);
-        cs.forEach(function (c) { pages.push({ base: isPdf ? c : cleaned(c) }); });   // photos are cleaned, PDF pages are already clean
+        cs.forEach(function (c) { pages.push(isPdf ? { base: c } : { base: cleaned(c), raw: plainOf(c) }); });   // photos are cleaned for the eye; the reader gets the plain photo (v39)
       }
     } catch (e) { fail(e); return; }
     pages.forEach(function (p) { var im = document.createElement('img'); im.alt = ''; im.src = Engine.scaled(p.base, 200).toDataURL('image/jpeg', 0.7); $('thumbs').appendChild(im); });
@@ -318,7 +321,13 @@
     if (glossaryBank === undefined) { try { glossaryBank = await Bank.load('glossary'); } catch (e) { glossaryBank = null; } }
     if (memoryBank === undefined) { try { memoryBank = await Bank.load('memory'); } catch (e) { memoryBank = null; } }
     var pub = typeof Memory !== 'undefined' ? Memory.publicPrompt(memoryBank) : '';
-    return pub;                                            // v38: places and courts of the area only — no formula text while reading
+    return (glossaryBank ? PROMPTS.glossary(Bank.promptText(glossaryBank, econ() ? 200 : 500)) : '') + pub;
+  }
+  /* v39: the formulas are back in the reading, but only to RECOGNISE written words (a real messy paper came back almost
+     all dots without them); the closing rule forbids writing any formula text the page does not show */
+  function recogSystem(bankTxt, cb, gloss) {
+    var t = (bankTxt || '') + caseText(cb) + (gloss || '');
+    return t ? t + "\n\nTHESE FORMULAS AND NAMES ONLY HELP YOU RECOGNISE WORDS THAT ARE WRITTEN ON THE PAGE. Never write a formula sentence, word or line that the page does not show, never complete a sentence from them, never fill a blank with them." : undefined;
   }
   /* v26: formula banks per case kind (bank/cases.json → bank/case_<key>.json, from published Egyptian forms): the
      kind is read from the paper's title (إلزام بصرف مستحقات تأمينية، قائمة منقولات، نفقة، طرد للغصب، ريع…) */
@@ -357,12 +366,12 @@
     var t0 = Date.now();
     step(0, 'جارٍ تجهيز ' + label + '…');
     var side = CLAUDE ? 1568 : 3072;                       // Claude reads at 1568px; bigger only slows the upload
-    p.canvas = p.base;
+    p.canvas = p.raw || p.base; p.turn = 0;
     /* a landscape photo of a portrait paper is sideways: straighten it before anything is read */
     if (CLAUDE && p.base.width > p.base.height * 1.1) {
       step(0, 'الصورة بالعرض: جارٍ تعديل اتجاه الورقة…');
       var up = await pickUpright(p.base, [0, 90, 270]);                  // a wide photo may also be upright already
-      if (up) p.canvas = Engine.rotated(p.base, up);
+      if (up) { p.canvas = Engine.rotated(p.canvas, up); p.turn = up; }
     }
     var bands = CLAUDE ? (econ() ? 4 : 5) : 3;            // more strips = more pixels per line of handwriting (and more image tokens)
     var imgs = await Engine.pageImages(p.canvas, bands, side);
@@ -374,8 +383,8 @@
         var kl = Engine.clean(k.text).split('\n'); kl0 = kl[0]; var kr = /ROT\s*:?\s*(90|180|270)/i.exec(kl.slice(1).join(' '));
         type = Office.detect('[H] ' + kl[0]);
         printed = /PRINTED/i.test(kl.slice(1).join(' '));
-        if (kr && +kr[1] === 180) { p.canvas = Engine.rotated(p.canvas, 180); imgs = await Engine.pageImages(p.canvas, bands, side); }   // upside down: turned before the reads
-        else if (kr) { var up2 = await pickUpright(p.canvas, [90, 270]); if (up2 !== null) { p.canvas = Engine.rotated(p.canvas, up2); imgs = await Engine.pageImages(p.canvas, bands, side); } }
+        if (kr && +kr[1] === 180) { p.canvas = Engine.rotated(p.canvas, 180); p.turn = (p.turn + 180) % 360; imgs = await Engine.pageImages(p.canvas, bands, side); }   // upside down: turned before the reads
+        else if (kr) { var up2 = await pickUpright(p.canvas, [90, 270]); if (up2 !== null) { p.canvas = Engine.rotated(p.canvas, up2); p.turn = (p.turn + up2) % 360; imgs = await Engine.pageImages(p.canvas, bands, side); } }
       } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
     }
     if (plainRun) type = null;                                            // «نص فقط»: no paper type, no formulas
@@ -383,7 +392,7 @@
     var cb = plainRun ? null : await caseBank(kl0);                                         // v26: the published wording of this kind of case
     /* v38 (Zeyad: «ما تزودش صيغ من عندك»): the reading sees NO formulas — a real paper came back with sentences the
        lawyer never wrote. The formulas are now only the «⚖️ تحسين صيغة المحاماة» button: suggestions, one by one. */
-    var system = (await glossaryPrompt()) || undefined, ctx = (caseContext() + learnPrompt() + (!EXAM && !plainRun && typeof Memory !== 'undefined' ? Memory.privatePrompt() : '')) || undefined;
+    var system = recogSystem(bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '', cb, await glossaryPrompt()), ctx = (caseContext() + learnPrompt() + (!EXAM && !plainRun && typeof Memory !== 'undefined' ? Memory.privatePrompt() : '')) || undefined;
     var a = null, b = null, ocrUsed = false;
     /* v31 a printed page: ONE Sonnet read of the page and its strips. (The free on-device OCR was tried on a real paper:
        it mixed the side column into the body and put words and lines in the wrong order, and one text correction did
@@ -408,7 +417,7 @@
       var ra = rotOf(pair.a), rb = pair.b ? rotOf(pair.b) : ra;
       if ((ra && ra === rb) || (refusal(pair.a) && (ra || rb))) {
         var turn = (ra || rb) === 180 ? 180 : await pickUpright(p.canvas, [90, 270]);
-        if (turn) { p.canvas = Engine.rotated(p.canvas, turn); imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system, ctx); }
+        if (turn) { p.canvas = Engine.rotated(p.canvas, turn); p.turn = (p.turn + turn) % 360; imgs = await Engine.pageImages(p.canvas, bands, side); pair = await readTwice(imgs, system, ctx); }
       }
       if (refusal(pair.a) && (!pair.b || refusal(pair.b))) throw { code: 'unreadable' };   // never a document made of an apology
       a = stripRot(pair.a); b = pair.b ? stripRot(pair.b) : null;
@@ -416,7 +425,7 @@
     }
     if (!type && !EXAM && !plainRun && typeof Office !== 'undefined') {
       type = Office.detect(a);
-      if (type && typeof Bank !== 'undefined') { bank = await Bank.load(type); }
+      if (type && typeof Bank !== 'undefined') { bank = await Bank.load(type); system = recogSystem(bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '', cb, await glossaryPrompt()); }
     }
     var final = a, d = b ? Verify.disagreements(a, b) : null;
     /* the numbers pass runs beside the judge: every number, date and amount read once more on its own */
@@ -488,7 +497,8 @@
     }
     curAdded = myAdded; curDict = myDict;                  // v31: this page's own reasons (pages are read side by side)
     var r = await toResult(text);
-    r.img = Engine.scaled(p.canvas, 1600).toDataURL('image/jpeg', 0.8);
+    var shown = p.raw && p.base !== p.raw ? (p.turn ? Engine.rotated(p.base, p.turn) : p.base) : p.canvas;   // the screen shows the enhanced page, turned the same way
+    r.img = Engine.scaled(shown, 1600).toDataURL('image/jpeg', 0.8);
     r.agree = d ? Math.round(d.agreement * 100) : null;
     r.text = text; r.type = type; r.snapped = snapped; r.spell = spellFixed; r.learned = learned; r.secs = Math.round((Date.now() - t0) / 1000); r.ocr = ocrUsed; r.dict = dictWords.length;
     return r;
@@ -1838,7 +1848,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '38';
+  var APP_VER = '39';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -1902,15 +1912,15 @@
     "- A table or a ruled list in columns: one line [TABLE] cell | cell | cell || cell | cell | cell (| between cells, || between rows, first row = the header as written).\n" +
     "- **text** = bold, __text__ = underlined, as in the source. Use a TAB between two items on one line far apart (e.g. a name and the word بصفته).\n" +
     "- Wrap any word or number you are not fully sure of in ⟦ ⟧ like ⟦كلمة⟧. When you hesitate between readings, give them all inside the brackets, the most likely first, separated by |: ⟦محمود|محمد⟧ (at most three).\n" +
-    "- WRITE ONLY WHAT IS ON THE PAPER: never add a word, a phrase or a line that the page does not show — not even when the standard formula of this kind of paper has it, not even when a sentence looks incomplete. Never complete, smooth or 'fix' the lawyer's wording.\n" +
-    "- A WORD YOU CANNOT READ is never guessed: write ⟦....⟧ (four dots) in its place, one ⟦....⟧ per unreadable word or group. A word you can partly read: your reading inside ⟦ ⟧. A wrong word is worse than a yellow gap.\n" +
+    "- EVERY WRITTEN WORD GETS A READING: lawyers write fast and joined-up, and the reviewer needs a text to check, not gaps. Never leave a gap and never write dots or ⟦؟⟧ for a written word: read it from its letter shapes, how this hand writes the same letters elsewhere on the page, the sentence and the legal formulas you know, and write your best reading — inside ⟦ ⟧ whenever you are not sure (⟦a|b⟧ for two readings). Every yellow word is checked against the photo.\n" +
+    "- NOTHING IS ADDED: the formulas help you RECOGNISE words that are written; they never add words. Each line you write holds the words on that line of the paper, no more: never write a formula sentence, a word or a line the paper does not show, and never complete a sentence the lawyer left short or a blank he left to fill later (a blank stays blank spaces).\n" +
     "- SPELLING IS CORRECTED AUTOMATICALLY: the typed paper must have no spelling mistakes. A slip of the hand in an ordinary word is written in the office's correct spelling (hamza forms أ إ آ ء ئ ؤ، ة not ه، ى not ي at the end, a missing or doubled letter, دعوه → دعوى، الى → إلى، علي → على where it means «on»). NEVER correct names of people, families or places, numbers, dates, amounts or case numbers — those stay exactly as the ink shows. The wording itself is not changed.\n" +
     "- Leave out: words crossed out or scribbled over (if they hid a name or field, write ........ in their place), stamps, seals, signatures, page numbers, handwritten court notes in the margins.\n" +
     "- Leave out the office's LEFT MARGIN COLUMN (الموضوع / the subject / كطلب الطالب وتحت مسئوليته / وكيل الطالب / المحامي) and the lawyer's STAMP BOX at the top (مكتب … المحامي): the Word template prints them itself. The body text starts at the title or at «إنه في يوم».\n" +
     "- HOUSE STYLE OF THIS OFFICE (measured on 1,740 of its typed papers): ALL numbers and dates use Western digits 0-9, even when the hand wrote ٠-٩. Dates are day/month/year like 10/1/2020 or 7/10/2025 (never year first). Amounts like 250000 ج ( مائتان وخمسون ألف جنيه مصري لا غير ). Case references like رقم 2537 لسنة 2025. Keep the source's punctuation.\n" +
     "- Copy EVERY digit: a year has four digits (2022, not 202), an amount keeps all its zeros; read numbers from the strips digit by digit, never from memory.\n" +    "- Spelling is standard Egyptian legal Arabic as the office types it: دعوى (never دعوه or دعوة), إلى، على، بالآتي، صحة توقيع، محكمة، الأهلية القانونية، أسيوط. Final ة and ى are never written as ه or ي by mistake.\n" +
     "- Do not add, remove, summarize, translate or reword.\n" +
-    "- Letters are read from the ink, not from what the sentence expects: count the dots and their position for ب ت ث ن ي، ج ح خ، د ذ، ر ز، س ش، ص ض، ط ظ، ع غ، ف ق; ه vs ة and ي vs ى as written; hamza (أ إ آ ا) as written. When a dot is faint or missing and the letters still fit one ordinary word only, write it; otherwise mark it (⟦reading⟧, or ⟦....⟧ when you cannot read it).";
+    "- Letters are read from the ink, not from what the sentence expects: count the dots and their position for ب ت ث ن ي، ج ح خ، د ذ، ر ز، س ش، ص ض، ط ظ، ع غ، ف ق; ه vs ة and ي vs ى as written; hamza (أ إ آ ا) as written. When a dot is faint or missing in an ordinary word, the sentence and the formulas decide which word it is; in a name or a number, give the best reading and mark it.";
   var EXAM_FORMAT =
     "OUTPUT FORMAT (plain text lines, no code fences, no commentary):\n" +
     "GRADE: <grade>   (first line, only if the paper names the grade, e.g. GRADE: Primary 4)\n" +
@@ -2001,18 +2011,18 @@
     },
     numbers: function (b) { return stripsNote(b) + NUMBERS_PROMPT; },
     kind: function () { return KIND_PROMPT; },
-    read: function (b) { if (plainRun) return plainRead(b, false); return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts (صحة توقيع، إعلانات، إنذارات، عقود بيع وهبة، إقرارات، مذكرات).\n\n" + stripsNote(b) + "Transcribe the ENTIRE page word for word, exactly as written — only what the ink shows, nothing added from what such papers usually say. For an unclear word compare with how the same letters look elsewhere on the page; partly readable → your reading in ⟦ ⟧; unreadable → ⟦....⟧. Names, numbers, dates and amounts come from the ink letter by letter and digit by digit (the earlier pages may confirm them); when unsure, the reading in ⟦ ⟧.\n\n" + ROT_NOTE + FMT(); },
+    read: function (b) { if (plainRun) return plainRead(b, false); return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts (صحة توقيع، إعلانات، إنذارات، عقود بيع وهبة، إقرارات، مذكرات).\n\n" + stripsNote(b) + "Transcribe the ENTIRE page word for word, exactly as written, working line by line through the strips. For every hard word use its letter shapes, how this hand writes the same letters elsewhere, the sentence, and the standard formulas of this kind of paper; give your best reading and mark it ⟦ ⟧ when unsure. The formulas only help you recognise what is written — never write words the page does not show. Names, numbers, dates and amounts come from the ink letter by letter and digit by digit (the earlier pages may confirm them); when unsure, the best reading in ⟦ ⟧.\n\n" + ROT_NOTE + FMT(); },
     read2: function (b) { if (plainRun) return plainRead(b, true); return "You are the most careful transcriber of Arabic and English documents: messy handwriting, typed pages, photocopies, legal papers for Egyptian courts.\n\n" + stripsNote(b) + STRIPWISE + "Transcribe the ENTIRE page word for word. Names of people and places, numbers, dates and case numbers must be copied letter by letter; if any letter is unsure, mark the word.\n\n" + ROT_NOTE + FMT(); },
     decide: function (b, marked, two) {
       return (two ? "Two transcribers copied the attached page independently. You settle the places where they differ. " : "You are proofreading a transcription of the attached page against the page itself. ") + stripsNote(b) +
         "Below is reading 1. MARKED PLACES: " + (two ? "every place where reading 2 differs is written ⟪n| reading 1 ‖ reading 2⟫ (∅ = nothing there); " : "") + "a place reading 1 was unsure of is written ⟪n| ⟦…⟧⟫.\n" +
-        "For each marked place look closely at the ink of that line in the strips and write what the page really says — not what sounds better. Write a word WITHOUT ⟦ ⟧ only when the strokes clearly show it. Not clear → keep it marked: your reading in ⟦ ⟧ (⟦a|b⟧ for two), or ⟦....⟧ when it cannot be read. Never fill a place from a legal formula or from what the sentence expects, and never add words that are not on the page. Ordinary words in correct spelling; names, numbers and dates exactly as the ink shows.\n" +
+        "For each marked place look closely at the ink of that line in the strips and write what the page really says — not what sounds better. An ordinary word whose strokes fit one reading (with the sentence and the formulas helping to recognise it) is written WITHOUT ⟦ ⟧. Otherwise give your best reading inside ⟦ ⟧ (⟦a|b⟧ for two) — never dots, never empty when something is written there. Never add words the page does not show. Ordinary words in correct spelling; names, numbers and dates exactly as the ink shows.\n" +
         "Then check EVERY number, date, amount and case number of reading 1 against the strips digit by digit (a year has four digits), and every word that is plainly misread or misspelled: for each error outside the marked places write one FIX line.\n" +
         "Reply ONLY with lines in this format, no other text:\n<n> | <final text for place n>\nFIX | <the wrong text exactly as in reading 1, 1-5 words> | <the correct text>\n\n" +
         "READING 1 (with the marked places):\n" + marked;
     },
     printed: function (t) { return "This page is PRINTED (typed), and a free OCR engine on the device has already read it. Correct that text against the attached image of the page: fix every misread, glued, split or missing word, number, date and name; drop OCR garbage and repeated lines; restore the paragraphs and the layout tags. Add nothing the page does not show; where the image is unclear, mark the word as the format says.\n\n" + FMT() + "\n\nOCR OUTPUT:\n" + t + "\n\nReply with the full corrected transcription only."; },
-    check: function (b, d) { return "You are proofreading a transcription of the attached page against the page itself. " + stripsNote(b) + "Go through the draft line by line and word by word against the images. Fix every misread word, missing or extra word, wrong number, date, name, digit order, bold/underline, and any skipped or doubled paragraph; delete any word or sentence that is not on the page. Remove ⟦ ⟧ from words you can now confirm; keep or add ⟦ ⟧ on anything still uncertain (⟦....⟧ when unreadable). Keep the same format.\n\n" + FMT() + "\n\nDRAFT TRANSCRIPTION:\n" + d + "\n\nReply with the full corrected transcription only."; },
-    judge: function (b, r1, r2, d) { return "Two transcribers copied the attached page independently. You decide the final text. " + stripsNote(b) + diffNote(d) + "For every disagreement look closely at the ink in the images and keep what the page really shows — not what sounds better. Also check that no paragraph is missing or doubled and that the layout tags are right; never keep a sentence that is not on the page. Where the image still does not settle a word, wrap it in ⟦ ⟧ (⟦....⟧ when it cannot be read at all) — with the plausible readings separated by | when there are two or three, the most likely first (⟦محمود|محمد⟧).\n\n" + FMT() + "\n\nREADING 1:\n" + r1 + "\n\nREADING 2:\n" + r2 + "\n\nReply with the one correct full transcription only."; }
+    check: function (b, d) { return "You are proofreading a transcription of the attached page against the page itself. " + stripsNote(b) + "Go through the draft line by line and word by word against the images. Fix every misread word, missing or extra word, wrong number, date, name, digit order, bold/underline, and any skipped or doubled paragraph; delete any word or sentence that is not on the page. Remove ⟦ ⟧ from words you can now confirm; keep or add ⟦ ⟧ on anything still uncertain (your best reading inside, never dots). Keep the same format.\n\n" + FMT() + "\n\nDRAFT TRANSCRIPTION:\n" + d + "\n\nReply with the full corrected transcription only."; },
+    judge: function (b, r1, r2, d) { return "Two transcribers copied the attached page independently. You decide the final text. " + stripsNote(b) + diffNote(d) + "For every disagreement look closely at the ink in the images and keep what the page really shows — not what sounds better. Also check that no paragraph is missing or doubled and that the layout tags are right; never keep a sentence that is not on the page. Where the image still does not settle a word, wrap your best reading in ⟦ ⟧ — with the plausible readings separated by | when there are two or three, the most likely first (⟦محمود|محمد⟧).\n\n" + FMT() + "\n\nREADING 1:\n" + r1 + "\n\nREADING 2:\n" + r2 + "\n\nReply with the one correct full transcription only."; }
   };
 })();

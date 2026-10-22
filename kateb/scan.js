@@ -234,7 +234,7 @@ var Scan = (function () {
   function smart(src, quad) {
     var q = quad === undefined ? detect(src) : quad;
     var page = q ? warp(src, q) : src;
-    return { canvas: clean(page), quad: q, cropped: !!q };
+    return { canvas: clean(page), plain: deskew(page), quad: q, cropped: !!q };   // v39: plain = cropped and straightened, not enhanced (what the reader gets)
   }
   return { enhance: enhance, deskew: deskew, sharpness: sharpness, clean: clean, detect: detect, warp: warp, smart: smart, homography: homography };
 })();
