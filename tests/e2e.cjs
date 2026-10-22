@@ -52,13 +52,13 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
   await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
-    const kind = /OCR OUTPUT:/.test(prompt) ? 'printed' : /writing UPRIGHT/.test(prompt) ? 'orient' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    const kind = /OCR OUTPUT:/.test(prompt) ? 'printed' : /writing UPRIGHT/.test(prompt) ? 'orient' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /against the standard wording of Egyptian court formulas/.test(prompt) ? 'form' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
     calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, p: prompt.slice(0, 6000), model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta, ocr: kind === 'printed' ? prompt.split('OCR OUTPUT:\n')[1] : undefined });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
     const short = /MARKED PLACES/.test(prompt);
     if (kind === 'orient') calls.rotDone = true;
-    const text = kind === 'orient' ? (answers.UP || '1') : short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    const text = kind === 'orient' ? (answers.UP || '1') : short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', form: answers.FORM || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
     calls.claude[calls.claude.length - 1].short = short; calls.claude[calls.claude.length - 1].cache = body.messages[0].content.some(c => c.cache_control);
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: ((kind === 'read' || kind === 'read2') && answers.ROT && !calls.rotDone ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
@@ -247,18 +247,29 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   }));
 
   const SIHHA_B = SIHHA_READ.replace('مينا سامي', 'مينا سامح').replace('باع المعلن', 'باع ⟦المعلز⟧');
-  await step('v31 Claude economy: ONE careful Opus read with the صحة توقيع formula bank (images cached), the numbers pass on Sonnet, a lone doubt inside a formula is settled by the formula (no extra call)', () => runMode(browser, base, 'kateb.html', { A: SIHHA_B, B: SIHHA_B, D: '1 | ⟦المعلز⟧', ROT: 0 }, async (page, calls) => {
-    assert.deepStrictEqual(calls.slice().sort(), ['kind', 'numbers', 'read'], 'one doubt the dictionary and formulas can settle → no extra check: ' + calls.join(','));
+  await step('v38 Claude economy: ONE careful Opus read (images cached) WITHOUT any formula — only what is on the paper, unreadable words as yellow dots; the numbers pass on Sonnet; the formulas come only from «⚖️ تحسين صيغة المحاماة»: suggestions accepted one by one, nothing added', () => runMode(browser, base, 'kateb.html', { A: SIHHA_B, B: SIHHA_B, D: '1 | ⟦المعلز⟧', ROT: 0, FORM: '3 | ⟦المعلز⟧ إليه | المعلن إليه | صيغة صحة التوقيع\n5 | السيد | وحيث إن الطالب يمتلك | إضافة صيغة' }, async (page, calls) => {
+    assert.ok(['kind', 'numbers', 'read'].every(k => calls.includes(k)) && !calls.includes('read2') && !calls.includes('judge'), 'one read: ' + calls.join(','));
     const c = calls.claude, r1 = c.find(x => x.kind === 'read'), nums = c.find(x => x.kind === 'numbers'), kindCall = c.find(x => x.kind === 'kind');
     assert.ok(kindCall.model === 'claude-haiku-5-5' && kindCall.images === 1, 'type detection: one small Haiku call');
     assert.ok(r1.model === 'claude-opus-5-5' && r1.effort === 'medium' && r1.cache && r1.images === 5 && !r1.fast, 'one Opus read, the page + 4 strips, images cached');
-    assert.ok(r1.system.includes('STANDARD FORMULAS') && r1.system.includes('دعوى صحة توقيع') && r1.system.includes('STANDARD WORDING OF «صحة توقيع» CASES') && r1.system.includes('PLACES AND INSTITUTIONS'), 'formula bank, case formulas and area memory');
+    assert.ok(!/STANDARD FORMULAS|STANDARD WORDING|COMMON EXPRESSIONS/.test(r1.system || '') && (r1.system || '').includes('PLACES AND INSTITUTIONS'), 'v38: no formulas while reading — only the area\'s places and courts');
+    assert.ok(/WRITE ONLY WHAT IS ON THE PAPER/.test(r1.p) && /⟦\.\.\.\.⟧/.test(r1.p) && !/formula of this paper type/.test(r1.p), 'the reader is told: nothing added, unreadable → ⟦....⟧');
     assert.ok(/LEFT MARGIN COLUMN/.test(r1.p), 'the side column and the stamp box are not transcribed');
     assert.ok(nums.model === 'claude-sonnet-5-5' && nums.effort === 'low' && !nums.system, 'economy: numbers pass on Sonnet, low effort, no bank');
     assert.match(await page.textContent('#readerInfo'), /claude-opus-5-5/, 'review screen shows the real model used');
+    assert.ok((await page.textContent('#pagesBox .sheet')).includes('باع المعلز إليه'), 'the reading is not changed by the formulas');
+    assert.ok(await page.locator('#pagesBox mark').count() >= 1, 'the unsure word stays yellow');
+    /* «⚖️ تحسين صيغة المحاماة»: suggestions only; a suggestion that would ADD a formula cannot apply (its text is not there) */
+    await page.click('#formBtn'); await page.waitForSelector('#fixPanel:not([hidden]) .fixrow');
+    assert.match(await page.textContent('#fixTitle'), /صيغة المحاماة/);
+    const fc = calls.claude.find(x => x.kind === 'form');
+    assert.ok(fc && /STANDARD FORMULAS/.test(fc.p) && /NEVER suggest adding/.test(fc.p) && /⟦المعلز⟧/.test(fc.p), 'the formulas go to this call only, with the yellow words marked');
+    assert.ok((await page.textContent('#pagesBox .sheet')).includes('باع المعلز إليه'), 'nothing changes before accepting');
+    await page.click('#fixList [data-fix="0"]');
     const txt = await page.textContent('#pagesBox .sheet');
-    assert.ok(txt.includes('باع المعلن إليه'), 'snap restored the formula word: ' + txt);
-    assert.strictEqual(await page.locator('#pagesBox mark').count(), 0, 'nothing left yellow');
+    assert.ok(txt.includes('باع المعلن إليه'), 'accepted: the formula word replaces the yellow one: ' + txt);
+    assert.ok(await page.locator('#pagesBox .fixd').count() === 1);
+    await page.click('#fixList [data-nofix="1"]'); assert.ok(!(await page.textContent('#pagesBox .sheet')).includes('وحيث إن الطالب يمتلك'), 'rejected: nothing added');
   }, 'sk-ant-test'));
   await step('Claude: the numbers pass completes a truncated year and flags a number it did not see', () => runMode(browser, base, 'kateb.html', { A: SIHHA_READ.replace('7/1/2026', '7/1/202'), B: SIHHA_READ.replace('7/1/2026', '7/1/202'), N: '2026 | الموافق\n7/1/2026 | بيع مؤرخ في' }, async (page) => {
     const txt = (await page.textContent('#pagesBox .sheet')).replace(/\u200F/g, '');
@@ -730,7 +741,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.waitForSelector('#tray:not([hidden])');
     assert.match(await page.textContent('#goBtn'), /✨ تحويل المستند بذكاء/);
     await page.click('#goBtn'); await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
-    assert.ok(calls.claude.filter(c => c.kind === 'read').every(c => /COMMON EXPRESSIONS OF EGYPTIAN COURT PAPERS/.test(c.system) && /وحيث إن/.test(c.system)), 'the glossary rides in the system prompt');
+    assert.ok(calls.claude.filter(c => c.kind === 'read').every(c => !/COMMON EXPRESSIONS OF EGYPTIAN COURT PAPERS/.test(c.system || '')), 'v38: no formulas or glossary while reading');
     assert.ok(calls.claude.filter(c => c.kind === 'read').every(c => /⟦محمود\|محمد⟧/.test(c.system) || true));
     assert.ok(await page.locator('#doneNote').isVisible(), '«✅ تم تحويل المستند»');
     assert.match(await page.textContent('#doubtNote'), /يوجد بعض الكلمات التي تحتاج مراجعة \(1\)/);
@@ -805,7 +816,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.waitForSelector('#done:not([hidden])', { timeout: 90000 });
     assert.deepStrictEqual(calls.filter(k => k !== 'orient').sort(), ['check', 'kind', 'read'], 'title + one read + one short check: ' + calls.join(','));
     const rd = calls.claude.find(c => c.kind === 'read'), ck = calls.claude.find(c => c.kind === 'check');
-    assert.ok(rd.model === 'claude-opus-5-5' && rd.effort === 'low' && rd.cache && rd.images >= 3 && rd.system.includes('STANDARD FORMULAS'), 'Opus at light effort (Sonnet scrambled the word order on a real typed page), the page and its strips, the formula bank, cached images');
+    assert.ok(rd.model === 'claude-opus-5-5' && rd.effort === 'low' && rd.cache && rd.images >= 3 && !/STANDARD FORMULAS/.test(rd.system || ''), 'Opus at light effort (Sonnet scrambled the word order on a real typed page), the page and its strips, no formulas, cached images');
     assert.ok(ck.model === 'claude-opus-5-5' && ck.short && ck.effort === rd.effort, 'the doubts checked by the same model at the same effort (cache hit)');
     assert.match(await page.textContent('#pagesBox .sheet'), /مينا سامي/);
   }));
@@ -965,7 +976,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
     assert.ok(calls.audio && calls.audio.length === 1 && calls.audio[0].mime === 'audio/wav' && calls.audio[0].bytes > 1000, 'the recording went to the audio key as one WAV chunk: ' + JSON.stringify(calls.audio && calls.audio.map(a => [a.mime, a.bytes])));
     assert.match(calls.audio[0].prompt, /Spoken punctuation commands/);
-    const fmt = calls.claude.find(c => c.kind === 'format'); assert.ok(fmt && fmt.images === 0 && /COMMON EXPRESSIONS/.test(fmt.system), 'Claude lays the transcript out, text only, with the glossary');
+    const fmt = calls.claude.find(c => c.kind === 'format'); assert.ok(fmt && fmt.images === 0 && !/COMMON EXPRESSIONS/.test(fmt.system || ''), 'Claude lays the transcript out, text only, no formulas added');
     assert.match(await page.textContent('#pagesBox .sheet p.h'), /إعادة إعلان في الدعوى/);
     assert.match(await page.textContent('#pagesBox .sheet'), /١٩‏\/‏١٠‏\/‏٢٠٢٦/, 'the spoken date as a house-style date');
     assert.strictEqual(await page.locator('#pagesBox mark').count(), 1, 'the transcriber\'s doubt stays yellow');
