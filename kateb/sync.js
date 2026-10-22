@@ -66,15 +66,16 @@ var Sync = (function () {
   }
   function pathOf(id) { return 'docs/' + MODE + '/' + id + '.json'; }
   async function tree() {
-    var t = await gh('GET', '/git/trees/HEAD?recursive=1'), docs = {}, blobs = {};
+    var t = await gh('GET', '/git/trees/HEAD?recursive=1'), docs = {}, blobs = {}, prefs = null;
     if (!t) t = { tree: [] };
     var re = new RegExp('^docs/' + MODE + '/([A-Za-z0-9_-]+)\\.json$');
     (t.tree || []).forEach(function (e) {
       if (e.type !== 'blob') return;
       var m = re.exec(e.path); if (m) docs[m[1]] = e.sha;
       var b = /^blobs\/([0-9a-f]{32})$/.exec(e.path); if (b) blobs[b[1]] = e.sha;
+      if (e.path === 'prefs/' + MODE + '.json') prefs = e.sha;
     });
-    return { docs: docs, blobs: blobs };
+    return { docs: docs, blobs: blobs, prefs: prefs };
   }
   async function readFile(sha) { var j = await gh('GET', '/git/blobs/' + sha); if (!j) throw { code: 'sync_missing' }; return open(unb64(j.content)); }
   async function writeFile(path, bytes, sha) {
@@ -188,8 +189,54 @@ var Sync = (function () {
         else await push(d, null);                                                  // new here (or this device's files, first time)
       } catch (e) { if (e.code === 'sync_conflict') again = true; else throw e; }
     }
+    try { await prefsRound(tr); } catch (e) { if (e.code === 'sync_conflict') again = true; else if (e.code === 'sync_auth' || e.code === 'sync_net') throw e; }
     return pulled;
   }
+  /* ---------- v41: one app on every device — settings, the handwriting learning and the office memory travel too ----------
+     prefs/<mode>.json (encrypted like the files): {s: {key: {v, t}}, learn: [records], memory: {key: {c, t}}}.
+     A setting changed here (its value differs from what was last synced) is sent; one changed elsewhere is taken. */
+  var PREF_KEYS = ['kateb.mode', 'kateb.ocr', 'kateb.dict', 'kateb.learn', 'kateb.fast', 'kateb.out', 'kateb.lawName', 'kateb.lawTitle', 'kateb.audiokey', 'kateb.enhance'];
+  var PREF_PREFIX = ['kateb.profile.', 'exam.'];
+  var prefsHooks = [];
+  function prefKeys() {
+    var out = PREF_KEYS.slice();
+    try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (PREF_PREFIX.some(function (p) { return k.indexOf(p) === 0; }) && out.indexOf(k) < 0) out.push(k); } } catch (e) {}
+    return out;
+  }
+  function mergeLearn(a, b) {
+    var m = {}; (a || []).concat(b || []).forEach(function (r) { if (!r || !r.id) return; var o = m[r.id]; if (!o) m[r.id] = Object.assign({}, r); else { o.n = Math.max(o.n || 0, r.n || 0); o.last = Math.max(o.last || 0, r.last || 0); } });
+    return Object.keys(m).map(function (k) { return m[k]; });
+  }
+  function mergeMem(a, b) {
+    var m = {}; [a || {}, b || {}].forEach(function (x) { Object.keys(x).forEach(function (k) { var o = m[k], r = x[k]; if (!o) m[k] = { c: r.c || 0, t: r.t || 0 }; else { o.c = Math.max(o.c, r.c || 0); o.t = Math.max(o.t, r.t || 0); } }); });
+    return m;
+  }
+  async function prefsRound(tr) {
+    var path = 'prefs/' + MODE + '.json', snapK = 'kateb.sync.prefsnap.' + MODE, snap = jget(snapK, {}), now = Date.now();
+    var remote = tr.prefs ? JSON.parse(dec8.decode(await readFile(tr.prefs))) : { s: {}, learn: [], memory: {} };
+    remote.s = remote.s || {};
+    var keys = prefKeys(); Object.keys(remote.s).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });
+    var push = !tr.prefs, applied = false;
+    keys.forEach(function (k) {
+      var lv = lsGet(k), sv = snap[k] === undefined ? null : snap[k], r = remote.s[k], rv = r ? r.v : null;
+      var localChanged = lv !== sv, remoteChanged = r && rv !== sv;
+      if (localChanged && (!remoteChanged || (r.t || 0) < now - 1)) { if (lv !== rv) { remote.s[k] = { v: lv, t: now }; push = true; } }
+      else if (remoteChanged && lv !== rv) { try { if (rv === null) localStorage.removeItem(k); else localStorage.setItem(k, rv); } catch (e) {} applied = true; }
+      snap[k] = (remote.s[k] ? remote.s[k].v : lv);
+    });
+    /* the handwriting learning (records) and the office memory (lawyers, judges, people): merged, never lost */
+    var L = null; try { L = await Store.get('learn', 'items'); } catch (e) {}
+    var lItems = (L && L.items) || [], ml = mergeLearn(lItems, remote.learn);
+    if (ml.length !== (remote.learn || []).length || JSON.stringify(ml) !== JSON.stringify(remote.learn || [])) { remote.learn = ml; push = true; }
+    if (ml.length !== lItems.length || JSON.stringify(ml) !== JSON.stringify(lItems)) { await Store.put('learn', { id: 'items', items: ml }); applied = true; }
+    var memLocal = jget('kateb.memory', { p: {} }), mm = mergeMem(memLocal.p, remote.memory);
+    if (JSON.stringify(mm) !== JSON.stringify(remote.memory || {})) { remote.memory = mm; push = true; }
+    if (JSON.stringify(mm) !== JSON.stringify(memLocal.p || {})) { lsSet('kateb.memory', JSON.stringify({ p: mm })); if (typeof Memory !== 'undefined' && Memory._clear) Memory._clear(); applied = true; }
+    if (push) tr.prefs = await writeFile(path, enc8.encode(JSON.stringify(remote)), tr.prefs || null);
+    lsSet(snapK, JSON.stringify(snap));
+    if (applied) prefsHooks.forEach(function (f) { try { f(); } catch (e) {} });
+  }
+
   var MSG = {
     sync_net: 'لا يوجد إنترنت الآن — الملفات محفوظة على هذا الجهاز وتُرفع تلقائيًا عند عودة الإنترنت.',
     sync_auth: 'رمز المزامنة لم يعد يعمل (انتهى أو حُذف). زياد يعمل رابطًا جديدًا من صفحة التجهيز.',
@@ -281,6 +328,6 @@ var Sync = (function () {
   return { start: start, sync: sync, soon: soon, cfg: cfg, setCfg: setCfg, fromHash: fromHash, connect: connect, autoJoin: autoJoin, msg: function (e) { return MSG[e && e.code] || MSG.sync_http; }, status: function () { return st; },
     onStatus: function (f) { listeners.push(f); }, onPulled: function (f) { pulledL.push(f); }, on: function () { return !!cfg(); },
     off: function () { try { localStorage.removeItem(LS_CFG); } catch (e) {} keyP = null; clearInterval(timer); setStatus('off'); },
-    _merge: merge, _pack: pack, _unpack: unpack };
+    _merge: merge, _pack: pack, _unpack: unpack, onPrefs: function (f) { prefsHooks.push(f); }, _mergeLearn: mergeLearn, _mergeMem: mergeMem };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Sync;

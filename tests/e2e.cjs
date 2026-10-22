@@ -601,6 +601,18 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(await page.getAttribute('#outList [data-out="plain"]', 'aria-pressed'), 'true', 'the choice is remembered on this device');
     await page.click('#outList [data-out="pro"]');
   }));
+  await step('v41 Hanan: the ministry math references — her grade\'s vocabulary and the exam instructions help the reading (nothing added); settings list every grade with its units and the ministry book links', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => localStorage.setItem('exam.hGrade', '4'));
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    await page.setInputFiles('#file', { name: 'p.png', mimeType: 'image/png', buffer: await pagePhoto(browser) });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn'); await page.waitForSelector('#done:not([hidden])', { timeout: 30000 });
+    const rd = calls.claude.find(c => c.kind === 'read');
+    assert.ok(/MATH REFERENCES/.test(rd.system) && /THIS TEACHER'S GRADE: Primary 4/.test(rd.system) && /Choose the correct answer/.test(rd.system) && /Never add a question/.test(rd.system), 'grade 4 references in the reading');
+    await page.click('#againBtn'); await page.waitForSelector('#start:not([hidden])'); await page.click('#settingsBtn'); await page.waitForSelector('#settings:not([hidden])'); await page.waitForSelector('#mathRefList details');
+    assert.ok(await page.locator('#mathRefList details').count() === 5 && await page.locator('#mathRefList details[open] summary').textContent() === 'Primary 4', 'five grades, hers open');
+    assert.ok(await page.locator('#mathRefList a[href*="moe.gov.eg"]').count() > 0, 'links to the ministry books');
+  }));
+
   await step('v28 Hanan: «بالتنسيق» with مراجعة chosen on the start screen → the first Word is a revision sheet without asking; «نص فقط» → the page as written on a white page, no exam header', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page, calls) => {
     assert.ok(await page.locator('#outKinds').isVisible());
     await page.click('#outKinds [data-okind="revision"]');
@@ -1091,6 +1103,14 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(!gh.files.has('docs/legal/' + oldB + '.json'), 'deleted for good → removed from the repository');
     await A.p.evaluate(() => Sync.sync());
     assert.strictEqual(await A.p.evaluate(id => Store.getDoc(id), oldB), null, 'and from A');
+    /* v41: one app — a setting, the handwriting learning and the office memory made on B reach A */
+    await B.p.evaluate(async () => { localStorage.setItem('kateb.mode', 'best'); localStorage.setItem('kateb.lawName', 'أيمن إسماعيل أحمد'); Memory.add('lawyer', 'عاطف محمد الموافي', 3); Memory.learn(''); localStorage.setItem('kateb.memory', JSON.stringify({ p: { 'lawyer|عاطف محمد الموافي': { c: 3, t: 1 } } })); await Store.put('learn', { id: 'items', items: [{ id: 'x1', profile: 'p', kind: 'fix', from: 'الطالبه', to: 'الطالبة', n: 2, last: 5 }] }); await Sync.sync(); });
+    assert.ok(gh.files.has('prefs/legal.json'), 'the shared settings file');
+    await A.p.evaluate(() => Sync.sync());
+    const got = await A.p.evaluate(async () => ({ mode: localStorage.getItem('kateb.mode'), law: localStorage.getItem('kateb.lawName'), mem: localStorage.getItem('kateb.memory') || '', learn: ((await Store.get('learn', 'items')) || { items: [] }).items.map(r => r.id) }));
+    assert.ok(got.mode === 'best' && got.law === 'أيمن إسماعيل أحمد' && /عاطف محمد الموافي/.test(got.mem) && got.learn.includes('x1'), 'settings, memory and learning reached A: ' + JSON.stringify(got));
+    await A.p.evaluate(() => { localStorage.setItem('kateb.mode', 'economy'); return Sync.sync(); }); await B.p.evaluate(() => Sync.sync());
+    assert.strictEqual(await B.p.evaluate(() => localStorage.getItem('kateb.mode')), 'economy', 'and back the other way');
     assert.deepStrictEqual(A.p.errs.concat(B.p.errs), [], 'no page errors');
     await A.c.close(); await B.c.close();
   });

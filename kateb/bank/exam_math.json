@@ -1,0 +1,1985 @@
+{
+ "type": "exam_math",
+ "updated": "2026-10",
+ "school_year": "2026/2027 (current, as of 2026-10-22). Where 2025/2026 differs it is noted. Only P3 changed between the two years.",
+ "grades": {
+  "P3": {
+   "label": "Primary 3",
+   "curriculum": "NEW Japan-developed math (with Sprix), first applied in 2026/2027. Units are called 'Chapters'. (2025/2026 used the older Edu 2.0 P3 book.)",
+   "terms": {
+    "1": [
+     {
+      "unit": "Chapter 1: Rules of Multiplication",
+      "lessons": [
+       "Properties of Multiplication (Part 1)",
+       "Properties of Multiplication (Part 2)",
+       "Multiplying by 10 and 0 (Part 1)",
+       "Multiplying by 10 and 0 (Part 2)",
+       "Finding the Missing Numbers"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     },
+     {
+      "unit": "Chapter 2: Time and Duration",
+      "lessons": [
+       "Finding Time Before and After (Part 1)",
+       "Finding Time Before and After (Part 2)",
+       "Shorter Time Units"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     },
+     {
+      "unit": "Chapter 3: Division",
+      "lessons": [
+       "Division",
+       "Sharing and Division",
+       "Cases for Division",
+       "Division to Compare"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     },
+     {
+      "unit": "Chapter 4: Addition and Subtraction",
+      "lessons": [
+       "Adding 3- and 4-Digit Numbers",
+       "Subtracting 3- and 4-Digit Numbers (Part 1)",
+       "Subtracting 3- and 4-Digit Numbers (Part 2)",
+       "Addition and Subtraction"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     },
+     {
+      "unit": "Chapter 5: Length",
+      "lessons": [
+       "Longer Units of Length",
+       "Distance and Shortest Distance"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     },
+     {
+      "unit": "Chapter 6: Organizing Data",
+      "lessons": [
+       "Using Tally Marks and Tables",
+       "Reading Bar Graphs",
+       "Drawing Bar Graphs",
+       "Organizing Data in Tables"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     },
+     {
+      "unit": "Chapter 7: Mental Math",
+      "lessons": [
+       "Mental Math of Addition",
+       "Mental Math of Subtraction"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     },
+     {
+      "unit": "Chapter 8: Division with Remainders",
+      "lessons": [
+       "Division with a Remainder",
+       "Checking the Answer",
+       "Using Division with a Remainder (Part 1)",
+       "Using Division with a Remainder (Part 2)"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     },
+     {
+      "unit": "Chapter 9: Numbers Bigger than 10,000",
+      "lessons": [
+       "How to Write Big Numbers?",
+       "The Structure of Big Numbers",
+       "Comparing Big Numbers",
+       "Numbers Multiplied by 10 and Divided by 10"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     },
+     {
+      "unit": "Chapter 10: Vertical Multiplication (Part 1)",
+      "lessons": [
+       "Multiplying by Tens and Hundreds",
+       "Vertical Multiplication (2-digit x 1-digit)",
+       "Vertical Multiplication (3-digit x 1-digit)",
+       "Rules of Multiplication",
+       "Using Multiplication"
+      ],
+      "confidence": "verified-secondary",
+      "year": "2026/27"
+     }
+    ],
+    "2": [
+     {
+      "unit": "(expected) Circles and Spheres",
+      "lessons": [
+       "Circles",
+       "Centre, radius and diameter",
+       "Spheres"
+      ],
+      "confidence": "inferred",
+      "year": "2026/27"
+     },
+     {
+      "unit": "(expected) Decimals",
+      "lessons": [
+       "Tenths",
+       "Comparing decimals",
+       "Adding and subtracting decimals"
+      ],
+      "confidence": "inferred",
+      "year": "2026/27"
+     },
+     {
+      "unit": "(expected) Weight",
+      "lessons": [
+       "Grams and kilograms",
+       "Measuring weight with scales"
+      ],
+      "confidence": "inferred",
+      "year": "2026/27"
+     },
+     {
+      "unit": "(expected) Fractions",
+      "lessons": [
+       "Fractions of a whole",
+       "Comparing fractions",
+       "Adding and subtracting fractions with the same denominator"
+      ],
+      "confidence": "inferred",
+      "year": "2026/27"
+     },
+     {
+      "unit": "(expected) Using a Box (unknown number) in Expressions",
+      "lessons": [
+       "Expressions with an unknown number"
+      ],
+      "confidence": "inferred",
+      "year": "2026/27"
+     },
+     {
+      "unit": "(expected) Vertical Multiplication (Part 2)",
+      "lessons": [
+       "Multiplying by 2-digit numbers"
+      ],
+      "confidence": "inferred",
+      "year": "2026/27"
+     },
+     {
+      "unit": "(expected) Triangles",
+      "lessons": [
+       "Isosceles triangles",
+       "Equilateral triangles",
+       "Angles"
+      ],
+      "confidence": "inferred",
+      "year": "2026/27"
+     }
+    ]
+   },
+   "vocab": [
+    "number",
+    "digit",
+    "ones",
+    "tens",
+    "hundreds",
+    "thousands",
+    "ten thousands",
+    "hundred thousands",
+    "place value",
+    "value",
+    "standard form",
+    "expanded form",
+    "word form",
+    "greater than",
+    "less than",
+    "equal to",
+    "compare",
+    "order",
+    "ascending",
+    "descending",
+    "number line",
+    "round",
+    "estimate",
+    "add",
+    "addition",
+    "sum",
+    "total",
+    "plus",
+    "subtract",
+    "subtraction",
+    "difference",
+    "minus",
+    "regroup",
+    "carry",
+    "borrow",
+    "mental math",
+    "multiply",
+    "multiplication",
+    "product",
+    "factor",
+    "times",
+    "multiplication table",
+    "properties of multiplication",
+    "commutative property",
+    "associative property",
+    "distributive property",
+    "vertical multiplication",
+    "divide",
+    "division",
+    "quotient",
+    "dividend",
+    "divisor",
+    "remainder",
+    "share",
+    "equal groups",
+    "equal sharing",
+    "check the answer",
+    "missing number",
+    "unknown",
+    "even",
+    "odd",
+    "pattern",
+    "rule",
+    "time",
+    "clock",
+    "hour",
+    "minute",
+    "second",
+    "duration",
+    "before",
+    "after",
+    "a.m.",
+    "p.m.",
+    "elapsed time",
+    "length",
+    "distance",
+    "shortest distance",
+    "kilometer",
+    "meter",
+    "centimeter",
+    "millimeter",
+    "ruler",
+    "measure",
+    "longer",
+    "shorter",
+    "data",
+    "tally marks",
+    "table",
+    "bar graph",
+    "pictograph",
+    "title",
+    "axis",
+    "scale",
+    "category",
+    "organize",
+    "fraction",
+    "numerator",
+    "denominator",
+    "half",
+    "quarter",
+    "decimal",
+    "tenths",
+    "weight",
+    "gram",
+    "kilogram",
+    "scales",
+    "circle",
+    "centre",
+    "center",
+    "radius",
+    "diameter",
+    "sphere",
+    "triangle",
+    "isosceles triangle",
+    "equilateral triangle",
+    "angle",
+    "side",
+    "vertex",
+    "word problem",
+    "story problem",
+    "answer",
+    "solution"
+   ],
+   "units": [
+    "mm",
+    "cm",
+    "m",
+    "km",
+    "g",
+    "kg",
+    "L",
+    "mL",
+    "h (hour)",
+    "min",
+    "s (second)",
+    "a.m.",
+    "p.m.",
+    "LE / L.E. (Egyptian pound)",
+    "PT / piastres",
+    "+",
+    "−",
+    "×",
+    "÷",
+    "=",
+    "<",
+    ">",
+    "□ (missing number box)"
+   ],
+   "books": [
+    {
+     "title": "Math Primary 3 - Student Book (English edition), Term 1",
+     "term": "1",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Ministry digital library portal (choose stage > grade > Math/English). Direct file URL not captured: ministry sites refused automated fetches."
+    },
+    {
+     "title": "Math Primary 3 - Student Book (English edition), Term 2",
+     "term": "2",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Same portal; Term 2 books are posted around late January."
+    },
+    {
+     "title": "Math Primary 3 - Performance Tasks & Assessments book / weekly assessments (كتاب الأداءات والتقييمات)",
+     "term": "1",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Ministry e-learning page for weekly assessments (choose stage > grade > weekly assessments). Also linked from studentbooks.moe.gov.eg/books/."
+    },
+    {
+     "title": "Math Primary 3 - Performance Tasks & Assessments book / weekly assessments, Term 2",
+     "term": "2",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Same page; Term 2 file published around February."
+    },
+    {
+     "title": "Math P3 Performance Tasks & Assessments book, Term 1 (2025/26, old curriculum) - mirror page",
+     "term": "1",
+     "kind": "assessment",
+     "url": "https://shbabbek.com/show/259345",
+     "official": false,
+     "note": "Mirror/news page embedding the ministry file (2025/26, pre-Japanese curriculum)."
+    },
+    {
+     "title": "El-Moasser Math P3 (languages) Term 1 2027 - table of contents source",
+     "term": "1",
+     "kind": "external",
+     "url": "https://shbabbek.com/show/283838",
+     "official": false,
+     "note": "Secondary: chapter/lesson English titles taken from here."
+    }
+   ]
+  },
+  "P4": {
+   "label": "Primary 4",
+   "curriculum": "Edu 2.0 (Discovery Education-based) book, unchanged structure in 2025/26 and 2026/27.",
+   "terms": {
+    "1": [
+     {
+      "unit": "Theme 1 - Unit 1: Place Value",
+      "lessons": [
+       "Concept 1: Reinforcing Place Value (Lessons 1-4)",
+       "Concept 2: Using Place Value (Lessons 5-8)"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Theme 1 - Unit 2: Addition and Subtraction Strategies",
+      "lessons": [
+       "Concept 1: Using Addition and Subtraction Strategies (Lessons 1-3)",
+       "Concept 2: Solving Multistep Problems (Lessons 4-5)"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Theme 1 - Unit 3: Concepts of Measurement",
+      "lessons": [
+       "Concept 1: Metric Measurement (Lessons 1-3)",
+       "Concept 2: Measuring Time (Lessons 4-7)"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Theme 1 - Unit 4: Area and Perimeter",
+      "lessons": [
+       "Concept 1: Explore Area and Perimeter (Lessons 1-4)"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Theme 2 - Unit 5: Multiplication as a Relationship",
+      "lessons": [
+       "Concept 1: Multiplicative Comparisons (Lessons 1-3)",
+       "Concept 2: Properties and Patterns of Multiplication (Lessons 4-7)"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Theme 2 - Unit 6: Factors and Multiples",
+      "lessons": [
+       "Concept 1: Understanding Factors (Lessons 1-3)",
+       "Concept 2: Understanding Multiples (Lessons 4-6)"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Theme 2 - Unit 7: Multiplication and Division: Computation and Relationships",
+      "lessons": [
+       "Concept 1: Multiplying by 1-Digit and 2-Digit Factors (Lessons 1-5)",
+       "Concept 2: Dividing by 1-Digit Divisors (Lessons 6-11)"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Theme 2 - Unit 8: Order of Operations",
+      "lessons": [
+       "Concept 1: Order of Operations (Lessons 1-2)"
+      ],
+      "confidence": "verified-secondary"
+     }
+    ],
+    "2": [
+     {
+      "unit": "Unit 9: Fractions",
+      "lessons": [
+       "Composing and decomposing fractions",
+       "Mixed numbers",
+       "Equivalent fractions",
+       "Comparing fractions",
+       "Adding and subtracting fractions (like denominators)",
+       "Fraction story problems"
+      ],
+      "confidence": "partial (topics from 2025/26 sources; English unit/lesson wording inferred)"
+     },
+     {
+      "unit": "Unit 10: Decimals",
+      "lessons": [
+       "Tenths and hundredths",
+       "Decimal place value",
+       "Fractions and decimals",
+       "Comparing decimals"
+      ],
+      "confidence": "partial"
+     },
+     {
+      "unit": "Unit 11: Graphs / Data",
+      "lessons": [
+       "Creating and analyzing graphs",
+       "Line plots with fractions"
+      ],
+      "confidence": "partial"
+     },
+     {
+      "unit": "Units 12-13: Geometry",
+      "lessons": [
+       "Points, lines, line segments and rays",
+       "Types of angles",
+       "Measuring and drawing angles with a protractor",
+       "Classifying triangles",
+       "Quadrilaterals",
+       "Parallel and perpendicular lines",
+       "Lines of symmetry"
+      ],
+      "confidence": "partial"
+     }
+    ]
+   },
+   "vocab": [
+    "place value",
+    "digit",
+    "period",
+    "ones",
+    "thousands",
+    "millions",
+    "standard form",
+    "expanded form",
+    "word form",
+    "compare",
+    "order",
+    "round",
+    "rounding",
+    "estimate",
+    "estimation",
+    "benchmark",
+    "addition",
+    "sum",
+    "subtraction",
+    "difference",
+    "strategy",
+    "algorithm",
+    "standard algorithm",
+    "regrouping",
+    "multistep problem",
+    "story problem",
+    "inverse operation",
+    "metric",
+    "metric measurement",
+    "length",
+    "mass",
+    "capacity",
+    "kilometer",
+    "meter",
+    "centimeter",
+    "millimeter",
+    "kilogram",
+    "gram",
+    "liter",
+    "milliliter",
+    "convert",
+    "conversion",
+    "time",
+    "elapsed time",
+    "hour",
+    "minute",
+    "second",
+    "a.m.",
+    "p.m.",
+    "timeline",
+    "area",
+    "perimeter",
+    "square unit",
+    "square centimeter",
+    "square meter",
+    "rectangle",
+    "square",
+    "width",
+    "formula",
+    "multiplication",
+    "multiplicative comparison",
+    "product",
+    "factor",
+    "multiple",
+    "times as many",
+    "properties of multiplication",
+    "commutative property",
+    "associative property",
+    "distributive property",
+    "identity property",
+    "zero property",
+    "pattern",
+    "factor pair",
+    "prime number",
+    "composite number",
+    "common factor",
+    "common multiple",
+    "divisible",
+    "divisibility",
+    "division",
+    "dividend",
+    "divisor",
+    "quotient",
+    "remainder",
+    "partial products",
+    "partial quotients",
+    "area model",
+    "order of operations",
+    "expression",
+    "parentheses",
+    "brackets",
+    "equation",
+    "unknown",
+    "variable",
+    "fraction",
+    "numerator",
+    "denominator",
+    "unit fraction",
+    "mixed number",
+    "improper fraction",
+    "equivalent fractions",
+    "like denominators",
+    "decompose",
+    "compose",
+    "decimal",
+    "decimal point",
+    "tenths",
+    "hundredths",
+    "graph",
+    "bar graph",
+    "line plot",
+    "data",
+    "key",
+    "point",
+    "line",
+    "line segment",
+    "ray",
+    "angle",
+    "vertex",
+    "degree",
+    "protractor",
+    "right angle",
+    "acute angle",
+    "obtuse angle",
+    "straight angle",
+    "reflex angle",
+    "parallel",
+    "perpendicular",
+    "intersecting",
+    "triangle",
+    "equilateral",
+    "isosceles",
+    "scalene",
+    "right triangle",
+    "acute triangle",
+    "obtuse triangle",
+    "quadrilateral",
+    "parallelogram",
+    "rhombus",
+    "trapezoid",
+    "trapezium",
+    "polygon",
+    "symmetry",
+    "line of symmetry"
+   ],
+   "units": [
+    "mm",
+    "cm",
+    "m",
+    "km",
+    "g",
+    "kg",
+    "mL",
+    "L",
+    "cm²",
+    "m²",
+    "°",
+    "h",
+    "min",
+    "s",
+    "a.m.",
+    "p.m.",
+    "LE / L.E.",
+    "PT",
+    "∠",
+    "<",
+    ">",
+    "=",
+    "×",
+    "÷",
+    "( )"
+   ],
+   "books": [
+    {
+     "title": "Math Primary 4 - Student Book (English edition), Term 1",
+     "term": "1",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Ministry digital library portal (choose stage > grade > Math/English). Direct file URL not captured: ministry sites refused automated fetches."
+    },
+    {
+     "title": "Math Primary 4 - Student Book (English edition), Term 2",
+     "term": "2",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Same portal; Term 2 books are posted around late January."
+    },
+    {
+     "title": "Math Primary 4 - Performance Tasks & Assessments book / weekly assessments (كتاب الأداءات والتقييمات)",
+     "term": "1",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Ministry e-learning page for weekly assessments (choose stage > grade > weekly assessments). Also linked from studentbooks.moe.gov.eg/books/."
+    },
+    {
+     "title": "Math Primary 4 - Performance Tasks & Assessments book / weekly assessments, Term 2",
+     "term": "2",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Same page; Term 2 file published around February."
+    },
+    {
+     "title": "Math P4 Performance Tasks & Assessments book, Term 2 (2025/26, ARABIC edition) - Google Drive mirror",
+     "term": "2",
+     "kind": "assessment",
+     "url": "https://drive.google.com/file/d/1aGdMWEjYH7VtDk_P-HJJTqYMz2aL11uo/view",
+     "official": false,
+     "note": "Mirror via shbabbek.com/show/264629; Arabic edition, not English."
+    },
+    {
+     "title": "El-Moasser Math P4 (languages) Term 1 2027 - table of contents source",
+     "term": "1",
+     "kind": "external",
+     "url": "https://shbabbek.com/show/279911",
+     "official": false
+    }
+   ]
+  },
+  "P5": {
+   "label": "Primary 5",
+   "curriculum": "Edu 2.0 book (same structure 2025/26 and 2026/27).",
+   "terms": {
+    "1": [
+     {
+      "unit": "Unit 1: Decimal Place Value and Computation",
+      "lessons": [
+       "Concept 1: Decimals to the Thousandths Place",
+       "Lesson 1: Decimals to the Thousandths Place",
+       "Lessons 2-3: Place Value Shuffle - Composing and Decomposing Decimals",
+       "Lesson 4: Comparing Decimals",
+       "Lesson 5: Rounding Decimals",
+       "Concept 2: Adding and Subtracting Decimals",
+       "Lessons 6-7: Estimating Decimal Sums - Modeling Decimal Addition",
+       "Lessons 8-10: Modeling Decimal Subtraction - Estimating Decimal Differences - Subtracting to the Thousandths Place",
+       "Lesson 11: Decimal Story Problems"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Unit 2: Number Relationships",
+      "lessons": [
+       "Concept 1: Expressions, Equations and the Real World",
+       "Lesson 1: Expressions, Equations and Variables",
+       "Lessons 2-3: Variables in Equations - Telling Stories with Numbers",
+       "Concept 2: Factors and Multiples",
+       "Lessons 4-5: Prime Factorization - Greatest Common Factor (G.C.F)",
+       "Lessons 6-7: Identifying Multiples - Least Common Multiple (L.C.M)",
+       "Lesson 8: Factors or Multiples?"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Unit 3: Multiplication with Whole Numbers",
+      "lessons": [
+       "Concept 1: Multiplying by a 2-Digit Number",
+       "Lessons 1-2: Using the Area Model to Multiply - The Distributive Property of Multiplication",
+       "Lessons 3-4: Multiplying by a 2-Digit Number Using the Algorithm - Multiplying Multi-Digit Numbers",
+       "Lesson 5: Multiplication Problems in the Real World"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Unit 4: Division with Whole Numbers",
+      "lessons": [
+       "Concept 1: Models for Division",
+       "Lessons 1-2: Dividing by a Two-Digit Number - Estimating Quotients",
+       "Concept 2: Dividing by 2-Digit Divisors",
+       "Lessons 3-4: Using the Division Algorithm - The Relation between Division and Multiplication",
+       "Lesson 5: Multistep Story Problems"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Unit 5: Multiplication and Division with Decimals",
+      "lessons": [
+       "Concept 1: Multiplying Decimals",
+       "Lessons 1-3: Multiplying by Powers of Ten - Multiplying Decimals by Whole Numbers - Multiplying Tenths by Tenths",
+       "Lesson 4: Multiply Decimals Using the Area of a Rectangle Model",
+       "Lessons 5-6: Multiplying Decimals through the Hundredths Place - through the Thousandths Place",
+       "Lessons 7-8: Decimals and the Metric System - Measurement, Decimals and Powers of Ten",
+       "Lesson 9: Solving Multistep Story Problems",
+       "Concept 2: Dividing Decimals",
+       "Lessons 10-11: Dividing by Powers of Ten - Patterns and Relationships in Powers of Ten",
+       "Lessons 12-13: Dividing Decimals by Whole Numbers - Dividing Decimals by Decimals"
+      ],
+      "confidence": "verified-secondary"
+     },
+     {
+      "unit": "Unit 6: Numerical Expressions and Patterns",
+      "lessons": [
+       "Concept 1: Evaluating Numerical Expressions and Patterns",
+       "Lessons 1-2: Ordering of Mathematical Operations - Numerical Expressions with Parentheses",
+       "Lesson 3: Writing Expressions to Represent Scenarios",
+       "Lesson 4: Identifying Numerical Patterns"
+      ],
+      "confidence": "verified-secondary"
+     }
+    ],
+    "2": [
+     {
+      "unit": "Unit 7: (title not verified - volume / measurement)",
+      "lessons": [
+       "Volume",
+       "Cubic units",
+       "Volume of a rectangular prism (cuboid)"
+      ],
+      "confidence": "inferred"
+     },
+     {
+      "unit": "Unit 8: Fractions (adding and subtracting)",
+      "lessons": [
+       "Common denominators using L.C.M",
+       "Adding and subtracting fractions with unlike denominators",
+       "Adding and subtracting mixed numbers",
+       "Story problems"
+      ],
+      "confidence": "partial (topics verified 2025/26, English wording inferred)"
+     },
+     {
+      "unit": "Unit 9: Multiplying and Dividing Fractions",
+      "lessons": [
+       "Multiplying fractions and mixed numbers by whole numbers",
+       "Multiplying fractions by fractions",
+       "Dividing with fractions (unit fractions and whole numbers)",
+       "Using models and the number line"
+      ],
+      "confidence": "partial"
+     },
+     {
+      "unit": "Unit 10: Geometry",
+      "lessons": [
+       "Types of angles",
+       "Categories of shapes",
+       "Classifying triangles",
+       "Classifying quadrilaterals",
+       "The coordinate plane",
+       "Plotting points"
+      ],
+      "confidence": "partial"
+     }
+    ]
+   },
+   "vocab": [
+    "decimal",
+    "decimal point",
+    "tenths",
+    "hundredths",
+    "thousandths",
+    "place value",
+    "compose",
+    "decompose",
+    "expanded form",
+    "standard form",
+    "word form",
+    "compare",
+    "order",
+    "round",
+    "estimate",
+    "benchmark",
+    "sum",
+    "difference",
+    "model",
+    "number line",
+    "story problem",
+    "multistep",
+    "expression",
+    "numerical expression",
+    "equation",
+    "variable",
+    "unknown",
+    "evaluate",
+    "factor",
+    "multiple",
+    "prime number",
+    "composite number",
+    "prime factorization",
+    "factor tree",
+    "greatest common factor",
+    "G.C.F",
+    "least common multiple",
+    "L.C.M",
+    "common factor",
+    "common multiple",
+    "divisible",
+    "multiply",
+    "product",
+    "area model",
+    "distributive property",
+    "partial products",
+    "algorithm",
+    "standard algorithm",
+    "multi-digit",
+    "divide",
+    "dividend",
+    "divisor",
+    "quotient",
+    "remainder",
+    "estimate quotients",
+    "compatible numbers",
+    "inverse operations",
+    "powers of ten",
+    "exponent",
+    "metric system",
+    "convert",
+    "kilometer",
+    "meter",
+    "centimeter",
+    "millimeter",
+    "kilogram",
+    "gram",
+    "liter",
+    "milliliter",
+    "order of operations",
+    "parentheses",
+    "brackets",
+    "braces",
+    "pattern",
+    "numerical pattern",
+    "rule",
+    "term",
+    "sequence",
+    "ordered pair",
+    "fraction",
+    "numerator",
+    "denominator",
+    "equivalent fractions",
+    "common denominator",
+    "unlike denominators",
+    "like denominators",
+    "mixed number",
+    "improper fraction",
+    "simplest form",
+    "simplify",
+    "unit fraction",
+    "reciprocal",
+    "angle",
+    "acute",
+    "obtuse",
+    "right",
+    "straight",
+    "triangle",
+    "equilateral",
+    "isosceles",
+    "scalene",
+    "quadrilateral",
+    "parallelogram",
+    "rectangle",
+    "rhombus",
+    "square",
+    "trapezoid",
+    "trapezium",
+    "kite",
+    "polygon",
+    "attribute",
+    "category",
+    "hierarchy",
+    "coordinate plane",
+    "x-axis",
+    "y-axis",
+    "origin",
+    "coordinates",
+    "plot",
+    "grid",
+    "volume",
+    "cubic unit",
+    "cubic centimeter",
+    "cube",
+    "rectangular prism",
+    "cuboid",
+    "length",
+    "width",
+    "height",
+    "base"
+   ],
+   "units": [
+    "mm",
+    "cm",
+    "m",
+    "km",
+    "g",
+    "kg",
+    "mL",
+    "L",
+    "cm²",
+    "m²",
+    "cm³",
+    "m³",
+    "°",
+    "LE / L.E.",
+    "PT",
+    "10², 10³ (powers of ten)",
+    "( )",
+    "[ ]",
+    "{ }",
+    "G.C.F",
+    "L.C.M",
+    "(x, y)"
+   ],
+   "books": [
+    {
+     "title": "Math Primary 5 - Student Book (English edition), Term 1",
+     "term": "1",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Ministry digital library portal (choose stage > grade > Math/English). Direct file URL not captured: ministry sites refused automated fetches."
+    },
+    {
+     "title": "Math Primary 5 - Student Book (English edition), Term 2",
+     "term": "2",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Same portal; Term 2 books are posted around late January."
+    },
+    {
+     "title": "Math Primary 5 - Performance Tasks & Assessments book / weekly assessments (كتاب الأداءات والتقييمات)",
+     "term": "1",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Ministry e-learning page for weekly assessments (choose stage > grade > weekly assessments). Also linked from studentbooks.moe.gov.eg/books/."
+    },
+    {
+     "title": "Math Primary 5 - Performance Tasks & Assessments book / weekly assessments, Term 2",
+     "term": "2",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Same page; Term 2 file published around February."
+    },
+    {
+     "title": "Math P5 Performance Tasks & Assessments book, Term 1 (2025/26) - Google Drive mirror (instructions in Arabic: likely Arabic edition)",
+     "term": "1",
+     "kind": "assessment",
+     "url": "https://drive.google.com/file/d/1VbDwivqQ6bE9arP1PZ0_YEqRT9X4tId4/preview",
+     "official": false,
+     "note": "via shbabbek.com/show/258739"
+    },
+    {
+     "title": "Math P5 Performance Tasks & Assessments book (languages), Term 2 (2025/26) - mirror page",
+     "term": "2",
+     "kind": "assessment",
+     "url": "https://shbabbek.com/show/266116",
+     "official": false,
+     "note": "Covers Units 7-10; English edition."
+    },
+    {
+     "title": "El-Moasser Math P5 (languages) Term 1 2027 - table of contents source",
+     "term": "1",
+     "kind": "external",
+     "url": "https://shbabbek.com/show/280240",
+     "official": false
+    }
+   ]
+  },
+  "P6": {
+   "label": "Primary 6",
+   "curriculum": "Edu 2.0 book (same structure 2025/26 and 2026/27).",
+   "terms": {
+    "1": [
+     {
+      "unit": "Unit 1: Divisibility, Factors, and Multiples",
+      "lessons": [
+       "Divisibility",
+       "Relatively Prime",
+       "Factorizing a Number to Its Prime Factors",
+       "GCF and LCM"
+      ],
+      "confidence": "verified-secondary (unit) / partial (lessons from Nagwa sessions)"
+     },
+     {
+      "unit": "Unit 2: Rational Numbers",
+      "lessons": [
+       "Integers",
+       "Rational Numbers",
+       "Comparing and Ordering Rational Numbers",
+       "The Absolute Value",
+       "Number lines"
+      ],
+      "confidence": "verified-secondary / partial"
+     },
+     {
+      "unit": "Unit 3: Algebraic Expressions",
+      "lessons": [
+       "Mathematical Expressions",
+       "Order of Operations and Exponents",
+       "Algebraic Expressions"
+      ],
+      "confidence": "verified-secondary / partial"
+     },
+     {
+      "unit": "Unit 4: Equations and Inequalities",
+      "lessons": [
+       "Solving Algebraic Equations",
+       "Inequalities"
+      ],
+      "confidence": "verified-secondary / partial"
+     },
+     {
+      "unit": "Unit 5: Dependent and Independent Variables",
+      "lessons": [
+       "Relationships between Two Variables",
+       "Representing Relationships Using Graphs"
+      ],
+      "confidence": "verified-secondary / partial"
+     },
+     {
+      "unit": "Unit 6: Data Distributions",
+      "lessons": [
+       "Data and Statistical Questions",
+       "Histograms",
+       "Exploring Box Plot",
+       "Applications on Data Representations"
+      ],
+      "confidence": "verified-secondary / partial"
+     },
+     {
+      "unit": "Unit 7: Measures of Central Tendency and Spread",
+      "lessons": [
+       "The Mean",
+       "Exploring Median, Mode, and Outliers",
+       "Exploring the Range",
+       "Quartiles and interquartile range"
+      ],
+      "confidence": "verified-secondary / partial"
+     }
+    ],
+    "2": [
+     {
+      "unit": "Unit 8: Operations on Fractions and Decimals",
+      "lessons": [
+       "Modeling division of fractions",
+       "Dividing fractions",
+       "Multiplying and dividing decimals"
+      ],
+      "confidence": "partial (unit numbers + topics verified 2025/26; English titles inferred)"
+     },
+     {
+      "unit": "Unit 9: Ratios and Rates",
+      "lessons": [
+       "Ratios",
+       "Equivalent ratios",
+       "Rates",
+       "Unit rate"
+      ],
+      "confidence": "partial"
+     },
+     {
+      "unit": "Unit 10: Percentages and Unit Conversions",
+      "lessons": [
+       "Percent",
+       "Percent of a number",
+       "Discount",
+       "Conversion factors",
+       "Converting measurement units"
+      ],
+      "confidence": "partial"
+     },
+     {
+      "unit": "Unit 11: The Coordinate Plane",
+      "lessons": [
+       "The four quadrants",
+       "Plotting points",
+       "Distance between points",
+       "Polygons on the coordinate plane"
+      ],
+      "confidence": "partial"
+     },
+     {
+      "unit": "Unit 12: Area and Volume",
+      "lessons": [
+       "Area of parallelograms",
+       "Area of triangles",
+       "Area of trapezoids",
+       "Volume",
+       "Surface area (nets) of a cube, rectangular prism and square pyramid"
+      ],
+      "confidence": "partial"
+     }
+    ]
+   },
+   "vocab": [
+    "divisibility",
+    "divisible",
+    "divisibility rules",
+    "factor",
+    "multiple",
+    "prime number",
+    "composite number",
+    "prime factorization",
+    "factor tree",
+    "relatively prime",
+    "greatest common factor",
+    "GCF",
+    "G.C.F",
+    "least common multiple",
+    "LCM",
+    "L.C.M",
+    "integer",
+    "positive",
+    "negative",
+    "opposite",
+    "zero",
+    "rational number",
+    "number line",
+    "absolute value",
+    "compare",
+    "order",
+    "ascending",
+    "descending",
+    "additive inverse",
+    "inequality symbol",
+    "expression",
+    "numerical expression",
+    "algebraic expression",
+    "term",
+    "coefficient",
+    "constant",
+    "variable",
+    "like terms",
+    "simplify",
+    "evaluate",
+    "exponent",
+    "power",
+    "base",
+    "squared",
+    "cubed",
+    "order of operations",
+    "equation",
+    "inequality",
+    "solution",
+    "solve",
+    "substitute",
+    "greater than or equal to",
+    "less than or equal to",
+    "dependent variable",
+    "independent variable",
+    "relationship",
+    "table of values",
+    "graph",
+    "ordered pair",
+    "statistical question",
+    "data",
+    "data set",
+    "distribution",
+    "histogram",
+    "frequency",
+    "box plot",
+    "dot plot",
+    "minimum",
+    "maximum",
+    "median",
+    "lower quartile",
+    "upper quartile",
+    "interquartile range",
+    "range",
+    "outlier",
+    "mean",
+    "arithmetic mean",
+    "mode",
+    "measures of central tendency",
+    "measures of spread",
+    "variability",
+    "fraction",
+    "numerator",
+    "denominator",
+    "reciprocal",
+    "mixed number",
+    "decimal",
+    "quotient",
+    "ratio",
+    "equivalent ratios",
+    "rate",
+    "unit rate",
+    "proportion",
+    "percent",
+    "percentage",
+    "discount",
+    "conversion factor",
+    "convert",
+    "coordinate plane",
+    "quadrant",
+    "x-axis",
+    "y-axis",
+    "origin",
+    "coordinates",
+    "plot",
+    "reflection",
+    "area",
+    "parallelogram",
+    "triangle",
+    "trapezoid",
+    "trapezium",
+    "height",
+    "altitude",
+    "polygon",
+    "volume",
+    "surface area",
+    "net",
+    "cube",
+    "rectangular prism",
+    "cuboid",
+    "square pyramid",
+    "face",
+    "edge",
+    "vertex"
+   ],
+   "units": [
+    "cm",
+    "m",
+    "km",
+    "mm",
+    "g",
+    "kg",
+    "L",
+    "mL",
+    "cm²",
+    "m²",
+    "cm³",
+    "m³",
+    "%",
+    "°",
+    "LE / L.E.",
+    "PT",
+    "≥",
+    "≤",
+    "<",
+    ">",
+    "| | (absolute value)",
+    "x², x³ (exponents)",
+    "(x, y)",
+    "km/h",
+    "GCF",
+    "LCM"
+   ],
+   "books": [
+    {
+     "title": "Math Primary 6 - Student Book (English edition), Term 1",
+     "term": "1",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Ministry digital library portal (choose stage > grade > Math/English). Direct file URL not captured: ministry sites refused automated fetches."
+    },
+    {
+     "title": "Math Primary 6 - Student Book (English edition), Term 2",
+     "term": "2",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Same portal; Term 2 books are posted around late January."
+    },
+    {
+     "title": "Math Primary 6 - Performance Tasks & Assessments book / weekly assessments (كتاب الأداءات والتقييمات)",
+     "term": "1",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Ministry e-learning page for weekly assessments (choose stage > grade > weekly assessments). Also linked from studentbooks.moe.gov.eg/books/."
+    },
+    {
+     "title": "Math Primary 6 - Performance Tasks & Assessments book / weekly assessments, Term 2",
+     "term": "2",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Same page; Term 2 file published around February."
+    },
+    {
+     "title": "Math P6 Performance Tasks & Assessments book (languages), Term 1 (2025/26) - mirror page",
+     "term": "1",
+     "kind": "assessment",
+     "url": "https://shbabbek.com/show/259212",
+     "official": false
+    },
+    {
+     "title": "Math P6 Performance Tasks & Assessments book (languages), Term 2 (2025/26) - mirror page",
+     "term": "2",
+     "kind": "assessment",
+     "url": "https://shbabbek.com/show/266112",
+     "official": false,
+     "note": "Covers Units 8-12."
+    },
+    {
+     "title": "Math P6 (languages) Term 1 2027 unit list source",
+     "term": "1",
+     "kind": "external",
+     "url": "https://shbabbek.com/show/282054",
+     "official": false
+    }
+   ]
+  },
+  "Prep1": {
+   "label": "Prep 1 (First Year of Preparatory)",
+   "curriculum": "Developed Prep 1 math book (Algebra & Statistics + Geometry). Term 1 = 6 units in 2026/27.",
+   "terms": {
+    "1": [
+     {
+      "unit": "Unit 1: Ratio, Proportion and Applications",
+      "lessons": [
+       "Ratio",
+       "Proportion",
+       "Applications of Ratio and Proportion: Drawing Scales",
+       "Applications of Ratio and Proportion: Proportional Division",
+       "Applications of Ratio and Proportion: Percentage"
+      ],
+      "confidence": "verified-secondary (unit) / partial (lessons from Nagwa)"
+     },
+     {
+      "unit": "Unit 2: Sets and Relations on Them",
+      "lessons": [
+       "Set notation",
+       "Belonging and subsets",
+       "Sets and Their Operations (intersection, union, difference, complement)"
+      ],
+      "confidence": "verified-secondary / partial"
+     },
+     {
+      "unit": "Unit 3: Integers, Rational Numbers and Operations on Them",
+      "lessons": [
+       "Operations on Integers",
+       "Rational Numbers",
+       "Comparing and ordering rational numbers",
+       "Operations on Rational Numbers",
+       "Properties of operations",
+       "Absolute value",
+       "Additive and multiplicative inverse"
+      ],
+      "confidence": "verified-secondary / partial"
+     },
+     {
+      "unit": "Unit 4: Algebra and Equations",
+      "lessons": [
+       "Mathematical Expressions and Formulas",
+       "Algebraic terms and expressions",
+       "Like terms",
+       "Linear Equations (first degree) in Z and Q"
+      ],
+      "confidence": "verified-secondary / partial"
+     },
+     {
+      "unit": "Unit 5: Geometry and Measurement",
+      "lessons": [
+       "Types of Angles and Relations between Angles",
+       "Complementary and supplementary angles",
+       "Angles around a point",
+       "Parallelism: Parallel Lines and Transversals",
+       "Parallelism: Proving the Parallelism of Two Lines",
+       "The Triangle",
+       "Quadrilaterals",
+       "Polygons",
+       "Coordinates"
+      ],
+      "confidence": "verified-secondary / partial"
+     },
+     {
+      "unit": "Unit 6: Statistics and Data Analysis",
+      "lessons": [
+       "Organizing Data",
+       "Stem-and-leaf plot",
+       "Box plot",
+       "Pie Charts",
+       "Arithmetic Mean",
+       "Median and mode"
+      ],
+      "confidence": "verified-secondary / partial"
+     }
+    ],
+    "2": [
+     {
+      "unit": "Algebra: Powers and Roots",
+      "lessons": [
+       "Non-negative integer powers",
+       "Negative integer powers",
+       "Standard (scientific) form of a rational number",
+       "Order of operations",
+       "Square root of a rational number",
+       "Cube root"
+      ],
+      "confidence": "partial (topics from 2025/26 March revision sources; unit titles inferred)"
+     },
+     {
+      "unit": "Algebra: Equations and Inequalities",
+      "lessons": [
+       "Solving equations in Q",
+       "Solving inequalities in N, Z and Q",
+       "Solution set"
+      ],
+      "confidence": "partial"
+     },
+     {
+      "unit": "Geometry: Areas",
+      "lessons": [
+       "Area of the square",
+       "Area of the rhombus",
+       "Area of the trapezium",
+       "Area of the triangle"
+      ],
+      "confidence": "partial"
+     },
+     {
+      "unit": "(not verified) remaining Term 2 units",
+      "lessons": [],
+      "confidence": "gap"
+     }
+    ]
+   },
+   "vocab": [
+    "ratio",
+    "proportion",
+    "antecedent",
+    "consequent",
+    "extremes",
+    "means",
+    "scale",
+    "drawing scale",
+    "map scale",
+    "proportional division",
+    "percentage",
+    "percent",
+    "profit",
+    "loss",
+    "discount",
+    "interest",
+    "tax",
+    "set",
+    "element",
+    "belongs to",
+    "does not belong to",
+    "subset",
+    "proper subset",
+    "empty set",
+    "finite set",
+    "infinite set",
+    "universal set",
+    "intersection",
+    "union",
+    "difference",
+    "complement",
+    "Venn diagram",
+    "roster method",
+    "set-builder",
+    "natural numbers",
+    "counting numbers",
+    "whole numbers",
+    "integers",
+    "rational numbers",
+    "positive",
+    "negative",
+    "opposite",
+    "absolute value",
+    "additive inverse",
+    "multiplicative inverse",
+    "additive identity",
+    "multiplicative identity",
+    "commutative",
+    "associative",
+    "distributive",
+    "closure",
+    "density",
+    "simplest form",
+    "standard form",
+    "scientific notation",
+    "power",
+    "exponent",
+    "base",
+    "square",
+    "cube",
+    "square root",
+    "cube root",
+    "perfect square",
+    "algebraic term",
+    "algebraic expression",
+    "coefficient",
+    "constant",
+    "variable",
+    "like terms",
+    "unlike terms",
+    "simplify",
+    "evaluate",
+    "formula",
+    "equation",
+    "first-degree equation",
+    "linear equation",
+    "inequality",
+    "solution set",
+    "substitute",
+    "verify",
+    "point",
+    "line",
+    "line segment",
+    "ray",
+    "angle",
+    "vertex",
+    "acute",
+    "right",
+    "obtuse",
+    "straight",
+    "reflex",
+    "complementary angles",
+    "supplementary angles",
+    "adjacent angles",
+    "vertically opposite angles",
+    "angles around a point",
+    "angle bisector",
+    "parallel lines",
+    "transversal",
+    "alternate angles",
+    "corresponding angles",
+    "interior angles on the same side",
+    "perpendicular",
+    "triangle",
+    "equilateral",
+    "isosceles",
+    "scalene",
+    "exterior angle",
+    "interior angle",
+    "sum of angles",
+    "quadrilateral",
+    "parallelogram",
+    "rectangle",
+    "rhombus",
+    "trapezium",
+    "trapezoid",
+    "diagonal",
+    "polygon",
+    "regular polygon",
+    "pentagon",
+    "hexagon",
+    "coordinate plane",
+    "x-axis",
+    "y-axis",
+    "origin",
+    "ordered pair",
+    "quadrant",
+    "data",
+    "frequency",
+    "frequency table",
+    "tally",
+    "stem-and-leaf plot",
+    "box plot",
+    "pie chart",
+    "sector",
+    "central angle",
+    "arithmetic mean",
+    "median",
+    "mode",
+    "range",
+    "quartile",
+    "area",
+    "perimeter",
+    "height",
+    "given",
+    "required to prove",
+    "proof",
+    "construction",
+    "compasses",
+    "protractor",
+    "ruler"
+   ],
+   "units": [
+    "N",
+    "Z",
+    "Q",
+    "∈",
+    "∉",
+    "⊂",
+    "⊄",
+    "∩",
+    "∪",
+    "∅",
+    "{ }",
+    "−",
+    "√",
+    "∛",
+    "°",
+    "∠",
+    "//",
+    "⊥",
+    "△",
+    "%",
+    "cm",
+    "m",
+    "km",
+    "cm²",
+    "m²",
+    "LE / L.E.",
+    "PT",
+    ":",
+    "≥",
+    "≤",
+    "x²",
+    "x³",
+    "10ⁿ"
+   ],
+   "books": [
+    {
+     "title": "Math Prep 1 - Student Book (English edition), Term 1",
+     "term": "1",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Ministry digital library portal (choose stage > grade > Math/English). Direct file URL not captured: ministry sites refused automated fetches."
+    },
+    {
+     "title": "Math Prep 1 - Student Book (English edition), Term 2",
+     "term": "2",
+     "kind": "student",
+     "url": "https://studentbooks.moe.gov.eg/",
+     "official": true,
+     "note": "Same portal; Term 2 books are posted around late January."
+    },
+    {
+     "title": "Math Prep 1 - Performance Tasks & Assessments book / weekly assessments (كتاب الأداءات والتقييمات)",
+     "term": "1",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Ministry e-learning page for weekly assessments (choose stage > grade > weekly assessments). Also linked from studentbooks.moe.gov.eg/books/."
+    },
+    {
+     "title": "Math Prep 1 - Performance Tasks & Assessments book / weekly assessments, Term 2",
+     "term": "2",
+     "kind": "assessment",
+     "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+     "official": true,
+     "note": "Same page; Term 2 file published around February."
+    },
+    {
+     "title": "Prep 1 Math Term 1 2027 unit list (Arabic) source - Selah El-Telmeez supplement page",
+     "term": "1",
+     "kind": "external",
+     "url": "https://shbabbek.com/show/283726",
+     "official": false
+    }
+   ]
+  }
+ },
+ "instructions": [
+  "Choose the correct answer",
+  "Choose the correct answer from those given",
+  "Choose:",
+  "Complete",
+  "Complete the following",
+  "Complete the table",
+  "Complete the pattern",
+  "Put (✓) or (✗)",
+  "Put (✓) for the correct statement and (✗) for the incorrect one",
+  "Write True or False",
+  "Match",
+  "Match from column (A) to column (B)",
+  "Answer the following",
+  "Answer the following questions",
+  "Answer the following question",
+  "Find",
+  "Find the value of",
+  "Find the result",
+  "Find the result of",
+  "Find the missing number",
+  "Find the unknown",
+  "Find the product",
+  "Find the quotient",
+  "Find the sum",
+  "Find the difference",
+  "Find the prime factors of",
+  "Find the G.C.F. of",
+  "Find the L.C.M. of",
+  "Find the numbers divisible by",
+  "Find the solution set",
+  "Find in the simplest form",
+  "Evaluate",
+  "Simplify",
+  "Solve",
+  "Solve the following equations",
+  "Solve the following story problems",
+  "Story problems",
+  "Word problems",
+  "Compare using <, > or =",
+  "Compare using the appropriate sign",
+  "Put the suitable sign (<, > or =)",
+  "Which is greater?",
+  "Arrange in ascending order",
+  "Arrange in descending order",
+  "Arrange the following in ascending order",
+  "Order from least to greatest",
+  "Order from greatest to least",
+  "Write in standard form",
+  "Write in expanded form",
+  "Write in word form",
+  "Write the value of the underlined digit",
+  "Write the place value of",
+  "Round to the nearest",
+  "Round to the nearest ten / hundred / thousand",
+  "Round to the nearest tenth / hundredth",
+  "Estimate",
+  "Decompose and compose",
+  "Use the number line",
+  "Using models and the number line",
+  "Plot the points",
+  "Determine the type of",
+  "Classify",
+  "Determine the appropriate unit for measuring",
+  "Write the length using the given ruler",
+  "Use the protractor to draw an angle of",
+  "Measure the angle",
+  "Draw",
+  "Construct",
+  "Shade",
+  "Use the graph to answer",
+  "Use the table to answer",
+  "Represent the data",
+  "Creating and analyzing graphs",
+  "Prove that",
+  "Given",
+  "Required",
+  "Proof",
+  "Check your answer",
+  "Show your work",
+  "Explain your answer",
+  "Classroom Performance",
+  "Class performance",
+  "Home performance",
+  "Homework",
+  "Weekly Assessment",
+  "Model A",
+  "Model B",
+  "Model C",
+  "Activities",
+  "Performance Tasks and Assessment"
+ ],
+ "structure": {
+  "primary_monthly": "P3-P6 monthly test (October & November in Term 1; March & April in Term 2): short paper answerable in about one class period, worth 5 marks of year work each. Ministry also issues weekly assessments (Models A/B/C) in the Performance Tasks & Assessments book. Typical sections: Choose the correct answer / Complete / Answer the following (story problems). Sources: parlmany.com 30-Oct-2025; dostor.org 7-Oct-2025.",
+  "primary_term": "P3-P6 end-of-term maths paper: 30 marks (doubled to 60 in some years), 1.5 hours, questions ordered easy to hard, MCQ always 4 options with one correct. 2024/25 Term 1 spec: Group 1 = 9 multiple-choice items x 1 mark; Group 2 = 7 essay/constructed-response items x 3 marks. 2023/24 Term 2 spec (P4-6): 7 MCQ + 8 completion + 7 MCQ + 4 essay x 2 = 30. Year work = 40% (performance tasks 10, homework notebook 5, activities 5, two monthly tests 5+5, behaviour 5 as reported Oct 2025). The 2025/26 and 2026/27 specs were not found; check the ministry's announcement each December/April.",
+  "prep_term": "Prep 1 end-of-term maths exam: 30 marks, 2 hours (one paper covering algebra, statistics and geometry; Prep 2 is split into two papers of 15). Year work = 70 marks (two monthly tests, 15% each; weekly assessment; homework; behaviour). MCQ always 4 options, one correct. Usual layout: Q1 Choose, Q2 Complete, then 3 constructed-response questions (algebra/statistics and geometry with 'Given / Required / Proof').",
+  "notes": "Monthly tests for Prep 1-2 are 15% each; no monthly tests in Prep 3. Exam questions on English-edition papers use the same instruction phrases listed in 'instructions'."
+ },
+ "sources": [
+  {
+   "url": "https://shbabbek.com/show/283838",
+   "what": "P3 2026/27 Term 1 chapter and lesson titles in English (El-Moasser Math P3 languages, 28-Sep-2026)"
+  },
+  {
+   "url": "https://shbabbek.com/show/279426",
+   "what": "P3 2026/27 Term 1 chapter and lesson titles in Arabic (5-Aug-2026)"
+  },
+  {
+   "url": "https://www.egypttelegraph.com/article/282602",
+   "what": "New Japan-developed P3 math applied for the first time in 2026/27 (29-Sep-2026)"
+  },
+  {
+   "url": "https://www.masrawy.com/news/news_egypt/details/2026/9/28/3055186",
+   "what": "Assistant minister on the new P3 math curriculum (28-Sep-2026)"
+  },
+  {
+   "url": "https://www.dostor.org/5420692",
+   "what": "P3 February 2026 monthly test scope (old curriculum, chapters 7-9)"
+  },
+  {
+   "url": "https://shbabbek.com/show/279911",
+   "what": "P4 Term 1 2026/27 English units/concepts (El-Moasser, 11-Aug-2026)"
+  },
+  {
+   "url": "https://shbabbek.com/show/279494",
+   "what": "P4 Term 1 2026/27 English theme/unit titles (5-Aug-2026)"
+  },
+  {
+   "url": "https://shbabbek.com/show/280309",
+   "what": "P4 Term 1 2026/27 units (Arabic, 16-Aug-2026)"
+  },
+  {
+   "url": "https://shbabbek.com/show/266248",
+   "what": "P4 Term 2 2025/26 units 9-13 topics and English exercise labels (14-Feb-2026)"
+  },
+  {
+   "url": "https://shbabbek.com/show/264629",
+   "what": "P4 Term 2 2025/26 ministry Performance Tasks & Assessments book (Arabic edition) with Drive link"
+  },
+  {
+   "url": "https://shbabbek.com/show/280240",
+   "what": "P5 Term 1 2026/27 full English unit/concept/lesson list (15-Aug-2026)"
+  },
+  {
+   "url": "https://shbabbek.com/show/255893",
+   "what": "P5 Term 1 2025/26 lesson titles in Arabic (6-Aug-2025)"
+  },
+  {
+   "url": "https://shbabbek.com/show/265665",
+   "what": "P5 Term 2 2025/26 units 8-10 topics (3-Feb-2026)"
+  },
+  {
+   "url": "https://shbabbek.com/show/266116",
+   "what": "P5 Term 2 2025/26 ministry assessments book (languages): units 7-10, English instruction phrases"
+  },
+  {
+   "url": "https://shbabbek.com/show/282054",
+   "what": "P6 Term 1 2026/27 seven unit titles in English (7-Sep-2026)"
+  },
+  {
+   "url": "https://www.nagwa.com/en/classes/486131473578/",
+   "what": "P6 Term 1 Egyptian curriculum session/lesson titles in English (Nagwa Classes)"
+  },
+  {
+   "url": "https://shbabbek.com/show/267820",
+   "what": "P6 Term 2 2025/26 units 8-10 topics (14-Mar-2026)"
+  },
+  {
+   "url": "https://shbabbek.com/show/267121",
+   "what": "P6 Term 2 2025/26 topics: ratio, percent, area & volume, coordinate plane (1-Mar-2026)"
+  },
+  {
+   "url": "https://shbabbek.com/show/266112",
+   "what": "P6 Term 2 2025/26 ministry assessments book (languages): units 8-12 and English instruction phrases"
+  },
+  {
+   "url": "https://shbabbek.com/show/259212",
+   "what": "P6 Term 1 2025/26 ministry assessments book (languages): English instruction phrases"
+  },
+  {
+   "url": "https://shbabbek.com/show/259345",
+   "what": "P3 Term 1 2025/26 ministry assessments book (languages): English instruction phrases"
+  },
+  {
+   "url": "https://shbabbek.com/show/283726",
+   "what": "Prep 1 Term 1 2026/27 six unit titles (Arabic) (27-Sep-2026)"
+  },
+  {
+   "url": "https://www.nagwa.com/en/classes/536134925484/",
+   "what": "Prep 1 Term 1 Egyptian curriculum lesson titles in English (Nagwa Classes)"
+  },
+  {
+   "url": "https://shbabbek.com/show/268672",
+   "what": "Prep 1 Term 2 2025/26 March topics (powers, roots, equations, areas)"
+  },
+  {
+   "url": "https://shbabbek.com/show/268222",
+   "what": "Prep 1 Term 2 2025/26 March exam models: topics and question types"
+  },
+  {
+   "url": "https://www.elwatannews.com/news/details/7714173",
+   "what": "Primary (P3-P6) maths term exam spec 2024/25 T1: 9 MCQ + 7 essay, 30 marks, 1.5 h"
+  },
+  {
+   "url": "https://www.youm7.com/6534725",
+   "what": "P4-P6 maths term exam spec 2023/24 T2: 26 items, 30 marks, 1.5 h"
+  },
+  {
+   "url": "https://www.elwatannews.com/news/details/7712070",
+   "what": "Prep maths term exam spec: Prep 1 = 30 marks, 2 hours"
+  },
+  {
+   "url": "https://www.parlmany.com/News/2/588818",
+   "what": "Monthly test weights: P3-P6 = 5 marks; Prep 1-2 = 15% each (30-Oct-2025)"
+  },
+  {
+   "url": "https://www.dostor.org/5252471",
+   "what": "Year-work distribution 2025/26 (7-Oct-2025)"
+  },
+  {
+   "url": "https://www.dostor.org/5304027",
+   "what": "Official weekly-assessment portals: moe.gov.eg/ar/assessments2025/ and studentbooks.moe.gov.eg/cha/"
+  },
+  {
+   "url": "https://www.dostor.org/5311372",
+   "what": "Official weekly-assessments download page on moe.gov.eg e-learning"
+  },
+  {
+   "url": "https://www.elbalad.news/6676054",
+   "what": "Official student-books portal studentbooks.moe.gov.eg (24-Aug-2025)"
+  },
+  {
+   "url": "https://studentbooks.moe.gov.eg/",
+   "what": "OFFICIAL ministry student books portal (not fetchable from this environment)"
+  },
+  {
+   "url": "https://moe.gov.eg/ar/elearningenterypage/e-learning?schoolStageId=1930&pageIndex=6",
+   "what": "OFFICIAL ministry weekly assessments page (not fetchable from this environment)"
+  }
+ ]
+}

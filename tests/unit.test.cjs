@@ -170,7 +170,7 @@ test('every template builds a well-formed file', async () => {
 /* ---------- formula bank (kateb/bank.js + kateb/bank/*.json) ---------- */
 const Bank = require('../kateb/bank.js');
 test('bank files hold formulas with placeholders, never a client name or number', () => {
-  const files = fs.readdirSync(path.join(REPO, 'kateb/bank')).filter(f => f.endsWith('.json') && !['spelling.json', 'memory.json', 'lexicon.json', 'cases.json'].includes(f));
+  const files = fs.readdirSync(path.join(REPO, 'kateb/bank')).filter(f => f.endsWith('.json') && !['spelling.json', 'memory.json', 'lexicon.json', 'cases.json', 'exam_math.json'].includes(f));
   assert.ok(files.length >= 10);
   for (const f of files) {
     const b = JSON.parse(fs.readFileSync(path.join(REPO, 'kateb/bank', f), 'utf8'));

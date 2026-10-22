@@ -124,6 +124,10 @@
   function startSync() {
     if (syncStarted || typeof Sync === 'undefined') return;
     syncStarted = true;
+    if (!syncHooked && Sync.onPrefs) Sync.onPrefs(function () {          // v41: settings / learning / memory from another device
+      loadLearn().then(function (items) { learnItems = learnOn() ? items : []; }).catch(function () {});
+      if (curScreen === 'settings') renderSettings(); homeCards(); try { paintOut(); } catch (e) {}
+    });
     if (!syncHooked) { syncHooked = true; Sync.onStatus(paintSync); Sync.onPulled(function (ids) {
       homeCards();
       if (curScreen === 'files') renderFiles(); else if (curScreen === 'trash') renderTrash(); else if (curScreen === 'settings') renderSettings();
@@ -323,6 +327,30 @@
     var pub = typeof Memory !== 'undefined' ? Memory.publicPrompt(memoryBank) : '';
     return (glossaryBank ? PROMPTS.glossary(Bank.promptText(glossaryBank, econ() ? 200 : 500)) : '') + pub;
   }
+  /* v41 Ms. Hanan's math references (bank/exam_math.json: the ministry curriculum, English edition, Primary 3 – Prep 1):
+     her grade's vocabulary and the standard exam instructions help recognise and spell what she wrote — never add */
+  var mathBank;
+  function gradeKey(g) {
+    g = String(g || '').toLowerCase();
+    if (/prep|إعدادي|اعدادي/.test(g)) return 'Prep1';
+    var m = /(\d)/.exec(g); var n = m ? +m[1] : 0;
+    if (/third|three|ثالث/.test(g)) n = 3; else if (/fourth|four|رابع/.test(g)) n = 4; else if (/fifth|five|خامس/.test(g)) n = 5; else if (/sixth|six|سادس/.test(g)) n = 6;
+    return n >= 3 && n <= 6 ? 'P' + n : '';
+  }
+  function termNow() { var m = new Date().getMonth() + 1; return m >= 9 || m === 1 ? '1' : '2'; }
+  async function examSystem() {
+    if (!EXAM || plainRun || typeof Bank === 'undefined') return undefined;
+    if (mathBank === undefined) { try { mathBank = await Bank.load('exam_math'); } catch (e) { mathBank = null; } }
+    if (!mathBank || !mathBank.grades) return undefined;
+    var k = gradeKey(($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade')), G = k && mathBank.grades[k];
+    var t = "MATH REFERENCES (Egyptian Ministry of Education curriculum, English edition for language schools" + (mathBank.school_year ? ', ' + mathBank.school_year : '') + "):\n";
+    if (G) {
+      var units = (G.terms[termNow()] || []).concat(G.terms[termNow() === '1' ? '2' : '1'] || []).map(function (u) { return '- ' + u.unit + (u.lessons && u.lessons.length ? ': ' + u.lessons.slice(0, 8).join('; ') : ''); });
+      t += "THIS TEACHER'S GRADE: " + G.label + ".\nUNITS AND LESSONS:\n" + units.join('\n') + "\nMATH WORDS SPELLED AS IN THE MINISTRY BOOK: " + G.vocab.join(', ') + "\nUNITS AND SYMBOLS: " + (G.units || []).join(', ') + "\n";
+    } else t += "MATH WORDS (Primary 3 – Prep 1): " + Object.keys(mathBank.grades).map(function (x) { return mathBank.grades[x].vocab.slice(0, 60).join(', '); }).join(', ') + "\n";
+    t += "STANDARD EXAM INSTRUCTIONS: " + (mathBank.instructions || []).join(' / ');
+    return t + "\n\nTHESE REFERENCES ONLY HELP YOU RECOGNISE AND SPELL WHAT IS WRITTEN ON THE PAGE. Never add a question, instruction, choice, number or word the page does not show.";
+  }
   /* v39: the formulas are back in the reading, but only to RECOGNISE written words (a real messy paper came back almost
      all dots without them); the closing rule forbids writing any formula text the page does not show */
   function recogSystem(bankTxt, cb, gloss) {
@@ -392,7 +420,7 @@
     var cb = plainRun ? null : await caseBank(kl0);                                         // v26: the published wording of this kind of case
     /* v38 (Zeyad: «ما تزودش صيغ من عندك»): the reading sees NO formulas — a real paper came back with sentences the
        lawyer never wrote. The formulas are now only the «⚖️ تحسين صيغة المحاماة» button: suggestions, one by one. */
-    var system = recogSystem(bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '', cb, await glossaryPrompt()), ctx = (caseContext() + learnPrompt() + (!EXAM && !plainRun && typeof Memory !== 'undefined' ? Memory.privatePrompt() : '')) || undefined;
+    var system = EXAM ? await examSystem() : recogSystem(bank ? PROMPTS.bankSystem(TYPE_LABEL[type] || type, Bank.promptText(bank, econ() ? 250 : 400)) : '', cb, await glossaryPrompt()), ctx = (caseContext() + learnPrompt() + (!EXAM && !plainRun && typeof Memory !== 'undefined' ? Memory.privatePrompt() : '')) || undefined;
     var a = null, b = null, ocrUsed = false;
     /* v31 a printed page: ONE Sonnet read of the page and its strips. (The free on-device OCR was tried on a real paper:
        it mixed the side column into the body and put words and lines in the wrong order, and one text correction did
@@ -1208,7 +1236,20 @@
     });
     $('emptyTrashBtn').addEventListener('click', function () { if (window.confirm('حذف كل الملفات في المحذوفات نهائيًا؟ لا يمكن التراجع عن هذا.')) Store.emptyTrash(MODE).then(renderTrash); });
   }
+  async function renderMathRefs() {
+    var box = $('mathRefList'); if (!box || typeof Bank === 'undefined') return;
+    if (mathBank === undefined) { try { mathBank = await Bank.load('exam_math'); } catch (e) { mathBank = null; } }
+    if (!mathBank) { box.textContent = 'تعذر تحميل المراجع.'; return; }
+    var my = gradeKey(Engine.lsGet('exam.hGrade'));
+    box.innerHTML = Object.keys(mathBank.grades).map(function (k) {
+      var G = mathBank.grades[k];
+      var terms = ['1', '2'].map(function (t) { return '<p class="small"><b>' + (t === '1' ? 'الترم الأول' : 'الترم الثاني') + '</b></p><ul class="mref">' + (G.terms[t] || []).map(function (u) { return '<li>' + escH(u.unit) + (u.lessons && u.lessons.length ? '<small> — ' + escH(u.lessons.join('، ')) + '</small>' : '') + '</li>'; }).join('') + '</ul>'; }).join('');
+      var books = (G.books || []).map(function (b) { return '<li><a href="' + escH(b.url) + '" target="_blank" rel="noopener">' + escH(b.title) + '</a>' + (b.official ? ' <small>(موقع الوزارة)</small>' : '') + '</li>'; }).join('');
+      return '<details' + (k === my ? ' open' : '') + '><summary><b>' + escH(G.label) + '</b></summary>' + terms + (books ? '<p class="small"><b>📘 كتب الوزارة والتقييمات</b></p><ul class="mref">' + books + '</ul>' : '') + '</details>';
+    }).join('') + '<p class="small">تُستخدم مفردات صف الامتحان وتعليمات الأسئلة لقراءة خطك بدقة وكتابة المصطلحات صح — ولا يُضاف أي سؤال أو كلمة من عندها.</p>';
+  }
   function renderSettings() {
+    if (EXAM) renderMathRefs();
     show('settings');
     $('setLearnState').textContent = learnOn() ? 'مفعّل — ' + profileLabel() : 'غير مفعّل';
     $('setEnhance').checked = enhanceOn();
@@ -1849,7 +1890,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '40';
+  var APP_VER = '41';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

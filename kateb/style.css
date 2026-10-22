@@ -468,3 +468,7 @@ body.wide{padding-bottom:110px}
 .livehelp{font-size:16px;color:#555;margin:6px 2px 0}
 .syncnote{margin:0 0 6px}
 .syncnote.warn{color:#8a4b00}
+
+.mref{margin:4px 0 8px;padding-inline-start:20px;font-size:15px;line-height:1.6}
+.mref small{color:var(--muted)}
+#mathRefs details{margin:6px 0}
