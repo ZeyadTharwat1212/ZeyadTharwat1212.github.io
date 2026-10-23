@@ -1457,18 +1457,44 @@
         showPending();
       });
     }
+    var liveHeard = 0, liveGotResult = false, liveStartT = 0;
     function liveTick(aKey) {
       if (!rec || !rec.pcmReady || !rec.pcmReady() || rec.state() !== 'recording') return;
-      var pend = rec.pending(); liveQuiet = rec.level() < 0.02 ? liveQuiet + 1 : 0;
+      var pend = rec.pending(), lvl = rec.level(); liveQuiet = lvl < 0.02 ? liveQuiet + 1 : 0;
+      /* v46: the browser's engine heard nothing back while the person was clearly talking (phones where it silently does
+         nothing) → the built-in engine takes over; what was said so far is still in the buffer and gets written */
+      if (liveMode === 'browser') {
+        if (lvl > 0.03) liveHeard++;
+        if (!liveGotResult && liveHeard >= 12 && Date.now() - liveStartT > 7000) { if (liveRec) { try { liveRec.stop(); } catch (e) {} liveRec = null; } liveBrowserFailed('silent'); return; }
+        if (liveGotResult && pend > 25) rec.cutPcm(0);                    // the engine works: the kept samples are not needed
+        return;
+      }
       if (liveMode === 'local') { if (pend >= 8 || (pend >= 1.5 && liveQuiet >= 2)) { liveQuiet = 0; sendLocal(rec.cutPcm(0.8)); } return; }   // shorter pieces: written sooner
       if (pend >= 12 || (pend >= 3 && liveQuiet >= 2)) { liveQuiet = 0; sendSeg(aKey, rec.cut(0.8)); }   // a pause between phrases (0.6 s quiet), or 12 s at most
+    }
+    function engineNote() {
+      if (!$('asrNote')) return;
+      var t = liveMode === 'browser' ? '🎙️ الكتابة: محرك المتصفح (مباشر)' : liveMode === 'local' ? '🎙️ الكتابة: المحرك المدمج في البرنامج' + (typeof LocalASR !== 'undefined' && LocalASR.device() ? ' (' + LocalASR.device() + ')' : '') : liveMode === 'key' ? '🎙️ الكتابة: مفتاح الصوت' : '';
+      if (t) { $('asrNote').hidden = false; $('asrNote').textContent = t; }
+    }
+    /* v46: nothing was written live but the recording has sound → the built-in engine writes the whole recording */
+    async function localWholeRecording(blob) {
+      if (!blob || !blob.size || typeof LocalASR === 'undefined' || !LocalASR.supported()) return false;
+      var d; try { d = await Speech.decode(blob); } catch (e) { return false; }
+      var S = d.samples, R = d.rate, step = 20 * R, n = Math.ceil(S.length / step), got = false;
+      for (var i = 0; i < n; i++) {
+        $('recState').textContent = (LocalASR.progress().loaded ? 'جارٍ كتابة التسجيل' : 'جارٍ تجهيز الكتابة بالصوت ثم كتابة التسجيل') + ' (' + (i + 1) + ' من ' + n + ')…';
+        try { var t = await LocalASR.transcribe(S.subarray(i * step, Math.min(S.length, (i + 1) * step)), EXAM ? 'english' : 'arabic'); if (t) { liveInsert({ text: liveFix(t) }); got = true; } }
+        catch (e) { $('voiceErr').hidden = false; $('voiceErr').textContent = 'تعذّر تشغيل الكتابة بالصوت على هذا الجهاز (' + (LocalASR.error() || (e && e.message) || 'خطأ') + ').'; return got; }
+      }
+      return got;
     }
     function flushLive(min) { if (!rec) return; if (liveMode === 'key') sendSeg(Engine.audioKey(KEY), rec.cut(min)); else if (liveMode === 'local' && rec.cutPcm) sendLocal(rec.cutPcm(min)); }
     function liveBrowserFailed(code) {
       /* v44: the browser's engine failed — the built-in one takes over at once (the recording already keeps the samples) */
       if (rec && rec.pcmReady && rec.pcmReady() && typeof LocalASR !== 'undefined' && LocalASR.supported()) {
         liveMode = 'local'; LocalASR.load().catch(function () {}); clearInterval(liveT); liveT = setInterval(function () { liveTick(null); }, 300);
-        $('liveInterim').className = 'liveinterim'; showPending(); return;
+        $('liveInterim').className = 'liveinterim'; showPending(); engineNote(); return;
       }
       var why = code === 'network' ? 'المتصفح لم يستطع الوصول لخدمة تحويل الكلام' : code === 'not-allowed' || code === 'service-not-allowed' ? 'المتصفح منع استخدام الميكروفون للكتابة' : 'خدمة الكلام في المتصفح لا تعمل الآن';
       $('liveInterim').textContent = '⚠️ الكتابة المباشرة لا تعمل هنا (' + why + '). الحل الأسهل: اضغط داخل المربع واستخدم زر الميكروفون 🎤 في لوحة المفاتيح، أو أضف «مفتاح الصوت» المجاني من ⚙️ الإعدادات فيكتب البرنامج كلامك بنفسه.';
@@ -1527,18 +1553,18 @@
       if (liveMode === 'local') LocalASR.load().catch(function () {});
       liveFixPrep();
       try {
-        if (liveMode === 'browser' && /Android|iPhone|iPad/i.test(navigator.userAgent)) rec = textOnlyRec(onTick);
-        else rec = await Speech.recorder({ pcm: liveMode !== 'none', onTick: onTick, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } });
+        rec = await Speech.recorder({ pcm: true, onTick: onTick, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } });
       } catch (e) { $('voiceErr').hidden = false; $('voiceErr').textContent = Engine.errText({ code: 'mic' }); rec = null; return; }
-      liveParts = []; liveHist = []; liveFail = 0; livePending = 0; liveQ = Promise.resolve(); $('liveConvert').hidden = true;
+      liveParts = []; liveHist = []; liveFail = 0; livePending = 0; liveQ = Promise.resolve(); $('liveConvert').hidden = true; liveHeard = 0; liveGotResult = false; liveStartT = Date.now();
       liveRec = liveMode !== 'browser' ? null : Speech.live({ lang: EXAM ? 'en-US' : 'ar-EG',
-        onInterim: function (t) { $('liveInterim').textContent = t; },
-        onFinal: function (t) { var p = $('cmdChk').checked ? Speech.command(t) : { text: t }; if (p.text) p.text = liveFix(p.text); liveParts.push(p); $('liveInterim').textContent = ''; liveInsert(p); },
+        onInterim: function (t) { liveGotResult = true; $('liveInterim').textContent = t; },
+        onFinal: function (t) { liveGotResult = true; var p = $('cmdChk').checked ? Speech.command(t) : { text: t }; if (p.text) p.text = liveFix(p.text); liveParts.push(p); $('liveInterim').textContent = ''; liveInsert(p); },
         onFatal: function (code) { liveBrowserFailed(code); } });
       $('liveBox').hidden = false;
       $('liveInterim').textContent = liveMode === 'key' ? 'تكلّم… الكلام يُكتب بعد كل وقفة قصيرة.' : liveMode === 'local' ? '' : liveMode === 'none' && isBrave() ? BRAVE_MSG : liveMode === 'none' ? 'الكتابة المباشرة غير متاحة في هذا المتصفح: اضغط داخل المربع واستخدم ميكروفون لوحة المفاتيح 🎤، أو أضف مفتاح الصوت من الإعدادات.' : '';
       rec.start(); if (liveRec) liveRec.start();
-      if (liveMode === 'key' || liveMode === 'local') liveT = setInterval(function () { liveTick(aKey); }, 300);
+      liveT = setInterval(function () { liveTick(aKey); }, 300);
+      engineNote();
       if (liveMode === 'local') showPending();
       $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…';
       $('recStart').hidden = true; $('recPause').hidden = false; $('recStop').hidden = false; $('recDone').hidden = true;
@@ -1561,7 +1587,10 @@
       recBlob = r.blob; recSecs = r.seconds;
       $('recStop').disabled = false; $('recStat').className = 'recstat'; $('recState').textContent = 'انتهى التسجيل (' + Speech.fmtTime(recSecs) + ')';
       $('recPause').hidden = true; $('recResume').hidden = true; $('recStop').hidden = true; $('recStart').hidden = true;
-      var hasLive = !!liveText(), aKey = Engine.audioKey(KEY);
+      var aKey = Engine.audioKey(KEY);
+      if (!liveText() && !aKey && recBlob.size && recSecs >= 1) await localWholeRecording(recBlob);
+      $('recState').textContent = 'انتهى التسجيل (' + Speech.fmtTime(recSecs) + ')';
+      var hasLive = !!liveText();
       if ((!recBlob.size && !hasLive) || recSecs < 1) { $('voiceErr').hidden = false; $('voiceErr').textContent = 'لم يُكتب ولم يُسجَّل شيء. تأكد من الميكروفون، أو تكلّم بزر الميكروفون 🎤 في لوحة المفاتيح داخل المربع.'; $('recStart').hidden = false; return; }
       if (recBlob.size) { recAudioUrl = URL.createObjectURL(recBlob); $('recAudio').src = recAudioUrl; $('recAudio').hidden = false; } else $('recAudio').hidden = true;
       $('recDone').hidden = false;
@@ -1952,7 +1981,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '45';
+  var APP_VER = '46';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

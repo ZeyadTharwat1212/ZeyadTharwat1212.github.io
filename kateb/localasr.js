@@ -6,7 +6,7 @@
 var LocalASR = (function () {
   'use strict';
   var LIB = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
-  var MODEL = 'onnx-community/whisper-small';
+  var MODEL = 'onnx-community/whisper-small', SMALLER = 'onnx-community/whisper-base', modelUsed = MODEL, lastErr = '';
   var pipeP = null, device = '', queue = Promise.resolve(), progress = { pct: 0, loaded: false };
   var listeners = [];
   function emit() { listeners.forEach(function (f) { try { f(progress); } catch (e) {} }); }
@@ -29,11 +29,17 @@ var LocalASR = (function () {
           if (p && p.file && p.total) { files[p.file] = { l: p.loaded || 0, t: p.total }; var l = 0, t = 0; for (var k in files) { l += files[k].l; t += files[k].t; } progress.pct = t ? Math.round(100 * l / t) : 0; emit(); }
         }
       };
-      var pipe;
+      var pipe, cpu = { encoder_model: 'q8', decoder_model_merged: 'q8' };
       try { pipe = await T.pipeline('automatic-speech-recognition', MODEL, opts); }
-      catch (e) {                                                           // a GPU that refuses the model: the CPU path
-        if (d.name !== 'webgpu') throw e;
-        device = 'wasm'; pipe = await T.pipeline('automatic-speech-recognition', MODEL, { device: 'wasm', dtype: { encoder_model: 'q8', decoder_model_merged: 'q8' }, progress_callback: opts.progress_callback });
+      catch (e) {
+        lastErr = String(e && e.message || e);
+        try {                                                               // a GPU that refuses the model: the CPU path
+          if (d.name === 'webgpu') { device = 'wasm'; pipe = await T.pipeline('automatic-speech-recognition', MODEL, { device: 'wasm', dtype: cpu, progress_callback: opts.progress_callback }); }
+          else throw e;
+        } catch (e2) {                                                      // a phone short of memory: the smaller model (~80 MB)
+          lastErr = String(e2 && e2.message || e2); files = {}; modelUsed = SMALLER; device = 'wasm';
+          pipe = await T.pipeline('automatic-speech-recognition', SMALLER, { device: 'wasm', dtype: cpu, progress_callback: opts.progress_callback });
+        }
       }
       progress.loaded = true; progress.pct = 100; emit();
       return pipe;
@@ -57,6 +63,6 @@ var LocalASR = (function () {
     queue = job.catch(function () {});
     return job;
   }
-  return { supported: supported, load: load, transcribe: transcribe, onProgress: function (f) { listeners.push(f); }, progress: function () { return progress; }, device: function () { return device; }, _clean: clean, MODEL: MODEL };
+  return { supported: supported, load: load, transcribe: transcribe, onProgress: function (f) { listeners.push(f); }, progress: function () { return progress; }, device: function () { return device; }, model: function () { return modelUsed; }, error: function () { return lastErr; }, _clean: clean, MODEL: MODEL };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = LocalASR;
