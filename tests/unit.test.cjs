@@ -541,3 +541,11 @@ test('v35 sync: a file changed on two devices keeps the newer one, the other tex
   const same = Sync._merge(here, Object.assign({}, here));
   assert.ok(!same.versions.some(v => v.label === 'other-device'), 'no extra version when the text is the same');
 });
+
+test('v44 built-in speech engine: Whisper\'s inventions on silence are dropped, real words kept', () => {
+  const L = require('../kateb/localasr.js');
+  assert.strictEqual(L._clean(' ترجمة نانسي قنقر '), '');
+  assert.strictEqual(L._clean('اشتركوا في القناة'), '');
+  assert.strictEqual(L._clean('...'), '');
+  assert.strictEqual(L._clean(' بناء على طلب السيد  مينا '), 'بناء على طلب السيد مينا');
+});

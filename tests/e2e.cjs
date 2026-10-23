@@ -1139,17 +1139,41 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(calls.audio.length, before + 1, 'converting uses the box: no second transcription');
   }));
 
-  await step('v43 Brave (the family\'s PC browser): no speech service behind the API — the voice screen says so at once with a copy-link button, and recording does not even try the engine', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
-    await page.evaluate(() => { localStorage.setItem('kateb.blob', 'abcdefghij0123456789abcdefghij0123456789xyz'); window.__srMade = 0; window.SpeechRecognition = window.webkitSpeechRecognition = function () { window.__srMade++; this.start = this.stop = this.abort = () => {}; }; });
+  await step('v44 Brave (the family\'s PC browser): the speech engine BUILT INTO the app writes what is said — prepared when the voice screen opens, every pause written into the box, spelling-corrected; the browser engine is not even tried', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
     await page.addInitScript(() => { navigator.brave = { isBrave: () => Promise.resolve(true) }; });
     await page.reload(); await page.waitForSelector('#start:not([hidden])');
-    await page.evaluate(() => { window.__srMade = 0; window.SpeechRecognition = window.webkitSpeechRecognition = function () { window.__srMade++; this.start = this.stop = this.abort = () => {}; }; });
+    await page.evaluate(() => {
+      window.__srMade = 0; window.SpeechRecognition = window.webkitSpeechRecognition = function () { window.__srMade++; this.start = this.stop = this.abort = () => {}; };
+      window.__asrCalls = []; let ready = false, cbs = [];
+      LocalASR.supported = () => true;
+      LocalASR.progress = () => ({ pct: ready ? 100 : 40, loaded: ready });
+      LocalASR.load = () => new Promise(r => setTimeout(() => { ready = true; r({}); }, 300));
+      LocalASR.transcribe = async (pcm, lang) => { window.__asrCalls.push([pcm.constructor.name, pcm.length, lang]); return 'بناء علي طلب السيد مينا سامي'; };
+    });
     await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
-    assert.ok(await page.locator('#braveNote').isVisible(), 'Brave is named on the voice screen');
-    assert.match(await page.textContent('#braveNote'), /Chrome/);
+    assert.ok(await page.locator('#braveNote').isHidden(), 'no «Brave cannot» warning any more: the app has its own engine');
     await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
-    assert.match(await page.textContent('#liveInterim'), /Brave/);
-    assert.strictEqual(await page.evaluate(() => window.__srMade), 0, 'the engine that cannot work in Brave is not started');
+    await page.waitForTimeout(2000); await page.click('#recPause');
+    await page.waitForFunction(() => /مينا سامي/.test(document.getElementById('liveEdit').value), null, { timeout: 15000 });
+    const v = await page.inputValue('#liveEdit');
+    assert.ok(/بناء على طلب السيد مينا سامي/.test(v), 'written and corrected (علي → على): ' + v);
+    const calls = await page.evaluate(() => window.__asrCalls);
+    assert.ok(calls.length >= 1 && calls[0][0] === 'Float32Array' && calls[0][2] === 'arabic', 'raw 16 kHz samples to the built-in engine: ' + JSON.stringify(calls));
+    assert.strictEqual(await page.evaluate(() => window.__srMade), 0, 'the browser engine that cannot work in Brave is not started');
+  }));
+
+  await step('v44 the browser speech engine fails mid-recording («network») → the built-in engine takes over at once and writes the words', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
+    await page.evaluate(() => {
+      window.__starts = 0;
+      window.SpeechRecognition = window.webkitSpeechRecognition = function () { const self = this; this.start = () => { window.__starts++; setTimeout(() => { self.onerror && self.onerror({ error: 'network' }); self.onend && self.onend(); }, 80); }; this.stop = this.abort = () => {}; };
+      LocalASR.supported = () => true; LocalASR.progress = () => ({ pct: 100, loaded: true }); LocalASR.load = () => Promise.resolve({});
+      LocalASR.transcribe = async () => 'ومحله المختار مكتب الأستاذ';
+    });
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
+    await page.waitForTimeout(1500); await page.click('#recPause');
+    await page.waitForFunction(() => /ومحله المختار/.test(document.getElementById('liveEdit').value), null, { timeout: 15000 });
+    assert.strictEqual(await page.evaluate(() => window.__starts), 1, 'the failing engine is not restarted');
   }));
 
   await step('v33 the browser speech engine fails («network», as on the family\'s Chrome and phone) and there is no audio key: the person is told at once what to do (keyboard 🎤 or the audio key) and the engine is not restarted forever; the keyboard-mic button opens the box', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
@@ -1160,8 +1184,10 @@ async function runMode(browser, base, file, answers, check, key, drive) {
         this.start = () => { window.__starts++; setTimeout(() => { self.onerror && self.onerror({ error: 'network' }); self.onend && self.onend(); }, 80); };
         this.stop = this.abort = () => {};
       };
+      LocalASR.supported = () => false;                       // a device where the built-in engine cannot run either
     });
     await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    await page.evaluate(() => { LocalASR.supported = () => false; });
     await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
     await page.waitForFunction(() => /لا تعمل هنا/.test(document.getElementById('liveInterim').textContent), null, { timeout: 5000 });
     assert.match(await page.textContent('#liveInterim'), /لوحة المفاتيح/);

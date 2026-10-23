@@ -93,6 +93,15 @@ var Speech = (function () {
       /* the samples recorded since the last cut, as a 16 kHz WAV (null when shorter than minSec) */
       pcmReady: function () { return !!proc; },
       pending: function () { return ctx ? (pcmLen - cutAt) / ctx.sampleRate : 0; },
+      /* v44: the same, as raw 16 kHz samples for the built-in Whisper engine (null when too short or silent) */
+      cutPcm: function (minSec) {
+        if (!proc || !ctx) return null;
+        if ((pcmLen - cutAt) / ctx.sampleRate < (minSec || 0.8)) return null;
+        var x = pcmSince(cutAt); pcm = []; pcmLen = 0; cutAt = 0;
+        var e = 0; for (var i = 0; i < x.length; i += 4) e += x[i] * x[i];
+        if (Math.sqrt(e / Math.max(1, x.length / 4)) < 0.004) return null;
+        return normalise(to16k(x, ctx.sampleRate));
+      },
       cut: function (minSec) {
         if (!proc || !ctx) return null;
         if ((pcmLen - cutAt) / ctx.sampleRate < (minSec || 0.8)) return null;
