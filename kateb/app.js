@@ -1464,7 +1464,7 @@
       /* v46: the browser's engine heard nothing back while the person was clearly talking (phones where it silently does
          nothing) → the built-in engine takes over; what was said so far is still in the buffer and gets written */
       if (liveMode === 'browser') {
-        if (lvl > 0.03) liveHeard++;
+        if (lvl > 0.025) liveHeard++;
         if (!liveGotResult && liveHeard >= 12 && Date.now() - liveStartT > 7000) { if (liveRec) { try { liveRec.stop(); } catch (e) {} liveRec = null; } liveBrowserFailed('silent'); return; }
         if (liveGotResult && pend > 25) rec.cutPcm(0);                    // the engine works: the kept samples are not needed
         return;
@@ -1981,7 +1981,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '46';
+  var APP_VER = '47';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

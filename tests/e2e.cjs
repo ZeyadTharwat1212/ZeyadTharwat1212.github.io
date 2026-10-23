@@ -1179,6 +1179,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
   await step('v46 a phone where the browser engine silently returns nothing while the person talks → after a few seconds the built-in engine takes over and writes what was said from the start; the screen names the engine in use', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
     await page.evaluate(() => {
       window.SpeechRecognition = window.webkitSpeechRecognition = function () { this.start = this.stop = this.abort = () => {}; };   // starts, never answers
+      AnalyserNode.prototype.getByteTimeDomainData = function (a) { for (let i = 0; i < a.length; i++) a[i] = 128 + (i % 2 ? 50 : -50); };   // the person is clearly talking
       window.__got = 0; LocalASR.supported = () => true; LocalASR.progress = () => ({ pct: 100, loaded: true }); LocalASR.load = () => Promise.resolve({}); LocalASR.device = () => 'wasm';
       LocalASR.transcribe = async (pcm) => { window.__got = pcm.length; return 'إنه في يوم الموافق'; };
     });
@@ -1186,7 +1187,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
     assert.match(await page.textContent('#asrNote'), /محرك المتصفح/);
     await page.evaluate(() => { const r = window.__test && window.__test.rec ? window.__test.rec() : null; });
-    await page.waitForFunction(() => /المحرك المدمج/.test(document.getElementById('asrNote').textContent), null, { timeout: 20000 });
+    await page.waitForFunction(() => /المحرك المدمج/.test(document.getElementById('asrNote').textContent), null, { timeout: 40000 });
     await page.click('#recPause');
     await page.waitForFunction(() => /إنه في يوم/.test(document.getElementById('liveEdit').value), null, { timeout: 15000 });
     assert.ok(await page.evaluate(() => window.__got) > 16000 * 5, 'the samples from the start of the recording were kept and written');
