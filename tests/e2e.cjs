@@ -1026,6 +1026,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.waitForFunction(() => /بالغ سن الرشد/.test(document.getElementById('liveEdit').value), null, { timeout: 10000 });
     const v = await page.inputValue('#liveEdit');
     assert.ok(/مينا سامح بالغ سن الرشد ومحله المختار/.test(v), 'the new words went where the cursor was, the correction kept: ' + v);
+    assert.ok(/بناء على طلب/.test(v) && !/علي طلب/.test(v), 'v43: what is said is corrected as it is written (علي → على): ' + v);
     await page.reload(); await page.waitForSelector('#start:not([hidden])');
     await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
     assert.ok((await page.inputValue('#liveEdit')).includes('مينا سامح'), 'an unfinished dictation comes back after a reload');
@@ -1136,6 +1137,19 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual((v.match(/مينا سامي/g) || []).length, 2, 'both pieces are in the box, in order: ' + v);
     await page.click('#recConvert'); await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
     assert.strictEqual(calls.audio.length, before + 1, 'converting uses the box: no second transcription');
+  }));
+
+  await step('v43 Brave (the family\'s PC browser): no speech service behind the API — the voice screen says so at once with a copy-link button, and recording does not even try the engine', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
+    await page.evaluate(() => { localStorage.setItem('kateb.blob', 'abcdefghij0123456789abcdefghij0123456789xyz'); window.__srMade = 0; window.SpeechRecognition = window.webkitSpeechRecognition = function () { window.__srMade++; this.start = this.stop = this.abort = () => {}; }; });
+    await page.addInitScript(() => { navigator.brave = { isBrave: () => Promise.resolve(true) }; });
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    await page.evaluate(() => { window.__srMade = 0; window.SpeechRecognition = window.webkitSpeechRecognition = function () { window.__srMade++; this.start = this.stop = this.abort = () => {}; }; });
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    assert.ok(await page.locator('#braveNote').isVisible(), 'Brave is named on the voice screen');
+    assert.match(await page.textContent('#braveNote'), /Chrome/);
+    await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
+    assert.match(await page.textContent('#liveInterim'), /Brave/);
+    assert.strictEqual(await page.evaluate(() => window.__srMade), 0, 'the engine that cannot work in Brave is not started');
   }));
 
   await step('v33 the browser speech engine fails («network», as on the family\'s Chrome and phone) and there is no audio key: the person is told at once what to do (keyboard 🎤 or the audio key) and the engine is not restarted forever; the keyboard-mic button opens the box', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {

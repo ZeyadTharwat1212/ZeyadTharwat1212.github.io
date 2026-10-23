@@ -1429,7 +1429,7 @@
       liveQ = liveQ.then(function () { return job; }).then(function (t) {
         livePending--;
         if (t && t.err) { liveFail++; $('liveInterim').textContent = 'تعذّرت كتابة جزء من الكلام (' + Engine.errText(t.err) + ') — سيُكتب كاملًا من التسجيل عند «إنهاء التسجيل».'; return; }
-        if (t) { liveParts.push({ text: t }); liveInsert({ text: t }); }
+        if (t) { t = liveFix(t); liveParts.push({ text: t }); liveInsert({ text: t }); }
         showPending();
       });
     }
@@ -1454,6 +1454,34 @@
         resume: function () { if (st === 'paused') { pTot += Date.now() - pAt; st = 'recording'; } },
         stop: function () { clearInterval(tm); var s2 = el(); st = 'inactive'; return Promise.resolve({ blob: new Blob([], { type: 'audio/webm' }), seconds: s2 }); } };
     }
+    /* v43: the family's PC opens the app in Brave — it shows the speech API but has no speech service behind it («network»
+       every time, nothing written). Chrome and Edge do have it (words appear while speaking). Said at once, with the link. */
+    function isBrave() { try { return !!navigator.brave || /Brave/i.test(navigator.userAgent); } catch (e) { return false; } }
+    var BRAVE_MSG = '⚠️ متصفح Brave لا يدعم تحويل الكلام إلى كتابة. افتح الكاتب من Google Chrome أو Microsoft Edge وسيظهر كلامك وأنت تتكلم (اضغط «📋 نسخ الرابط» والصقه هناك). أو استخدم ميكروفون لوحة المفاتيح 🎤.';
+    function appLink() { var b = Engine.lsGet('kateb.blob'), g = Engine.lsGet('kateb.gblob'); return b ? location.origin + location.pathname + '#k=' + b + (g ? '&g=' + g : '') : location.origin + location.pathname; }
+    if ($('braveNote')) {
+      if (isBrave()) { $('braveNote').hidden = false; }
+      if ($('copyLink')) $('copyLink').addEventListener('click', function () {
+        var t = appLink(), b = this;
+        (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { b.textContent = '✓ تم النسخ — افتح Chrome أو Edge والصقه'; }, function () { window.prompt('انسخ الرابط:', t); });
+      });
+    }
+    /* v43: what is said is corrected as it is written — دعوه → دعوى، علي طلب → على طلب، الي → إلى (names and numbers untouched) */
+    var liveLex = null, liveSpell = null;
+    function liveFixPrep() {
+      if (EXAM || typeof Bank === 'undefined') return;
+      Bank.load('lexicon').then(function (b) { liveLex = b; }).catch(function () {});
+      Bank.load('spelling').then(function (b) { liveSpell = b; }).catch(function () {});
+      if (typeof Dict !== 'undefined' && Dict.load && !Dict.ready()) { try { Dict.load(); } catch (e) {} }
+    }
+    function liveFix(t) {
+      if (EXAM || !t) return t;
+      try {
+        if (typeof Dict !== 'undefined' && Dict.fix) t = Dict.fix(t, { lexicon: liveLex || undefined, names: typeof Fields !== 'undefined' ? Fields.extract(t).names : [] }).text;
+        if (liveSpell && typeof Arabic !== 'undefined' && Arabic.spell) t = Arabic.spell(t, liveSpell).text;
+      } catch (e) {}
+      return t;
+    }
     /* the keyboard's own microphone (Gboard / iPhone / Windows Win+H) writes straight into the box, with no key at all */
     if ($('kbMic')) $('kbMic').addEventListener('click', function () {
       $('liveBox').hidden = false; $('liveInterim').className = 'liveinterim';
@@ -1464,7 +1492,8 @@
     $('recStart').addEventListener('click', async function () {
       $('voiceErr').hidden = true; $('liveInterim').className = 'liveinterim';
       var aKey = Engine.audioKey(KEY), onTick = function (sec, lvl) { $('recTime').textContent = Speech.fmtTime(sec); liveHist.push(lvl); if (liveHist.length > 400) liveHist.shift(); };
-      liveMode = aKey ? 'key' : Speech.liveSupported() ? 'browser' : 'none';
+      liveMode = aKey ? 'key' : Speech.liveSupported() && !isBrave() ? 'browser' : 'none';   // v43: Brave has the API but no speech service behind it
+      liveFixPrep();
       try {
         if (liveMode === 'browser' && /Android|iPhone|iPad/i.test(navigator.userAgent)) rec = textOnlyRec(onTick);
         else rec = await Speech.recorder({ pcm: liveMode === 'key', onTick: onTick, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } });
@@ -1472,10 +1501,10 @@
       liveParts = []; liveHist = []; liveFail = 0; livePending = 0; liveQ = Promise.resolve(); $('liveConvert').hidden = true;
       liveRec = liveMode !== 'browser' ? null : Speech.live({ lang: EXAM ? 'en-US' : 'ar-EG',
         onInterim: function (t) { $('liveInterim').textContent = t; },
-        onFinal: function (t) { var p = $('cmdChk').checked ? Speech.command(t) : { text: t }; liveParts.push(p); $('liveInterim').textContent = ''; liveInsert(p); },
+        onFinal: function (t) { var p = $('cmdChk').checked ? Speech.command(t) : { text: t }; if (p.text) p.text = liveFix(p.text); liveParts.push(p); $('liveInterim').textContent = ''; liveInsert(p); },
         onFatal: function (code) { liveBrowserFailed(code); } });
       $('liveBox').hidden = false;
-      $('liveInterim').textContent = liveMode === 'key' ? 'تكلّم… الكلام يُكتب بعد كل وقفة قصيرة.' : liveMode === 'none' ? 'الكتابة المباشرة غير متاحة في هذا المتصفح: اضغط داخل المربع واستخدم ميكروفون لوحة المفاتيح 🎤، أو أضف مفتاح الصوت من الإعدادات.' : '';
+      $('liveInterim').textContent = liveMode === 'key' ? 'تكلّم… الكلام يُكتب بعد كل وقفة قصيرة.' : liveMode === 'none' && isBrave() ? BRAVE_MSG : liveMode === 'none' ? 'الكتابة المباشرة غير متاحة في هذا المتصفح: اضغط داخل المربع واستخدم ميكروفون لوحة المفاتيح 🎤، أو أضف مفتاح الصوت من الإعدادات.' : '';
       rec.start(); if (liveRec) liveRec.start();
       if (liveMode === 'key') liveT = setInterval(function () { liveTick(aKey); }, 300);
       $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…';
@@ -1890,7 +1919,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '42';
+  var APP_VER = '43';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

@@ -472,3 +472,5 @@ body.wide{padding-bottom:110px}
 .mref{margin:4px 0 8px;padding-inline-start:20px;font-size:15px;line-height:1.6}
 .mref small{color:var(--muted)}
 #mathRefs details{margin:6px 0}
+.status.warn{background:#fff4dc;color:#7a4300;border:1px solid #f0d49a}
+.status.warn{display:block;border-radius:12px;text-align:center;line-height:1.6;font-weight:600}
