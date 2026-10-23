@@ -42,7 +42,7 @@ var LocalASR = (function () {
     return pipeP;
   }
   /* Whisper's well-known inventions on silence or noise (Arabic subtitles credits, «thanks for watching»…) */
-  var JUNK = /(ترجمة\s*نانسي|نانسي\s*قنقر|اشترك(وا)?\s*(في|ب)\s*القناة|شكرا\s*(لكم\s*)?(على|لل)\s*المشاهدة|لا\s*تنسوا\s*الاشتراك|Thank you for watching|Subscribe|Subtitles by|\[(موسيقى|Music)\]|♪)/gi;
+  var JUNK = /((ترجمة\s*)?نانسي(\s*قنقر)?|اشترك(وا)?\s*(في|ب)\s*القناة|شكرا\s*(لكم\s*)?(على|لل)\s*المشاهدة|لا\s*تنسوا\s*الاشتراك|Thank you for watching|Subscribe|Subtitles by|\[(موسيقى|Music)\]|♪)/gi;
   function clean(t) {
     t = String(t || '').replace(JUNK, ' ').replace(/\s+/g, ' ').trim();
     if (/^[\s.،,؟?!…-]*$/.test(t)) return '';
