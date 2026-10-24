@@ -60,7 +60,7 @@ var Speech = (function () {
     if (opt.pcm && ctx && src) {
       try {
         proc = ctx.createScriptProcessor(4096, 1, 1);
-        proc.onaudioprocess = function (ev) { if (mr.state !== 'recording') return; var d = ev.inputBuffer.getChannelData(0); pcm.push(new Float32Array(d)); pcmLen += d.length; };
+        proc.onaudioprocess = function (ev) { if (mr.state !== 'recording') return; var d = ev.inputBuffer.getChannelData(0); pcm.push(new Float32Array(d)); pcmLen += d.length; if (opt.onPcm) { try { opt.onPcm(to16k(new Float32Array(d), ctx.sampleRate)); } catch (e) {} } };   // v48: streamed to Gemini Live
         src.connect(proc); proc.connect(ctx.destination); if (ctx.state === 'suspended' && ctx.resume) ctx.resume();
       } catch (e) { proc = null; }
     }

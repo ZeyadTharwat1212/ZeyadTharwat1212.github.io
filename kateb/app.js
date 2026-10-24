@@ -1437,6 +1437,17 @@
       if (liveMode === 'local') showPending();
       if ($('asrNote')) { $('asrNote').hidden = false; $('asrNote').textContent = pr.loaded ? '✓ الكتابة بالصوت جاهزة على هذا الجهاز — تكلّم ويُكتب كلامك بعد كل وقفة قصيرة.' : '⏳ تجهيز الكتابة بالصوت على هذا الجهاز لأول مرة (مرة واحدة فقط)… ' + (pr.pct || 0) + '٪'; }
     });
+    /* v48: without an audio key and without a browser engine (Brave), the voice screen offers the free key right there */
+    function paintKeyBox() { if ($('vKeyBox')) $('vKeyBox').hidden = !!Engine.audioKey(KEY) || (Speech.liveSupported() && !isBrave()); }
+    if ($('voiceBtn')) $('voiceBtn').addEventListener('click', paintKeyBox);
+    if ($('vKeySave')) $('vKeySave').addEventListener('click', async function () {
+      var k = ($('vKeyIn').value || '').trim(), b = this; if (!k) return;
+      if (Engine.provider(k) !== 'gemini') { $('vKeyMsg').textContent = 'المفتاح يبدأ بـ AIza — انسخه من جديد.'; return; }
+      b.disabled = true; b.textContent = 'جارٍ التحقق…';
+      try { await Engine.listModels(k); Engine.setAudioKey(k); $('vKeyIn').value = ''; $('vKeyMsg').textContent = '✓ تم — الكلام سيُكتب الآن وأنت تتكلم.'; setTimeout(paintKeyBox, 1500); if (typeof audioKeyState === 'function') try { audioKeyState(); } catch (e) {} }
+      catch (e) { $('vKeyMsg').textContent = 'المفتاح لا يعمل — تأكد أنك نسخته كاملًا.'; }
+      b.disabled = false; b.textContent = 'حفظ';
+    });
     /* the engine is prepared as soon as the voice screen opens, so it is ready when the person starts talking */
     if ($('voiceBtn')) $('voiceBtn').addEventListener('click', function () { if (needLocal()) { if ($('asrNote')) { $('asrNote').hidden = false; $('asrNote').textContent = '⏳ تجهيز الكتابة بالصوت على هذا الجهاز…'; } LocalASR.load().catch(function () { if ($('asrNote')) $('asrNote').textContent = 'تعذّر تجهيز الكتابة بالصوت على هذا الجهاز — استخدم ميكروفون لوحة المفاتيح 🎤.'; }); } });
     function needLocal() { return !Engine.audioKey(KEY) && (!Speech.liveSupported() || isBrave()) && typeof LocalASR !== 'undefined' && LocalASR.supported(); }
@@ -1469,12 +1480,13 @@
         if (liveGotResult && pend > 25) rec.cutPcm(0);                    // the engine works: the kept samples are not needed
         return;
       }
+      if (liveMode === 'stream') { if (pend > 25) rec.cutPcm(0); return; }      // Gemini Live gets the samples as they come
       if (liveMode === 'local') { if (pend >= 8 || (pend >= 1.5 && liveQuiet >= 2)) { liveQuiet = 0; sendLocal(rec.cutPcm(0.8)); } return; }   // shorter pieces: written sooner
       if (pend >= 12 || (pend >= 3 && liveQuiet >= 2)) { liveQuiet = 0; sendSeg(aKey, rec.cut(0.8)); }   // a pause between phrases (0.6 s quiet), or 12 s at most
     }
     function engineNote() {
       if (!$('asrNote')) return;
-      var t = liveMode === 'browser' ? '🎙️ الكتابة: محرك المتصفح (مباشر)' : liveMode === 'local' ? '🎙️ الكتابة: المحرك المدمج في البرنامج' + (typeof LocalASR !== 'undefined' && LocalASR.device() ? ' (' + LocalASR.device() + ')' : '') : liveMode === 'key' ? '🎙️ الكتابة: مفتاح الصوت' : '';
+      var t = liveMode === 'stream' ? '🎙️ الكتابة: مباشرة عبر مفتاح الصوت (Gemini Live)' : liveMode === 'browser' ? '🎙️ الكتابة: محرك المتصفح (مباشر)' : liveMode === 'local' ? '🎙️ الكتابة: المحرك المدمج في البرنامج' + (typeof LocalASR !== 'undefined' && LocalASR.device() ? ' (' + LocalASR.device() + ')' : '') : liveMode === 'key' ? '🎙️ الكتابة: مفتاح الصوت' : '';
       if (t) { $('asrNote').hidden = false; $('asrNote').textContent = t; }
     }
     /* v46: nothing was written live but the recording has sound → the built-in engine writes the whole recording */
@@ -1490,7 +1502,28 @@
       return got;
     }
     function flushLive(min) { if (!rec) return; if (liveMode === 'key') sendSeg(Engine.audioKey(KEY), rec.cut(min)); else if (liveMode === 'local' && rec.cutPcm) sendLocal(rec.cutPcm(min)); }
+    /* v48 Gemini Live: the words come back while speaking (grey line), each phrase is written corrected at its pause */
+    var liveStream = null;
+    function startStream(aKey) {
+      liveStream = GeminiLive.start(aKey, {
+        lang: EXAM ? 'en' : 'ar',
+        onOpen: function () { engineNote(); if (!livePending) $('liveInterim').textContent = 'تكلّم… الكلام يظهر وأنت تتكلم.'; },
+        onPartial: function (t) { $('liveInterim').className = 'liveinterim'; $('liveInterim').textContent = t; },
+        onTurn: function (t) { var p = $('cmdChk') && $('cmdChk').checked ? Speech.command(t) : { text: t }; if (p.text) p.text = liveFix(p.text); liveParts.push(p); $('liveInterim').textContent = ''; liveInsert(p); },
+        onError: function (code) {
+          var s0 = liveStream; liveStream = null; try { if (s0) s0.stop(); } catch (e) {}
+          /* the key does not stream (old model list, quota): the same key in short pieces, else the built-in engine */
+          liveMode = code !== 'bad_key' && code !== 'quota' ? 'key' : needLocalAny() ? 'local' : 'none';
+          if (liveMode === 'local') LocalASR.load().catch(function () {});
+          engineNote(); showPending();
+        }
+      });
+    }
+    function needLocalAny() { return typeof LocalASR !== 'undefined' && LocalASR.supported(); }
     function liveBrowserFailed(code) {
+      /* v48: the browser's engine failed — Gemini Live streaming takes over when there is an audio key */
+      var aK = Engine.audioKey(KEY);
+      if (aK && typeof GeminiLive !== 'undefined' && rec) { liveMode = 'stream'; $('liveInterim').className = 'liveinterim'; $('liveInterim').textContent = 'جارٍ التحويل للكتابة عبر مفتاح الصوت…'; startStream(aK); engineNote(); return; }
       /* v44: the browser's engine failed — the built-in one takes over at once (the recording already keeps the samples) */
       if (rec && rec.pcmReady && rec.pcmReady() && typeof LocalASR !== 'undefined' && LocalASR.supported()) {
         liveMode = 'local'; LocalASR.load().catch(function () {}); clearInterval(liveT); liveT = setInterval(function () { liveTick(null); }, 300);
@@ -1549,11 +1582,13 @@
     $('recStart').addEventListener('click', async function () {
       $('voiceErr').hidden = true; $('liveInterim').className = 'liveinterim';
       var aKey = Engine.audioKey(KEY), onTick = function (sec, lvl) { $('recTime').textContent = Speech.fmtTime(sec); liveHist.push(lvl); if (liveHist.length > 400) liveHist.shift(); };
-      liveMode = aKey ? 'key' : Speech.liveSupported() && !isBrave() ? 'browser' : needLocal() ? 'local' : 'none';   // v43/v44: Brave → the engine built into the app
+      /* v48 order: the browser's own engine (Chrome/Edge: free, word by word) → Gemini Live streaming with the audio key (any
+         browser) → the engine built into the app. Each hands over to the next when it fails. */
+      liveMode = Speech.liveSupported() && !isBrave() ? 'browser' : aKey && typeof GeminiLive !== 'undefined' ? 'stream' : aKey ? 'key' : needLocal() ? 'local' : 'none';
       if (liveMode === 'local') LocalASR.load().catch(function () {});
       liveFixPrep();
       try {
-        rec = await Speech.recorder({ pcm: true, onTick: onTick, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } });
+        rec = await Speech.recorder({ pcm: true, onPcm: function (x) { if (liveStream) liveStream.send(x); }, onTick: onTick, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } });
       } catch (e) { $('voiceErr').hidden = false; $('voiceErr').textContent = Engine.errText({ code: 'mic' }); rec = null; return; }
       liveParts = []; liveHist = []; liveFail = 0; livePending = 0; liveQ = Promise.resolve(); $('liveConvert').hidden = true; liveHeard = 0; liveGotResult = false; liveStartT = Date.now();
       liveRec = liveMode !== 'browser' ? null : Speech.live({ lang: EXAM ? 'en-US' : 'ar-EG',
@@ -1563,6 +1598,7 @@
       $('liveBox').hidden = false;
       $('liveInterim').textContent = liveMode === 'key' ? 'تكلّم… الكلام يُكتب بعد كل وقفة قصيرة.' : liveMode === 'local' ? '' : liveMode === 'none' && isBrave() ? BRAVE_MSG : liveMode === 'none' ? 'الكتابة المباشرة غير متاحة في هذا المتصفح: اضغط داخل المربع واستخدم ميكروفون لوحة المفاتيح 🎤، أو أضف مفتاح الصوت من الإعدادات.' : '';
       rec.start(); if (liveRec) liveRec.start();
+      if (liveMode === 'stream') startStream(aKey);
       liveT = setInterval(function () { liveTick(aKey); }, 300);
       engineNote();
       if (liveMode === 'local') showPending();
@@ -1573,15 +1609,17 @@
     $('recPause').addEventListener('click', function () {
       if (!rec) return;
       flushLive(0.5);                                                              // what was said before the pause is written now
+      if (liveStream) liveStream.pause();
       rec.pause(); if (liveRec) liveRec.pause(); $('recStat').className = 'recstat paused'; $('recState').textContent = 'متوقف مؤقتًا — صحّح النص إن أردت ثم استكمل'; $('recPause').hidden = true; $('recResume').hidden = false; if (liveMode !== 'key' && liveMode !== 'local') $('liveInterim').textContent = ''; $('liveConvert').hidden = !liveText();
     });
-    $('recResume').addEventListener('click', function () { if (!rec) return; rec.resume(); if (liveRec) liveRec.resume(); $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…'; $('recPause').hidden = false; $('recResume').hidden = true; $('liveConvert').hidden = true; });
+    $('recResume').addEventListener('click', function () { if (!rec) return; rec.resume(); if (liveRec) liveRec.resume(); if (liveStream) liveStream.resume(); $('recStat').className = 'recstat on'; $('recState').textContent = 'جارٍ التسجيل…'; $('recPause').hidden = false; $('recResume').hidden = true; $('liveConvert').hidden = true; });
     $('recStop').addEventListener('click', async function () {
       if (!rec) return;
       $('recStop').disabled = true;
       if (liveRec) liveRec.stop();
       clearInterval(liveT); liveT = null;
       if (liveMode === 'key' || liveMode === 'local') { flushLive(0.5); $('recState').textContent = 'جارٍ كتابة آخر جملة…'; }
+      if (liveStream) { $('recState').textContent = 'جارٍ كتابة آخر جملة…'; var ls0 = liveStream; await ls0.stop(); liveStream = null; }
       var r = await rec.stop(); rec = null; clearInterval(waveT); Speech.drawWave($('wave'), liveHist, false);
       await liveQ;                                                                   // the last words are in the box before anything else
       recBlob = r.blob; recSecs = r.seconds;
@@ -1981,7 +2019,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '47';
+  var APP_VER = '48';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

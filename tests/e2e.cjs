@@ -1116,10 +1116,10 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await A.c.close(); await B.c.close();
   });
 
-  await step('v33 live dictation by the audio key: the browser engine is not used; what is said is cut at the pause, sent as a WAV to the key and written into the box in order; stop writes the last words before the buttons; convert uses the box', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: 'بناء على طلب السيد مينا سامي', FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
+  await step('v33 live dictation by the audio key in short pieces (when the key cannot stream): what is said is cut at the pause, sent as a WAV to the key and written into the box in order; stop writes the last words before the buttons; convert uses the box', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J, T: 'بناء على طلب السيد مينا سامي', FMT: FORMATTED }, null, 'sk-ant-test', async (page, calls) => {
     await page.evaluate(() => {
       localStorage.setItem('kateb.audiokey', 'AIza-test'); window.__srMade = 0;
-      window.SpeechRecognition = window.webkitSpeechRecognition = function () { window.__srMade++; this.start = this.stop = this.abort = () => {}; };
+      delete window.SpeechRecognition; delete window.webkitSpeechRecognition; window.GeminiLive = undefined;   // a browser without an engine, a key that does not stream
     });
     await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
     await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
@@ -1128,7 +1128,6 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('#recPause');                                       // what was said so far goes out now
     await page.waitForFunction(() => /مينا سامي/.test(document.getElementById('liveEdit').value), null, { timeout: 15000 });
     assert.ok(calls.audio && calls.audio.length >= 1 && calls.audio[0].mime === 'audio/wav', 'a WAV piece went to the audio key: ' + JSON.stringify(calls.audio));
-    assert.strictEqual(await page.evaluate(() => window.__srMade), 0, 'the browser speech engine (fails with «network» on the family\'s Chrome) is not used');
     await page.click('#recResume'); await page.waitForTimeout(1500);
     const before = calls.audio.length;
     await page.click('#recStop'); await page.waitForSelector('#recDone:not([hidden])', { timeout: 20000 });
@@ -1137,6 +1136,53 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual((v.match(/مينا سامي/g) || []).length, 2, 'both pieces are in the box, in order: ' + v);
     await page.click('#recConvert'); await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
     assert.strictEqual(calls.audio.length, before + 1, 'converting uses the box: no second transcription');
+  }));
+
+  await step('v48 Gemini Live streaming (any browser, Brave too, with the free audio key): the microphone streams as 16 kHz PCM, the words come back WHILE speaking (grey line), each phrase is written corrected at its pause; pause / resume / stop', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
+    await page.addInitScript(() => { navigator.brave = { isBrave: () => Promise.resolve(true) }; });
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    await page.evaluate(() => {
+      localStorage.setItem('kateb.audiokey', 'AIza-test'); localStorage.setItem('kateb.livemodel', 'gemini-live-test');
+      window.__ws = { url: '', setup: null, audio: 0, bytes: 0, ends: 0 };
+      window.WebSocket = function (url) {
+        const self = this; window.__ws.url = url; self.readyState = 0;
+        setTimeout(() => { self.readyState = 1; self.onopen && self.onopen(); }, 50);
+        self.send = (m) => { const j = JSON.parse(m);
+          if (j.setup) { window.__ws.setup = j.setup; setTimeout(() => self.onmessage({ data: JSON.stringify({ setupComplete: {} }) }), 30); return; }
+          if (j.realtimeInput && j.realtimeInput.audio) { window.__ws.audio++; window.__ws.bytes += j.realtimeInput.audio.data.length;
+            if (window.__ws.audio === 3) self.onmessage({ data: JSON.stringify({ serverContent: { inputTranscription: { text: 'بناء علي' } } }) });
+            if (window.__ws.audio === 5) self.onmessage({ data: JSON.stringify({ serverContent: { inputTranscription: { text: ' طلب السيد مينا' } } }) });
+            if (window.__ws.audio === 8) self.onmessage({ data: JSON.stringify({ serverContent: { turnComplete: true } }) }); }
+          if (j.realtimeInput && j.realtimeInput.audioStreamEnd) window.__ws.ends++;
+        };
+        self.close = () => { self.readyState = 3; self.onclose && self.onclose({ code: 1000, reason: '' }); };
+      };
+    });
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    assert.ok(await page.locator('#vKeyBox').isHidden(), 'with a key the «add the free key» card is not shown');
+    await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
+    await page.waitForFunction(() => /بناء علي/.test(document.getElementById('liveInterim').textContent), null, { timeout: 10000 });
+    assert.equal(await page.inputValue('#liveEdit'), '', 'while speaking the words show in the grey line');
+    await page.waitForFunction(() => /بناء على طلب السيد مينا/.test(document.getElementById('liveEdit').value), null, { timeout: 10000 });
+    const ws = await page.evaluate(() => window.__ws);
+    assert.ok(/BidiGenerateContent\?key=AIza-test/.test(ws.url) && ws.setup.model === 'models/gemini-live-test' && ws.setup.inputAudioTranscription && ws.setup.generationConfig.responseModalities[0] === 'TEXT', 'Live API setup: ' + JSON.stringify(ws.setup));
+    assert.ok(ws.audio >= 8 && ws.bytes > 1000, 'PCM streamed: ' + ws.audio);
+    assert.match(await page.textContent('#asrNote'), /Gemini Live/);
+    await page.click('#recPause'); assert.ok((await page.evaluate(() => window.__ws.ends)) >= 1, 'pause ends the audio stream');
+    await page.click('#recResume'); await page.waitForTimeout(400);
+    await page.click('#recStop'); await page.waitForSelector('#recDone:not([hidden])', { timeout: 15000 });
+    assert.ok(await page.locator('#recConvert').isVisible());
+  }));
+
+  await step('v48 Brave without a key: the voice screen offers the free audio key in one paste (checked before it is kept)', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
+    await page.addInitScript(() => { navigator.brave = { isBrave: () => Promise.resolve(true) }; });
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    await page.evaluate(() => { LocalASR.load = () => new Promise(() => {}); });
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    assert.ok(await page.locator('#vKeyBox').isVisible(), 'the free-key card is offered');
+    await page.click('#vKeyBox summary'); await page.fill('#vKeyIn', 'AIza-new'); await page.click('#vKeySave');
+    await page.waitForFunction(() => /تم/.test(document.getElementById('vKeyMsg').textContent), null, { timeout: 10000 });
+    assert.strictEqual(await page.evaluate(() => localStorage.getItem('kateb.audiokey')), 'AIza-new');
   }));
 
   await step('v44 Brave (the family\'s PC browser): the speech engine BUILT INTO the app writes what is said — prepared when the voice screen opens, every pause written into the box, spelling-corrected; the browser engine is not even tried', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
