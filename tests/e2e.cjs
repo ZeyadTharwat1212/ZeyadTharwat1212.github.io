@@ -65,7 +65,7 @@ async function fakeWorld(context, answers, calls) {
   });
   await context.route(/generativelanguage\.googleapis\.com/, async r => {
     const url = r.request().url();
-    if (/\/models\?/.test(url)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }] }) });
+    if (/\/models\?/.test(url)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-live-test', supportedGenerationMethods: ['bidiGenerateContent'] }] }) });
     const parts = JSON.parse(r.request().postData()).contents[0].parts, prompt = parts[0].text;
     const audio = parts.find(p => p.inline_data && /^audio\//.test(p.inline_data.mime_type));
     let kind = audio ? 'transcribe' : /CLOCKWISE/.test(prompt) ? 'rot' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
@@ -1172,6 +1172,36 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('#recResume'); await page.waitForTimeout(400);
     await page.click('#recStop'); await page.waitForSelector('#recDone:not([hidden])', { timeout: 15000 });
     assert.ok(await page.locator('#recConvert').isVisible());
+  }));
+
+  await step('v49 the family phone (Android Chrome): the browser engine gets the microphone ALONE (no recording beside it); when it writes nothing for 10 s the app takes the microphone, Gemini Live tries each Live model (an audio-only one gets AUDIO) and the words appear; any failure is named on screen', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {
+    await page.addInitScript(() => { Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (Linux; Android 14; SM-A546E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0 Mobile Safari/537.36' }); });
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    await page.evaluate(() => {
+      localStorage.setItem('kateb.audiokey', 'AIza-test'); localStorage.removeItem('kateb.livemodel');
+      window.__gum = 0; const g = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices); navigator.mediaDevices.getUserMedia = (c) => { window.__gum++; return g(c); };
+      window.SpeechRecognition = window.webkitSpeechRecognition = function () { this.start = this.stop = this.abort = () => {}; };   // starts, never writes
+      window.__setups = [];
+      window.WebSocket = function () {
+        const self = this; setTimeout(() => self.onopen && self.onopen(), 30);
+        self.send = (m) => { const j = JSON.parse(m);
+          if (j.setup) { window.__setups.push(j.setup.model + ':' + j.setup.generationConfig.responseModalities[0]);
+            if (window.__setups.length === 1) return setTimeout(() => self.onclose({ code: 1008, reason: 'models/x is not supported for TEXT' }), 30);
+            return setTimeout(() => self.onmessage({ data: JSON.stringify({ setupComplete: {} }) }), 30); }
+          if (j.realtimeInput && j.realtimeInput.audio && !self.said) { self.said = true; setTimeout(() => { self.onmessage({ data: JSON.stringify({ serverContent: { inputTranscription: { text: 'أنا المحضر سالف الذكر' } } }) }); self.onmessage({ data: JSON.stringify({ serverContent: { turnComplete: true } }) }); }, 100); }
+        };
+        self.close = () => {};
+      };
+    });
+    await page.route(/generativelanguage\.googleapis\.com\/v1beta\/models\?/, r => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ models: [{ name: 'models/gemini-2.0-flash-live-001', supportedGenerationMethods: ['bidiGenerateContent'] }, { name: 'models/gemini-2.5-flash-native-audio-preview', supportedGenerationMethods: ['bidiGenerateContent'] }] }) }));
+    await page.click('#voiceBtn'); await page.waitForSelector('#voice:not([hidden])');
+    await page.click('#recStart'); await page.waitForSelector('.recstat.on', { timeout: 10000 });
+    assert.strictEqual(await page.evaluate(() => window.__gum), 0, 'the speech engine has the microphone alone');
+    await page.waitForFunction(() => /أنا المحضر سالف الذكر/.test(document.getElementById('liveEdit').value), null, { timeout: 30000 });
+    const st = await page.evaluate(() => window.__setups);
+    assert.deepStrictEqual(st, ['models/gemini-2.0-flash-live-001:TEXT', 'models/gemini-2.5-flash-native-audio-preview:AUDIO'], 'each Live model tried, the audio-only one with AUDIO: ' + st);
+    assert.ok(await page.evaluate(() => window.__gum) >= 1, 'then the app took the microphone');
+    assert.match(await page.textContent('#asrNote'), /Gemini Live/);
   }));
 
   await step('v48 Brave without a key: the voice screen offers the free audio key in one paste (checked before it is kept)', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page) => {

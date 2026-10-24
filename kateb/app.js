@@ -1457,19 +1457,23 @@
       var job = (async function () {
         try {
           var ms = await Engine.audioModels(aKey);
-          var r = await Engine.generate(aKey, PROMPTS.transcribe(1, 1, $('cmdChk') ? $('cmdChk').checked : true), [wav], { models: ms, temperature: 0.1, maxTokens: 2048 });
+          var r = await Promise.race([Engine.generate(aKey, PROMPTS.transcribe(1, 1, $('cmdChk') ? $('cmdChk').checked : true), [wav], { models: ms, temperature: 0.1, maxTokens: 2048 }),
+            new Promise(function (_, rej) { setTimeout(function () { rej({ code: 'timeout' }); }, 30000); })]);   // v49: never «جارٍ كتابة» forever
           return Engine.clean(r.text).replace(/^\s*(لا يوجد كلام|لا شيء)\.?\s*$/gm, '').trim();
         } catch (e) { return { err: e }; }
       })();
       liveQ = liveQ.then(function () { return job; }).then(function (t) {
         livePending--;
-        if (t && t.err) { liveFail++; $('liveInterim').textContent = 'تعذّرت كتابة جزء من الكلام (' + Engine.errText(t.err) + ') — سيُكتب كاملًا من التسجيل عند «إنهاء التسجيل».'; return; }
+        if (t && t.err) { liveFail++; liveWhy = 'key: ' + ((t.err && (t.err.code || t.err.status)) || '') + ' ' + ((t.err && t.err.body) || '').slice(0, 120); engineNote(); $('liveInterim').textContent = 'تعذّرت كتابة جزء من الكلام (' + (t.err.code === 'timeout' ? 'لا رد من جوجل' : Engine.errText(t.err)) + ') — سيُكتب كاملًا من التسجيل عند «إنهاء التسجيل».'; return; }
         if (t) { t = liveFix(t); liveParts.push({ text: t }); liveInsert({ text: t }); }
         showPending();
       });
     }
     var liveHeard = 0, liveGotResult = false, liveStartT = 0;
+    var liveOnTick = null;
     function liveTick(aKey) {
+      /* v49 phones: the browser engine records alone (no samples, no level); nothing back for 10 s → hand over */
+      if (rec && !rec.pcmReady && liveMode === 'browser' && rec.state() === 'recording' && !liveGotResult && Date.now() - liveStartT > 10000) { liveGotResult = true; if (liveRec) { try { liveRec.stop(); } catch (e) {} liveRec = null; } liveWhy = 'محرك المتصفح لم يكتب شيئًا'; liveBrowserFailed('silent'); return; }
       if (!rec || !rec.pcmReady || !rec.pcmReady() || rec.state() !== 'recording') return;
       var pend = rec.pending(), lvl = rec.level(); liveQuiet = lvl < 0.02 ? liveQuiet + 1 : 0;
       /* v46: the browser's engine heard nothing back while the person was clearly talking (phones where it silently does
@@ -1487,6 +1491,7 @@
     function engineNote() {
       if (!$('asrNote')) return;
       var t = liveMode === 'stream' ? '🎙️ الكتابة: مباشرة عبر مفتاح الصوت (Gemini Live)' : liveMode === 'browser' ? '🎙️ الكتابة: محرك المتصفح (مباشر)' : liveMode === 'local' ? '🎙️ الكتابة: المحرك المدمج في البرنامج' + (typeof LocalASR !== 'undefined' && LocalASR.device() ? ' (' + LocalASR.device() + ')' : '') : liveMode === 'key' ? '🎙️ الكتابة: مفتاح الصوت' : '';
+      if (liveWhy) t += ' — ⚠️ ' + liveWhy;
       if (t) { $('asrNote').hidden = false; $('asrNote').textContent = t; }
     }
     /* v46: nothing was written live but the recording has sound → the built-in engine writes the whole recording */
@@ -1503,15 +1508,16 @@
     }
     function flushLive(min) { if (!rec) return; if (liveMode === 'key') sendSeg(Engine.audioKey(KEY), rec.cut(min)); else if (liveMode === 'local' && rec.cutPcm) sendLocal(rec.cutPcm(min)); }
     /* v48 Gemini Live: the words come back while speaking (grey line), each phrase is written corrected at its pause */
-    var liveStream = null;
+    var liveStream = null, liveWhy = '';
     function startStream(aKey) {
       liveStream = GeminiLive.start(aKey, {
         lang: EXAM ? 'en' : 'ar',
         onOpen: function () { engineNote(); if (!livePending) $('liveInterim').textContent = 'تكلّم… الكلام يظهر وأنت تتكلم.'; },
         onPartial: function (t) { $('liveInterim').className = 'liveinterim'; $('liveInterim').textContent = t; },
         onTurn: function (t) { var p = $('cmdChk') && $('cmdChk').checked ? Speech.command(t) : { text: t }; if (p.text) p.text = liveFix(p.text); liveParts.push(p); $('liveInterim').textContent = ''; liveInsert(p); },
-        onError: function (code) {
+        onError: function (code, why) {
           var s0 = liveStream; liveStream = null; try { if (s0) s0.stop(); } catch (e) {}
+          liveWhy = 'Gemini Live: ' + code + (why ? ' — ' + why : ''); try { console.warn(liveWhy); } catch (e) {}
           /* the key does not stream (old model list, quota): the same key in short pieces, else the built-in engine */
           liveMode = code !== 'bad_key' && code !== 'quota' ? 'key' : needLocalAny() ? 'local' : 'none';
           if (liveMode === 'local') LocalASR.load().catch(function () {});
@@ -1520,7 +1526,20 @@
       });
     }
     function needLocalAny() { return typeof LocalASR !== 'undefined' && LocalASR.supported(); }
-    function liveBrowserFailed(code) {
+    async function realRecorder() {
+      /* the phone's text-only recorder is swapped for a real one (samples kept) once the browser engine has let go of the mic */
+      if (!rec || rec.pcmReady) return true;
+      var old = rec;
+      try {
+        var nr = await Speech.recorder({ pcm: true, onPcm: function (x) { if (liveStream) liveStream.send(x); }, onTick: liveOnTick || function () {} });
+        try { old.stop(); } catch (e) {}
+        rec = nr; rec.start(); return true;
+      } catch (e) { liveWhy = 'mic: ' + (e && (e.name || e.message) || ''); return false; }
+    }
+    async function liveBrowserFailed(code) {
+      if (liveWhy === '' && code) liveWhy = 'محرك المتصفح: ' + code;
+      if (liveRec) { try { liveRec.stop(); } catch (e) {} liveRec = null; }
+      await realRecorder();
       /* v48: the browser's engine failed — Gemini Live streaming takes over when there is an audio key */
       var aK = Engine.audioKey(KEY);
       if (aK && typeof GeminiLive !== 'undefined' && rec) { liveMode = 'stream'; $('liveInterim').className = 'liveinterim'; $('liveInterim').textContent = 'جارٍ التحويل للكتابة عبر مفتاح الصوت…'; startStream(aK); engineNote(); return; }
@@ -1588,9 +1607,11 @@
       if (liveMode === 'local') LocalASR.load().catch(function () {});
       liveFixPrep();
       try {
-        rec = await Speech.recorder({ pcm: true, onPcm: function (x) { if (liveStream) liveStream.send(x); }, onTick: onTick, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } });
+        if (liveMode === 'browser' && /Android|iPhone|iPad/i.test(navigator.userAgent)) rec = textOnlyRec(onTick);   // v49: phones cannot share the microphone with the speech engine (v46 broke this)
+        else rec = await Speech.recorder({ pcm: true, onPcm: function (x) { if (liveStream) liveStream.send(x); }, onTick: onTick, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } });
       } catch (e) { $('voiceErr').hidden = false; $('voiceErr').textContent = Engine.errText({ code: 'mic' }); rec = null; return; }
-      liveParts = []; liveHist = []; liveFail = 0; livePending = 0; liveQ = Promise.resolve(); $('liveConvert').hidden = true; liveHeard = 0; liveGotResult = false; liveStartT = Date.now();
+      liveParts = []; liveHist = []; liveFail = 0; livePending = 0; liveQ = Promise.resolve(); $('liveConvert').hidden = true; liveHeard = 0; liveGotResult = false; liveStartT = Date.now(); liveWhy = '';
+      liveOnTick = onTick;
       liveRec = liveMode !== 'browser' ? null : Speech.live({ lang: EXAM ? 'en-US' : 'ar-EG',
         onInterim: function (t) { liveGotResult = true; $('liveInterim').textContent = t; },
         onFinal: function (t) { liveGotResult = true; var p = $('cmdChk').checked ? Speech.command(t) : { text: t }; if (p.text) p.text = liveFix(p.text); liveParts.push(p); $('liveInterim').textContent = ''; liveInsert(p); },
@@ -2019,7 +2040,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '48';
+  var APP_VER = '49';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
