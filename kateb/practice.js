@@ -12,7 +12,7 @@ var Practice = (function () {
   function dec(x, p) { return String(+x.toFixed(p)); }
   /* each generator: → {q: question without «= ____», a: answer text, v: numeric answer (for choices) or null} */
   var G = {
-    add3: function () { var a = R(105, 899), b = R(105, 999 - a > 105 ? 999 - a : 105); return { q: a + ' + ' + b, a: String(a + b), v: a + b }; },
+    add3: function () { var a = R(105, 849), b = R(100, 999 - a); return { q: a + ' + ' + b, a: String(a + b), v: a + b }; },
     sub3: function () { var a = R(300, 999), b = R(101, a - 50); return { q: a + ' − ' + b, a: String(a - b), v: a - b }; },
     mul1: function () { var a = R(2, 10), b = R(2, 10); return { q: a + ' × ' + b, a: String(a * b), v: a * b }; },
     mul21: function () { var a = R(12, 99), b = R(2, 9); return { q: a + ' × ' + b, a: String(a * b), v: a * b }; },
@@ -57,9 +57,9 @@ var Practice = (function () {
     set[v] = 1;
     var tries = 0;
     while (out.length < 4 && tries++ < 50) {
-      var d = pick([1, 2, 10, -1, -2, -10, 100, -100]), c = Number.isInteger(v) ? v + d : +(v + d / 10).toFixed(2);
+      var d = pick([1, 2, 3, 10, -1, -2, -3, -10, 100, -100]), c = Number.isInteger(v) ? v + d : +(v + d / 10).toFixed(2);
       if (Math.abs(v) < 20 && Math.abs(d) >= 10) continue;
-      if (v >= 0 && c < 0) continue;
+      if (v >= 0 && c < 0 && tries < 40) continue;                                 // a non-negative answer keeps positive choices (unless nothing else is left)
       if (!set[c]) { set[c] = 1; out.push(c); }
     }
     out.sort(function () { return Math.random() - 0.5; });

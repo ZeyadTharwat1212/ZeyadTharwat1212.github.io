@@ -549,3 +549,24 @@ test('v44 built-in speech engine: Whisper\'s inventions on silence are dropped, 
   assert.strictEqual(L._clean('...'), '');
   assert.strictEqual(L._clean(' بناء على طلب السيد  مينا '), 'بناء على طلب السيد مينا');
 });
+
+test('v52 exam math: Word-valid OMML (m:rPr before w:rPr, no sty=undefined), \\stackrel falls back yellow, bare |−5| does not split a choice', async () => {
+  const vm = require('vm'), fs = require('fs'); const c = { console }; c.globalThis = c; vm.createContext(c);
+  for (const [f, n] of [['../kateb/vendor/temml.min.js', 'temml'], ['../kateb/vendor/mathml2omml.js', 'MML2OMML'], ['../kateb/exam.js', 'ExamBuilder']]) vm.runInContext(fs.readFileSync(require('path').join(__dirname, f), 'utf8') + ';globalThis.' + n + '=' + n + ';', c);
+  const E = c.ExamBuilder;
+  const p = E.parseExam('[I] **1)** \\(\\mathrm{m}^2\\) \\(\\stackrel{\\frown}{AB}\\) \\(\\sqrt{49}\\)\n[OPT] a) 5 | b) −5 | c) |−5| | d) 0\n[FIG] <svg viewBox="0 0 10 10">\n<rect x="1"/>\n</svg>');
+  assert.strictEqual(p.blocks[1].cells.length, 4, 'four choices');
+  assert.strictEqual(p.blocks[2].k, 'fig'); assert.ok(/<\/svg>$/.test(p.blocks[2].svg), 'multi-line svg joined');
+  const x = await E.build(JSZip, p.blocks, { title: 'T' }, {}).generateAsync({ type: 'nodebuffer' }).then(b => JSZip.loadAsync(b)).then(z => z.file('word/document.xml').async('string'));
+  assert.ok(!/undefined/.test(x));
+  const runs = x.match(/<m:r>[\s\S]*?<\/m:r>/g);
+  assert.ok(runs.length >= 3 && runs.every(r => /^<m:r>(<m:rPr>[\s\S]*?<\/m:rPr>)?<w:rPr>[\s\S]*?<\/w:rPr><m:t/.test(r)), 'run order');
+  assert.ok(!/<m:t[^>]*>[^<]*<(?!\/m:t>)/.test(x), 'no element inside m:t');
+  assert.ok(/highlight/.test(x), 'the formula Word cannot take is yellow');
+});
+
+test('v52 arabic amounts: «اثني عشر ألف» (accusative, as the office writes it) matches 12000; practice choices are always four', () => {
+  const Arabic = require('../kateb/arabic.js'), Practice = require('../kateb/practice.js');
+  assert.ok(Arabic.sameAmount(12000, 'اثني عشر ألف جنيه'));
+  for (let i = 0; i < 300; i++) for (const g of ['P3', 'P6', 'PREP1']) (Practice.make({ grade: g, count: 12 }).match(/\[OPT\][^\n]*/g) || []).forEach(l => assert.strictEqual(l.split('|').length, 4, l));
+});

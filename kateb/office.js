@@ -246,7 +246,7 @@ var Office = (function () {
     var blankBeforeDate = T.order.indexOf('date') > 0 && T.order[T.order.indexOf('date') - 1] === 'blank';
     items.forEach(function (it) {
       if (it.role === 'table') {
-        paras.push({ role: 'table', xml: T.table ? tableXml(T, it.b.table) : (typeof DocxBuilder !== 'undefined' ? DocxBuilder.tableXml(it.b.table, true) : '') });
+        paras.push({ role: 'table', xml: T.table ? tableXml(T, it.b.table) : (typeof DocxBuilder !== 'undefined' ? DocxBuilder.tableXml(it.b.table, true, 8931) : '') });
         return;
       }
       if (it.role === 'date' && blankBeforeDate && !paras.some(function (p) { return p.role === 'date'; })) paras.push({ role: 'blank', pPr: T.blank, runs: '' });
@@ -275,7 +275,7 @@ var Office = (function () {
     var zip = await JSZip.loadAsync(await skeleton(key));
     var doc = await zip.file('word/document.xml').async('string');
     if (doc.indexOf('<!--KATEB-BODY-->') < 0) throw { code: 'template' };
-    zip.file('word/document.xml', doc.replace('<!--KATEB-BODY-->', body));
+    zip.file('word/document.xml', doc.replace('<!--KATEB-BODY-->', function () { return body; }));   // v52: a «$'» in the paper must not be read as a replacement pattern
     return zip;
   }
 

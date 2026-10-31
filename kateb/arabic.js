@@ -44,7 +44,7 @@ var Arabic = (function () {
   /* words of an amount as a comparable token list: «جنيه مصري لا غير», «فقط», brackets dropped */
   /* case endings are not differences: خمسين = خمسون, ألفين = ألفان, مائتين = مائتان, اثنين = اثنان */
   function inflect(w) {
-    return w.replace(/^(و?)(عشر|ثلاث|اربع|خمس|ست|سبع|ثمان|تسع)ين$/, '$1$2ون').replace(/^(و?)(الف|مليون|مليار|مائت)ين$/, '$1$2ان').replace(/^(و?)اثنين$/, '$1اثنان').replace(/^(و?)اثني عشر$/, '$1اثنا عشر');
+    return w.replace(/^(و?)(عشر|ثلاث|اربع|خمس|ست|سبع|ثمان|تسع)ين$/, '$1$2ون').replace(/^(و?)(الف|مليون|مليار|مائت)ين$/, '$1$2ان').replace(/^(و?)اثنين$/, '$1اثنان').replace(/^(و?)اثني$/, '$1اثنا');     // v52: tokens are single words — اثني عشر arrives as «اثني» + «عشر»
   }
   function amountTokens(t) {
     return norm(t).replace(/[()«»"]/g, ' ').split(' ').filter(function (w) { return w && !/^(جنيه|جنيها|جنيهات|مصري|مصريا|لا|غير|فقط|ج|م)$/.test(w); }).map(inflect);

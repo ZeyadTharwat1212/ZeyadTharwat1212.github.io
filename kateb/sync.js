@@ -59,7 +59,7 @@ var Sync = (function () {
     if (r.status === 401 || (r.status === 403 && !/rate limit/i.test(await r.clone().text().catch(function () { return ''; })))) throw { code: 'sync_auth', status: r.status };
     if (r.status === 403 || r.status === 429) throw { code: 'sync_rate', status: r.status };
     if (r.status === 404) return null;
-    if (r.status === 409 && /git\/trees/.test(path)) return { tree: [] };          // a new, empty repository
+    if (r.status === 409 && /git\/trees/.test(path)) return { tree: [], empty: true };   // a new, empty repository
     if (r.status === 409 || r.status === 422) throw { code: 'sync_conflict', status: r.status };
     if (!r.ok) throw { code: 'sync_http', status: r.status };
     return r.status === 204 ? {} : r.json();
@@ -67,7 +67,8 @@ var Sync = (function () {
   function pathOf(id) { return 'docs/' + MODE + '/' + id + '.json'; }
   async function tree() {
     var t = await gh('GET', '/git/trees/HEAD?recursive=1'), docs = {}, blobs = {}, prefs = null;
-    if (!t) t = { tree: [] };
+    /* v52: a repository the token cannot see any more (404) is an error, never «everything was deleted elsewhere» */
+    if (!t) throw { code: 'sync_norepo' };
     var re = new RegExp('^docs/' + MODE + '/([A-Za-z0-9_-]+)\\.json$');
     (t.tree || []).forEach(function (e) {
       if (e.type !== 'blob') return;
@@ -75,13 +76,14 @@ var Sync = (function () {
       var b = /^blobs\/([0-9a-f]{32})$/.exec(e.path); if (b) blobs[b[1]] = e.sha;
       if (e.path === 'prefs/' + MODE + '.json') prefs = e.sha;
     });
-    return { docs: docs, blobs: blobs, prefs: prefs };
+    return { docs: docs, blobs: blobs, prefs: prefs, empty: !!t.empty };
   }
   async function readFile(sha) { var j = await gh('GET', '/git/blobs/' + sha); if (!j) throw { code: 'sync_missing' }; return open(unb64(j.content)); }
   async function writeFile(path, bytes, sha) {
     var body = { message: 'kateb', content: b64(await seal(bytes)) }; if (sha) body.sha = sha;
     var j = await gh('PUT', '/contents/' + path, body);
-    return j && j.content && j.content.sha;
+    if (!j || !j.content || !j.content.sha) throw { code: 'sync_norepo' };          // v52: a lost PUT was recorded as success and later overwrote local edits
+    return j.content.sha;
   }
   async function removeFile(path, sha) { try { await gh('DELETE', '/contents/' + path, { message: 'kateb', sha: sha }); } catch (e) { if (e.code !== 'sync_conflict') throw e; } }
 
@@ -185,7 +187,7 @@ var Sync = (function () {
     for (var j = 0; j < locals.length; j++) {
       var d = locals[j]; if (tr.docs[d.id] || ids.indexOf(d.id) >= 0) continue;
       try {
-        if (S[d.id] && d.updated === S[d.id].at) { await Store.del('docs', d.id); delete S[d.id]; saveState(S); pulled.push(d.id); }   // removed for good on another device
+        if (S[d.id] && d.updated === S[d.id].at && !tr.empty) { await Store.del('docs', d.id); delete S[d.id]; saveState(S); pulled.push(d.id); }   // removed for good on another device
         else await push(d, null);                                                  // new here (or this device's files, first time)
       } catch (e) { if (e.code === 'sync_conflict') again = true; else throw e; }
     }
@@ -240,9 +242,9 @@ var Sync = (function () {
   var MSG = {
     sync_net: 'لا يوجد إنترنت الآن — الملفات محفوظة على هذا الجهاز وتُرفع تلقائيًا عند عودة الإنترنت.',
     sync_auth: 'رمز المزامنة لم يعد يعمل (انتهى أو حُذف). زياد يعمل رابطًا جديدًا من صفحة التجهيز.',
+    sync_norepo: 'مخزن المزامنة غير موجود أو الرمز لا يراه — الملفات محفوظة على هذا الجهاز ولم يُحذف شيء. زياد يراجع صفحة التجهيز.',
     sync_rate: 'GitHub طلب الانتظار قليلًا — تُستكمل المزامنة بعد دقائق.',
     sync_http: 'تعذرت المزامنة الآن — تُعاد المحاولة تلقائيًا.',
-    sync_norepo: 'المستودع kateb-files غير موجود أو الرمز لا يصل إليه.',
     sync_public: 'المستودع عام (Public) — لازم يكون خاص (Private).',
     sync_readonly: 'الرمز بدون صلاحية الكتابة (Contents: Read and write).',
     sync_otherkey: 'الملفات المشتركة اتعملت بمفتاح قراءة مختلف عن مفتاح هذا الجهاز.'

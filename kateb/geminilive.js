@@ -35,10 +35,11 @@ var GeminiLive = (function () {
   function start(key, opt) {
     opt = opt || {};
     var ws = null, open = false, setupDone = false, paused = false, stopped = false, buf = [], bufLen = 0, turn = '', sendT = null, model = '', reconnects = 0, everSetup = false;
-    var cands = null, ci = 0, why = [];
+    var cands = null, ci = 0, why = [], openedAt = 0;
     function emitTurn() { var t = turn.replace(/\s+/g, ' ').trim(); turn = ''; if (t && opt.onTurn) opt.onTurn(t); }
     async function connect() {
       if (!cands) { try { cands = await candidates(key); } catch (e) { if (opt.onError) opt.onError(e.code || 'net', e.why || ''); return; } }
+      if (stopped) return;                                                         // v52: stop() came while the models were being listed
       var c = cands[ci]; model = c.name;
       try { ws = new WebSocket(WS + '?key=' + encodeURIComponent(key)); } catch (e) { if (opt.onError) opt.onError('net', 'websocket'); return; }
       ws.onopen = function () {
@@ -54,7 +55,7 @@ var GeminiLive = (function () {
       ws.onmessage = async function (ev) {
         var raw = ev.data; if (typeof raw !== 'string') { try { raw = await (raw.text ? raw.text() : new Response(raw).text()); } catch (e) { return; } }
         var m; try { m = JSON.parse(raw); } catch (e) { return; }
-        if (m.setupComplete) { setupDone = true; everSetup = true; reconnects = 0; lsSet(LS_MODEL, model); if (opt.onOpen) opt.onOpen(model); flush(); return; }
+        if (m.setupComplete) { setupDone = true; everSetup = true; openedAt = Date.now(); lsSet(LS_MODEL, model); if (opt.onOpen) opt.onOpen(model); flush(); return; }
         if (m.error) why.push(model + ': ' + (m.error.message || JSON.stringify(m.error)).slice(0, 160));
         var sc = m.serverContent; if (!sc) return;
         if (sc.inputTranscription && sc.inputTranscription.text) { turn += sc.inputTranscription.text; if (opt.onPartial) opt.onPartial(turn.replace(/\s+/g, ' ').trim()); }
@@ -70,7 +71,9 @@ var GeminiLive = (function () {
           if (++ci < cands.length && ci < 4) { setTimeout(connect, 150); return; }          // the next model
           lsSet(LS_MODEL, ''); if (opt.onError) opt.onError(/quota|exhaust|429|RESOURCE/i.test(why.join(' ')) ? 'quota' : 'live_failed', why.join(' · ')); return;
         }
-        /* sessions are time-limited (~10-15 min): reconnect and keep going */
+        /* sessions are time-limited (~10-15 min): reconnect and keep going — a session that lived a while earns its
+           reconnects back; one that dies right after setup (quota gone) does not loop forever (v52) */
+        if (was && Date.now() - openedAt > 60000) reconnects = 0;
         if (reconnects++ < 5) setTimeout(connect, was ? 200 : 1500); else if (opt.onError) opt.onError('live_failed', ev.reason || '');
       };
     }

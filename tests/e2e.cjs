@@ -1183,7 +1183,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.evaluate(() => {
       localStorage.setItem('kateb.audiokey', 'AIza-test'); localStorage.removeItem('kateb.livemodel');
       window.__gum = 0; const g = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices); navigator.mediaDevices.getUserMedia = (c) => { window.__gum++; return g(c); };
-      window.SpeechRecognition = window.webkitSpeechRecognition = function () { this.start = this.stop = this.abort = () => {}; };   // starts, never writes
+      window.SpeechRecognition = window.webkitSpeechRecognition = function () { var me = this; this.start = () => { setTimeout(() => { if (me.onspeechstart) me.onspeechstart(); }, 300); }; this.stop = this.abort = () => {}; };   // hears speech, never writes (v52: silence alone is no failure)
       window.__setups = [];
       window.WebSocket = function () {
         const self = this; setTimeout(() => self.onopen && self.onopen(), 30);

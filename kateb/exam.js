@@ -48,11 +48,19 @@ var ExamBuilder = (function () {
         x = x.replace(/<m:oMath\b[^>]*>/, '<m:oMath>')
           .replace(/<m:chr m:val="([^"]*)" m:pos="(top|bot)"\/>/g, '<m:chr m:val="$1"/><m:pos m:val="$2"/><m:vertJc m:val="$2"/>')       // the library writes pos as an attribute: Word wants an element
           .replace(/(<m:t[^>]*>)([^<]*)/g, function (a, t, v) { return t + v.replace(/\|/g, '∣'); })                   // |−5|: the bar sign every Word and LibreOffice draws
-          .replace(/<m:borderBox><m:borderBoxPr><m:hideBot m:val="on"\/><m:hideLeft m:val="on"\/><m:hideRight m:val="on"\/><\/m:borderBoxPr>([\s\S]*?)<\/m:borderBox>/g, function (a, e) { return '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>' + e + '</m:bar>'; }).replace(/<m:r>(<m:rPr>[\s\S]*?<\/m:rPr>)?/g, function (all, mp) { return '<m:r>' + (mp || '') + mrpr(o); });
-        if (/^<m:oMath>[\s\S]*<\/m:oMath>$/.test(x)) return x;
+          .replace(/<m:borderBox><m:borderBoxPr><m:hideBot m:val="on"\/><m:hideLeft m:val="on"\/><m:hideRight m:val="on"\/><\/m:borderBoxPr>([\s\S]*?)<\/m:borderBox>/g, function (a, e) { return '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>' + e + '</m:bar>'; })
+          /* v52: every run rebuilt in schema order (m:rPr, then w:rPr, then m:t); the library's own <w:rPr/> and its
+             <m:sty m:val="undefined"/> (from \mathrm{m}) made Word complain about unreadable content */
+          .replace(/<m:r>([\s\S]*?)<\/m:r>/g, function (all, inner) {
+            var mp = (inner.match(/<m:rPr>[\s\S]*?<\/m:rPr>/) || [''])[0].replace(/<m:sty m:val="undefined"\/>/g, '').replace(/<m:rPr><\/m:rPr>/, '');
+            var rest = inner.replace(/<m:rPr>[\s\S]*?<\/m:rPr>/g, '').replace(/<w:rPr\/>|<w:rPr>[\s\S]*?<\/w:rPr>/g, '');
+            return '<m:r>' + mp + mrpr(o) + rest + '</m:r>';
+          });
+        var nested = /<m:t[^>]*>[^<]*<(?!\/m:t>)/.test(x);                     // an element inside m:t (\stackrel): Word rejects it
+        if (!nested && /^<m:oMath>[\s\S]*<\/m:oMath>$/.test(x)) return x;
       } catch (e) {}
     }
-    return textRuns(texPlain(tex), o);
+    return textRuns(texPlain(tex), Object.assign({}, o, { hl: true }));          // v52: a formula Word cannot get is shown yellow, never silently flattened
   }
   function runsXml(runs, base) {
     return (runs || []).map(function (r) {
@@ -209,9 +217,13 @@ var ExamBuilder = (function () {
   }
 
   /* split a line on | or || but never inside \( … \) or ⟦ … ⟧ (|x| and ⟦a|b⟧ stay whole) */
-  function splitTop(str, sep) {
+  function splitTop(str, sep, loose) {
     var out = [], cur = '', depthM = 0, depthD = 0;
+    /* v52: a bare |−5| (absolute value without \( \)) is not a separator: a single | splits only with a space on both
+       sides; if that finds no separator at all, the old loose rule applies */
+    if (sep === '|' && !loose) { var strict = splitTop(str, sep, 'strict'); return strict.length > 1 ? strict : splitTop(str, sep, true); }
     for (var i = 0; i < str.length; i++) {
+      if (loose === 'strict' && str[i] === '|' && !depthM && !depthD && str[i + 1] !== '|' && str[i - 1] !== '|' && !(/\s/.test(str[i - 1] || ' ') && /\s/.test(str[i + 1] || ' '))) { cur += '|'; continue; }
       if (str.substr(i, 2) === '\\(') { depthM++; cur += '\\('; i++; continue; }
       if (str.substr(i, 2) === '\\)' && depthM) { depthM--; cur += '\\)'; i++; continue; }
       var ch = str[i];
@@ -225,7 +237,9 @@ var ExamBuilder = (function () {
   /* model output → {meta, blocks}. Figures keep their box for the page to crop. */
   function parseExam(text) {
     var meta = {}, blocks = [];
-    String(text || '').replace(/\r/g, '').split('\n').forEach(function (raw) {
+    /* v52: an SVG the model wrapped over several lines is joined back onto its [FIG] line */
+    text = String(text || '').replace(/\r/g, '').replace(/(\[FIG[^\]]*\][^\n]*<svg[^\n]*?)(?![^\n]*<\/svg>)\n([\s\S]*?<\/svg>)/gi, function (a, head, rest) { return head + ' ' + rest.replace(/\n+/g, ' '); });
+    text.split('\n').forEach(function (raw) {
       var line = raw.trim(); if (!line) return;
       var mm;
       if ((mm = line.match(/^GRADE:\s*(.+)$/i))) { meta.grade = mm[1].trim(); return; }

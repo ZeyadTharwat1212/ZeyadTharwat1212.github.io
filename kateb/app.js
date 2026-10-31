@@ -76,9 +76,11 @@
   /* opened from the home-screen icon without a saved key (iPhone keeps a separate storage): paste the link once */
   $('linkForm').addEventListener('submit', function (e) {
     e.preventDefault();
-    var m = ($('linkIn').value || '').match(/k=([A-Za-z0-9_-]{40,})/);
+    var v = $('linkIn').value || '', m = v.match(/k=([A-Za-z0-9_-]{40,})/);
     if (!m) { $('linkErr').hidden = false; return; }
-    $('linkErr').hidden = true; history.replaceState(null, '', location.pathname + '#k=' + m[1]);
+    var frag = (v.match(/#(.*)$/) || [0, ''])[1];                 // v52: the whole fragment (audio key, sync, memory) — not only k=
+    if (!/(^|&)k=/.test(frag)) frag = 'k=' + m[1];
+    $('linkErr').hidden = true; history.replaceState(null, '', location.pathname + '#' + frag);
     show('lock'); setTimeout(function () { $('pw').focus(); }, 50);
   });
   $('lockForm').addEventListener('submit', async function (e) {
@@ -96,7 +98,7 @@
     finally { $('pwBtn').disabled = false; $('pwBtn').textContent = 'دخول'; }
   });
   function toStart() {
-    CLAUDE = Engine.provider(KEY) === 'claude';
+    CLAUDE = Engine.provider(KEY) === 'claude'; SHORT = CLAUDE && !EXAM;
     var name = Engine.provider(KEY) === 'claude' ? 'Claude' : 'Gemini';
     var b = $('providerBadge'); if (b) { b.textContent = name; b.hidden = false; }
     var w = $('readerNote'); if (w) w.textContent = 'القارئ: ' + name + (name === 'Claude' ? ' (Opus 5.5' + (Engine.fastOn() ? ' ⚡ وضع السرعة' : '') + (econ() ? ' 💰 وضع التوفير' : ' 🎯 أقصى دقة') + ' — قراءتان + مراجعة + فحص الأرقام)' : ' (المجاني — أبطأ)') + '. اترك الصفحة مفتوحة.';
@@ -127,8 +129,10 @@
     if (!syncHooked && Sync.onPrefs) Sync.onPrefs(function () {          // v41: settings / learning / memory from another device
       loadLearn().then(function (items) { learnItems = learnOn() ? items : []; }).catch(function () {});
       if (curScreen === 'settings') renderSettings(); homeCards(); try { paintOut(); } catch (e) {}
+      try { var ev = Engine.lsGet('kateb.enhance'); if ($('enhanceChk') && ev !== null) $('enhanceChk').checked = ev === '1'; } catch (e) {}
     });
     if (!syncHooked) { syncHooked = true; Sync.onStatus(paintSync); Sync.onPulled(function (ids) {
+      if (curDoc && ids.indexOf(curDoc.id) >= 0) pulledOpenDoc();
       homeCards();
       if (curScreen === 'files') renderFiles(); else if (curScreen === 'trash') renderTrash(); else if (curScreen === 'settings') renderSettings();
     }); }
@@ -157,6 +161,11 @@
   /* ---------- camera: one page per shot, cleaned, collected in a tray, read together ---------- */
   var shots = [], blur = [];
   function enhanceOn() { var c = $('enhanceChk'); return !c || c.checked; }
+  /* v52: the choice is remembered (and travels with the settings sync); before, every reload turned it back on */
+  (function () {
+    var v = Engine.lsGet('kateb.enhance'), on = v === null ? true : v === '1';
+    if ($('enhanceChk')) { $('enhanceChk').checked = on; $('enhanceChk').addEventListener('change', function () { Engine.lsSet('kateb.enhance', this.checked ? '1' : '0'); if ($('setEnhance')) $('setEnhance').checked = this.checked; }); }
+  })();
   /* v39: a real messy handwritten paper was read far worse from the enhanced (black/white) image — thin strokes vanish.
      The reader now gets the photo only straightened; the enhanced one is for the screen. */
   function plainOf(c) { try { return typeof Scan !== 'undefined' && Scan.deskew ? Scan.deskew(c) : c; } catch (e) { return c; } }
@@ -164,7 +173,7 @@
   /* a photo → { orig, clean, quad }: the paper found and straightened (Scan.smart), then white paper / dark ink;
      a PDF page or a photo with enhancement off stays as it is */
   function shotOf(c, isPdf, quad) {
-    if (isPdf || !enhanceOn() || typeof Scan === 'undefined' || !Scan.smart) return { orig: c, clean: c, plain: c, quad: null };
+    if (isPdf || (!enhanceOn() && !quad) || typeof Scan === 'undefined' || !Scan.smart) return { orig: c, clean: c, plain: c, quad: null };
     try { var sm = Scan.smart(c, quad); return { orig: c, clean: sm.canvas, plain: sm.plain || c, quad: sm.quad }; } catch (e) { return { orig: c, clean: cleaned(c), plain: c, quad: null }; }
   }
   var BLUR = 18;                                               // strongest-edge strength below this (crisp text ≈ 140, 2px blur ≈ 10): warn
@@ -217,7 +226,8 @@
     run();
   }
   $('againBtn').addEventListener('click', toStart);
-  $('retryBtn').addEventListener('click', function () { if (pages.length) run(); else toStart(); });
+  var retryFn = null;                                   // v52: «حاول مرة أخرى» repeats the job that failed, never an older photo run
+  $('retryBtn').addEventListener('click', function () { var f = retryFn; retryFn = null; if (f) f(); else toStart(); });
   $('homeBtn').addEventListener('click', toStart);
   $('resumeBtn').addEventListener('click', function () {
     Store.getDoc(Engine.lsGet(LAST) || '').then(function (doc) {
@@ -225,6 +235,26 @@
       var d = loadDraft(); if (!d) { toStart(); return; } curDoc = null; results = d.pages; finish(true);
     }).catch(function () { var d = loadDraft(); if (!d) { toStart(); return; } curDoc = null; results = d.pages; finish(true); });
   });
+  /* v52: the open document was changed on another device — merge it into what is on screen instead of letting the
+     next keystroke overwrite the other person's edits (newer text wins, the other becomes an «other-device» version) */
+  var pulling = false;
+  function pulledOpenDoc() {
+    if (pulling || running || !curDoc || typeof Sync === 'undefined' || !Sync._merge) return;
+    pulling = true; var mine = curDoc;
+    Store.getDoc(mine.id).then(function (stored) {
+      if (!stored || curDoc !== mine) return;
+      if (stored.deletedAt) { $('savedNote').hidden = false; $('savedNote').textContent = 'هذا الملف نُقل إلى المحذوفات من جهاز آخر. أي تعديل هنا يرجعه إلى ملفاتي.'; return; }
+      var onScreen = $('done') && !$('done').hidden;
+      if (onScreen) { var ps = pagesNow(); if (ps.length) { mine.pages = ps; ps.forEach(function (p, i) { if (results[i]) results[i].html = p.html; }); } }
+      var m = Sync._merge(mine, stored), changed = JSON.stringify((m.pages || []).map(function (p) { return p.html; })) !== JSON.stringify((mine.pages || []).map(function (p) { return p.html; }));
+      curDoc = m;
+      return Store.saveDoc(m).then(function () {
+        if (!onScreen || !changed || curDoc !== m) return;
+        openDoc(m);
+        $('savedNote').hidden = false; $('savedNote').textContent = 'وصل تعديل لهذا الملف من جهاز آخر وتم دمجه. النص السابق في «نسخ سابقة».';
+      });
+    }).catch(function () {}).then(function () { pulling = false; });
+  }
   function openDoc(doc) {
     curDoc = doc; results = doc.pages.map(function (p) { return { html: p.html, img: p.img, text: p.text, type: doc.type }; });
     usedModels = {}; finish(true);
@@ -252,14 +282,21 @@
     pages.forEach(function (p) { var im = document.createElement('img'); im.alt = ''; im.src = Engine.scaled(p.base, 200).toDataURL('image/jpeg', 0.7); $('thumbs').appendChild(im); });
     run();
   }
-  function fail(e) { running = false; $('failMsg').textContent = Engine.errText(e); show('fail'); }
+  function fail(e, retry) {
+    running = false; reconvertDoc = null; stageNames(STAGE_IMG);
+    retryFn = retry || null; if (!retry) pages = [];
+    var code = e && e.code ? String(e.code) : (e && e.message ? String(e.message).slice(0, 60) : '');
+    $('failMsg').textContent = Engine.errText(e) + (code ? ' (' + code + ')' : '');
+    try { console.warn('kateb fail', e); } catch (x) {}
+    show('fail');
+  }
 
   function onWait(sec) { $('waitText').hidden = false; $('waitText').textContent = 'الخدمة مزدحمة، سننتظر ' + sec + ' ثانية ونكمل تلقائياً…'; }
 
   /* one page: both reads at once, rotation taken from the reads, then the judge with the formula bank of the
      detected paper type, Verify.guard marks what the reads did not agree on, Bank.snap fixes doubtful words
      that sit inside a known formula. */
-  var CLAUDE = Engine.provider(KEY) === 'claude', SHORT = CLAUDE && !EXAM;     // SHORT: the short judge (only the disputed places)
+  var CLAUDE = Engine.provider(KEY) === 'claude', SHORT = CLAUDE && !EXAM;     // SHORT: the short judge (only the disputed places); v52: both follow the key (toStart)
   /* a reply that is an apology instead of the page («I can't transcribe…») */
   function refusal(t) { var x = String(t || '').replace(/^\s*ROT:\s*\d+\s*/, '').slice(0, 400); return /\b(I can'?t|I cannot|I'm unable|I am unable|unable to (read|transcribe)|can'?t (produce|transcribe|read))\b/i.test(x); }
   function rotOf(t) { var m = /^\s*ROT:\s*(0|90|180|270)/.exec(t || ''); return m ? +m[1] : 0; }
@@ -275,7 +312,7 @@
        became a yellow «disagreement» (39 on one page) and forced a full rewrite. One careful Opus read; its own doubts
        get the short check. «🎯 أقصى دقة» keeps two Opus reads and the judge. */
     var pb = short ? Promise.resolve(null) : Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: econ() ? 'low' : eff, best: !short, system: system, context: ctx })
-      .then(function (r) { if (r.model) usedModels[r.model] = 1; return r.truncated ? null : Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
+      .then(function (r) { if (r.model) usedModels[r.model] = 1; return r.truncated ? null : Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit' || e.code === 'cancelled')) throw e; return null; });
     var ra = await pa, b = await pb;
     if (ra.model) usedModels[ra.model] = 1;
     return { a: Engine.clean(ra.text), b: b };
@@ -413,7 +450,7 @@
         printed = /PRINTED/i.test(kl.slice(1).join(' '));
         if (kr && +kr[1] === 180) { p.canvas = Engine.rotated(p.canvas, 180); p.turn = (p.turn + 180) % 360; imgs = await Engine.pageImages(p.canvas, bands, side); }   // upside down: turned before the reads
         else if (kr) { var up2 = await pickUpright(p.canvas, [90, 270]); if (up2 !== null) { p.canvas = Engine.rotated(p.canvas, up2); p.turn = (p.turn + up2) % 360; imgs = await Engine.pageImages(p.canvas, bands, side); } }
-      } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
+      } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit' || e.code === 'cancelled')) throw e; }
     }
     if (plainRun) type = null;                                            // «نص فقط»: no paper type, no formulas
     if (type && typeof Bank !== 'undefined') bank = await Bank.load(type);
@@ -458,7 +495,7 @@
     var final = a, d = b ? Verify.disagreements(a, b) : null;
     /* the numbers pass runs beside the judge: every number, date and amount read once more on its own */
     var numbersP = ocrUsed ? Promise.resolve(null) : Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, econ() ? { onWait: onWait, signal: sig(), effort: 'low', maxTokens: 2048 } : { onWait: onWait, signal: sig(), effort: 'high', best: true, maxTokens: 2048, system: system, context: ctx })
-      .then(function (r) { if (r.model) usedModels[r.model] = 1; return Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; return null; });
+      .then(function (r) { if (r.model) usedModels[r.model] = 1; return Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit' || e.code === 'cancelled')) throw e; return null; });
     try {
       var mk = SHORT && !ocrUsed ? Verify.marks(a, b || null) : null;
       if (ocrUsed) {
@@ -489,7 +526,7 @@
         var rc = await Engine.generate(KEY, PROMPTS.check(imgs.bands, a), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: econ() ? 'medium' : 'high', best: true });
         var tc = Engine.clean(rc.text); if (tc.length > a.length * 0.6 && !rc.truncated && !refusal(tc)) final = tc;
       }
-    } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit')) throw e; }
+    } catch (e) { if (e && (e.code === 'bad_key' || e.code === 'credit' || e.code === 'cancelled')) throw e; }
     var learned = 0;
     if (learnOn() && learnItems.length) {
       /* this hand's own words: a doubt the model kept on a word the family already confirmed is lifted (the guard
@@ -585,7 +622,7 @@
       finish();
     } catch (e) {
       if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; reconvertDoc = null; pages = []; results = []; toStart(); return; }
-      fail(e);
+      var rd = reconvertDoc; fail(e, function () { reconvertDoc = rd; run(); });
     }
     running = false;
   }
@@ -1065,8 +1102,8 @@
         }
         try { localStorage.removeItem('exam.askDraft'); } catch (e) {}
       } catch (e) {
-        if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; toStart(); return; }
-        fail(e);
+        if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; stageNames(STAGE_IMG); toStart(); return; }
+        fail(e, function () { $('askText').value = req; $('askOk').click(); });
       }
       running = false; stageNames(STAGE_IMG);
     });
@@ -1400,7 +1437,7 @@
       var id = card.dataset.id, d = filesAll.filter(function (x) { return x.id === id; })[0]; if (!d) return;
       if (b.dataset.act === 'open') { Store.getDoc(id).then(function (doc) { if (doc) openDoc(doc); }); }
       else if (b.dataset.act === 'rename') { var n = window.prompt('اسم الملف الجديد:', d.name); if (n && n.trim()) Store.renameDoc(id, n.trim()).then(function () { if (curDoc && curDoc.id === id) curDoc.name = n.trim(); renderFiles(); }); }
-      else if (b.dataset.act === 'trash') { if (window.confirm('نقل «' + d.name + '» إلى المحذوفات؟ يمكنك استرجاعه خلال 30 يومًا.')) Store.trashDoc(id).then(function () { if (curDoc && curDoc.id === id) { curDoc = null; results = []; } renderFiles(); }); }
+      else if (b.dataset.act === 'trash') { if (window.confirm('نقل «' + d.name + '» إلى المحذوفات؟ يمكنك استرجاعه خلال 30 يومًا.')) Store.trashDoc(id).then(function () { if (curDoc && curDoc.id === id) { curDoc = null; results = []; try { localStorage.removeItem(DRAFT); localStorage.removeItem(LAST); } catch (e) {} } renderFiles(); }); }   // v52: no «استكمال» of a trashed file
     });
     $('trashList').addEventListener('click', function (e) {
       var b = e.target.closest('[data-act]'), card = e.target.closest('.doc'); if (!b || !card) return;
@@ -1452,7 +1489,7 @@
   if ($('usageResetBtn')) $('usageResetBtn').addEventListener('click', function () { if (window.confirm('تصفير عداد الاستهلاك على هذا الجهاز؟')) { Engine.usageReset(); renderUsage(); } });
   if ($('settings')) {
     $('setLearnBtn').addEventListener('click', renderLearn);
-    $('setEnhance').addEventListener('change', function () { if ($('enhanceChk')) $('enhanceChk').checked = this.checked; });
+    $('setEnhance').addEventListener('change', function () { Engine.lsSet('kateb.enhance', this.checked ? '1' : '0'); if ($('enhanceChk')) $('enhanceChk').checked = this.checked; });
     if ($('setFast')) $('setFast').addEventListener('change', function () { Engine.setFast(this.checked); });
     if ($('setOcr')) $('setOcr').addEventListener('change', function () { Engine.lsSet('kateb.ocr', this.checked ? '1' : '0'); });
     if ($('setDict')) $('setDict').addEventListener('change', function () { Engine.lsSet('kateb.dict', this.checked ? '1' : '0'); });
@@ -1541,9 +1578,16 @@
     /* a dictation left unfinished (the page was closed): it comes back */
     if (dr && !$('liveEdit').value && !rec) { $('liveEdit').value = dr; saveLive(); $('liveBox').hidden = false; $('liveConvert').hidden = false; $('liveInterim').textContent = 'رجع آخر نص لم يُحوَّل بعد — استكمل التسجيل أو حوّله.'; }
   }
+  /* v52: keep the screen awake while recording — Android stops the browser speech engine when the screen locks */
+  var wakeLock = null;
+  function wakeOn() { try { if (navigator.wakeLock && !wakeLock) navigator.wakeLock.request('screen').then(function (l) { wakeLock = l; l.addEventListener('release', function () { wakeLock = null; }); }).catch(function () {}); } catch (e) {} }
+  function wakeOff() { try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {} }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && rec && rec.state && rec.state() === 'recording') wakeOn(); });
   function resetRec() {
+    wakeOff();
     if (rec) { try { rec.stop(); } catch (e) {} } rec = null; if (liveRec) { try { liveRec.stop(); } catch (e) {} } liveRec = null;
     recBlob = null; recSecs = 0; liveParts = []; liveHist = []; clearInterval(waveT); waveT = null;
+    try { clearInterval(liveT); liveT = null; if (liveStream) { var s1 = liveStream; liveStream = null; s1.stop(); } } catch (e) {}   // v52: no orphan timer / socket
     if (recAudioUrl) { try { URL.revokeObjectURL(recAudioUrl); } catch (e) {} recAudioUrl = null; }
     $('recStat').className = 'recstat'; $('recState').textContent = 'جاهز للتسجيل'; $('recTime').textContent = '٠:٠٠';
     $('recStart').hidden = false; $('recPause').hidden = true; $('recResume').hidden = true; $('recStop').hidden = true;
@@ -1638,7 +1682,7 @@
       })();
       liveQ = liveQ.then(function () { return job; }).then(function (t) {
         livePending--;
-        if (t && t.err) { liveFail++; liveWhy = 'key: ' + ((t.err && (t.err.code || t.err.status)) || '') + ' ' + ((t.err && t.err.body) || '').slice(0, 120); engineNote(); $('liveInterim').textContent = 'تعذّرت كتابة جزء من الكلام (' + (t.err.code === 'timeout' ? 'لا رد من جوجل' : Engine.errText(t.err)) + ') — سيُكتب كاملًا من التسجيل عند «إنهاء التسجيل».'; return; }
+        if (t && t.err) { liveFail++; liveWhy = 'key: ' + ((t.err && (t.err.code || t.err.status)) || '') + ' ' + ((t.err && t.err.body) || '').slice(0, 120); engineNote(); $('liveInterim').textContent = 'تعذّرت كتابة جزء من الكلام (' + (t.err.code === 'timeout' ? 'لا رد من جوجل' : Engine.errText(t.err)) + ') — بعد «إنهاء التسجيل» اضغط «تفريغ التسجيل من جديد» ليُكتب من الصوت.'; return; }
         if (t) { t = liveFix(t); liveParts.push({ text: t }); liveInsert({ text: t }); }
         showPending();
       });
@@ -1647,7 +1691,9 @@
     var liveOnTick = null;
     function liveTick(aKey) {
       /* v49 phones: the browser engine records alone (no samples, no level); nothing back for 10 s → hand over */
-      if (rec && !rec.pcmReady && liveMode === 'browser' && rec.state() === 'recording' && !liveGotResult && Date.now() - liveStartT > 10000) { liveGotResult = true; if (liveRec) { try { liveRec.stop(); } catch (e) {} liveRec = null; } liveWhy = 'محرك المتصفح لم يكتب شيئًا'; liveBrowserFailed('silent'); return; }
+      /* v52: on phones (no samples to measure) the engine is declared dead only if it HEARD speech and still wrote nothing for 10 s, or wrote nothing at all for 40 s */
+      var heardSpeech = liveRec && liveRec.heard && liveRec.heard() > 0, idle = Date.now() - liveStartT;
+      if (rec && !rec.pcmReady && liveMode === 'browser' && rec.state() === 'recording' && !liveGotResult && (heardSpeech ? idle > 10000 : idle > 40000)) { liveGotResult = true; if (liveRec) { try { liveRec.stop(); } catch (e) {} liveRec = null; } liveWhy = 'محرك المتصفح لم يكتب شيئًا'; liveBrowserFailed('silent'); return; }
       if (!rec || !rec.pcmReady || !rec.pcmReady() || rec.state() !== 'recording') return;
       var pend = rec.pending(), lvl = rec.level(); liveQuiet = lvl < 0.02 ? liveQuiet + 1 : 0;
       /* v46: the browser's engine heard nothing back while the person was clearly talking (phones where it silently does
@@ -1784,6 +1830,7 @@
         if (liveMode === 'browser' && /Android|iPhone|iPad/i.test(navigator.userAgent)) rec = textOnlyRec(onTick);   // v49: phones cannot share the microphone with the speech engine (v46 broke this)
         else rec = await Speech.recorder({ pcm: true, onPcm: function (x) { if (liveStream) liveStream.send(x); }, onTick: onTick, onLost: function () { $('voiceErr').hidden = false; $('voiceErr').textContent = 'انقطع الميكروفون. ما سُجّل محفوظ: اضغط «إنهاء التسجيل».'; } });
       } catch (e) { $('voiceErr').hidden = false; $('voiceErr').textContent = Engine.errText({ code: 'mic' }); rec = null; return; }
+      wakeOn();                                                                       // v52: the phone screen must not lock mid-dictation (that kills the speech engine)
       liveParts = []; liveHist = []; liveFail = 0; livePending = 0; liveQ = Promise.resolve(); $('liveConvert').hidden = true; liveHeard = 0; liveGotResult = false; liveStartT = Date.now(); liveWhy = '';
       liveOnTick = onTick;
       liveRec = liveMode !== 'browser' ? null : Speech.live({ lang: EXAM ? 'en-US' : 'ar-EG',
@@ -1815,7 +1862,7 @@
       clearInterval(liveT); liveT = null;
       if (liveMode === 'key' || liveMode === 'local') { flushLive(0.5); $('recState').textContent = 'جارٍ كتابة آخر جملة…'; }
       if (liveStream) { $('recState').textContent = 'جارٍ كتابة آخر جملة…'; var ls0 = liveStream; await ls0.stop(); liveStream = null; }
-      var r = await rec.stop(); rec = null; clearInterval(waveT); Speech.drawWave($('wave'), liveHist, false);
+      var r = await rec.stop(); rec = null; clearInterval(waveT); Speech.drawWave($('wave'), liveHist, false); wakeOff();
       await liveQ;                                                                   // the last words are in the box before anything else
       recBlob = r.blob; recSecs = r.seconds;
       $('recStop').disabled = false; $('recStat').className = 'recstat'; $('recState').textContent = 'انتهى التسجيل (' + Speech.fmtTime(recSecs) + ')';
@@ -1836,7 +1883,18 @@
     if ($('recExact')) $('recExact').addEventListener('click', function () { if (recBlob) convertAudio(recBlob, { source: 'voice', seconds: recSecs, live: liveText(), useLive: false }); });
     $('liveConvert').addEventListener('click', async function () {
       if (!liveText()) return;
-      if (rec) { if (liveRec) liveRec.stop(); var r = await rec.stop(); rec = null; clearInterval(waveT); recBlob = r.blob; recSecs = r.seconds; }
+      /* v52: same shutdown as «إنهاء»: the last phrase still being written (key / local / Live) lands in the box first,
+         and the Live socket and the tick timer are closed instead of living on behind the next screen */
+      $('liveConvert').disabled = true;
+      if (rec) {
+        if (liveRec) liveRec.stop();
+        clearInterval(liveT); liveT = null;
+        if (liveMode === 'key' || liveMode === 'local') flushLive(0.5);
+        if (liveStream) { var ls1 = liveStream; await ls1.stop(); liveStream = null; }
+        var r = await rec.stop(); rec = null; clearInterval(waveT); recBlob = r.blob; recSecs = r.seconds; wakeOff();
+        await liveQ;
+      }
+      $('liveConvert').disabled = false;
       convertAudio(recBlob && recBlob.size ? recBlob : null, { source: 'voice', seconds: recSecs, live: liveText(), useLive: true });
     });
     $('recAgain').addEventListener('click', function () { if (!recBlob || window.confirm('حذف هذا التسجيل والبدء من جديد؟')) resetRec(); });
@@ -1914,8 +1972,8 @@
       setProgress(3, 3, 'تم'); setStage('all');
       finish();
     } catch (e) {
-      if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; reconvertDoc = null; pendingAudio = null; toStart(); return; }
-      fail(e);
+      if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; reconvertDoc = null; pendingAudio = null; stageNames(STAGE_IMG); toStart(); return; }
+      fail(e, blob ? function () { convertAudio(blob, o); } : null);
     }
     running = false; stageNames(STAGE_IMG);
   }
@@ -2154,7 +2212,8 @@
     (function walk(n, f) {
       n.childNodes.forEach(function (c) {
         if (c.nodeType === 3) { if (c.nodeValue) runs.push({ text: (EXAM ? c.nodeValue : Verify.west(Verify.stripMarks(c.nodeValue))).replace(/\n/g, ' '), b: f.b, u: f.u, hl: f.hl }); return; }
-        if (c.nodeType !== 1 || c.tagName === 'BR') return;
+        if (c.nodeType === 1 && c.tagName === 'BR') { if (runs.length && !/\s$/.test(runs[runs.length - 1].text || '')) runs.push({ text: ' ', b: f.b, u: f.u, hl: f.hl }); return; }   // v52: Shift+Enter is a space, not a joined word
+        if (c.nodeType !== 1) return;
         if (c.classList.contains('mathx')) { runs.push({ math: c.dataset.tex, text: c.dataset.tex, b: f.b, u: f.u, hl: f.hl }); return; }
         if (c.classList.contains('frac')) { runs.push({ frac: [c.dataset.n, c.dataset.d], text: c.dataset.n + '/' + c.dataset.d, b: f.b, u: f.u, hl: f.hl }); return; }
         var g = { b: f.b || c.tagName === 'B' || c.tagName === 'STRONG', u: f.u || c.tagName === 'U', hl: f.hl || c.tagName === 'MARK' };
@@ -2163,8 +2222,14 @@
     })(node, { b: false, u: false, hl: false });
     return runs;
   }
+  /* v52: Chrome puts text typed after a trailing figure, gap or table straight under the sheet (no <p>); it was dropped from Word */
+  function wrapLooseText(root) {
+    var loose = Array.prototype.filter.call(root.childNodes, function (n) { return n.nodeType === 3 && n.nodeValue.trim(); });
+    loose.forEach(function (n) { var p = document.createElement('p'); p.setAttribute('data-k', 'p'); p.className = EXAM ? 'al-J' : 'al-J'; root.insertBefore(p, n); p.appendChild(n); });
+    Array.prototype.forEach.call(root.querySelectorAll(':scope > b, :scope > u, :scope > mark, :scope > span:not(.mathx):not(.frac)'), function (el) { var p = document.createElement('p'); p.setAttribute('data-k', 'p'); p.className = 'al-J'; root.insertBefore(p, el); p.appendChild(el); });
+  }
   function sheetToParas(root) {
-    var out = [];
+    var out = []; try { wrapLooseText(root); } catch (e) {}
     (function each(parent) {
       Array.prototype.forEach.call(parent.children, function (b) {
         if (b.tagName === 'TABLE') { out.push({ table: Array.prototype.map.call(b.querySelectorAll('tr'), function (tr) { return Array.prototype.map.call(tr.children, walkRuns); }) }); return; }
@@ -2179,8 +2244,9 @@
   }
   /* exam: edited sheet → blocks */
   function domBlocks(root) {
-    var out = [];
+    var out = []; try { wrapLooseText(root); } catch (e) {}
     Array.prototype.forEach.call(root.children, function (el) {
+      if (!el.dataset.k && el.tagName === 'DIV' && el.querySelector('p,div,table,figure')) { out = out.concat(domBlocks(el)); return; }   // v52: the editor's wrapper divs
       var k = el.dataset.k || (el.tagName === 'TABLE' ? 'table' : 'p');
       if (k === 'gap') { out.push({ k: 'gap', n: 3 }); return; }
       if (k === 'fig') { var im = el.querySelector('img'); if (im) out.push({ k: 'fig', data: im.src, w: +el.dataset.w || 300, h: +el.dataset.h || 200 }); return; }
@@ -2201,7 +2267,9 @@
         if (!/^<svg[\s>]/i.test(svg.trim())) return res(null);
         if (!/xmlns=/.test(svg)) svg = svg.replace(/<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
         var vb = svg.match(/viewBox="\s*([-\d.]+)[\s,]+([-\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/i);
-        var w = vb ? +vb[3] : 240, h = vb ? +vb[4] : 160; if (!(w > 0 && h > 0)) return res(null);
+        var wa = svg.match(/<svg[^>]*\swidth="\s*([\d.]+)/i), ha = svg.match(/<svg[^>]*\sheight="\s*([\d.]+)/i);   // v52: no viewBox → width/height, not a 240×160 crop
+        var w = vb ? +vb[3] : wa ? +wa[1] : 240, h = vb ? +vb[4] : ha ? +ha[1] : 160; if (!(w > 0 && h > 0)) return res(null);
+        if (!vb) svg = svg.replace(/<svg/i, '<svg viewBox="0 0 ' + w + ' ' + h + '"');
         svg = svg.replace(/<svg([^>]*)>/i, function (m, at) { return '<svg' + at.replace(/\s(width|height)="[^"]*"/gi, '') + ' width="' + w + '" height="' + h + '">'; });
         var img = new Image();
         img.onload = function () { var k = 3, c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
@@ -2215,7 +2283,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '51';
+  var APP_VER = '52';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -2226,6 +2294,15 @@
     try { if (window.caches) { var ks = await caches.keys(); for (var j = 0; j < ks.length; j++) await caches.delete(ks[j]); } } catch (e) {}
     location.replace(location.pathname + '?r=' + Date.now() + location.hash);
   }
+  /* something on screen the person would lose by a reload: photos in the tray, a password half typed, a recording */
+  function busyOnScreen() {
+    try {
+      if (typeof shots !== 'undefined' && shots.length) return true;
+      if ($('pw') && !$('lock').hidden && $('pw').value) return true;
+      if ($('voice') && !$('voice').hidden && (typeof rec !== 'undefined' && rec || (typeof liveRec !== 'undefined' && liveRec))) return true;
+    } catch (e) {}
+    return false;
+  }
   async function checkVersion() {
     if (location.protocol === 'file:') return;
     try {
@@ -2233,7 +2310,7 @@
       var v = String((await r.json()).v || '');
       if (!v || v === APP_VER) return;
       var tried = sessionStorage.getItem('kateb.reloadedFor');
-      if (tried === v || running || !$('done').hidden) return;
+      if (tried === v || running || !$('done').hidden || busyOnScreen()) return;
       sessionStorage.setItem('kateb.reloadedFor', v);
       hardRefresh();
     } catch (e) {}
@@ -2243,10 +2320,12 @@
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').then(function (reg) { try { reg.update(); } catch (e) {} }).catch(function () {});
     /* a new version took over: reload once so the page and its scripts match (never while a page is being read) */
-    var reloaded = false;
+    var reloaded = false, hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', function () {
-      if (reloaded || reloading || running || !navigator.serviceWorker.controller) return; reloaded = true;
-      if ($('done').hidden) location.reload();
+      /* v52: the very first install also fires this (clients.claim) — no reload then: the parent may be typing the
+         password or has photos in the tray. Reload only for a real update, and only on an idle screen. */
+      if (reloaded || reloading || running || !navigator.serviceWorker.controller || !hadController) return; reloaded = true;
+      if ($('done').hidden && !busyOnScreen()) location.reload();
     });
   }
   window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installEvt = e; if (!standalone()) $('installBtn').hidden = false; });

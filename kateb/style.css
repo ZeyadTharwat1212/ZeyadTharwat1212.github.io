@@ -111,7 +111,7 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
 .btn.go:hover{background:var(--primary-2);box-shadow:0 12px 28px -10px color-mix(in srgb,var(--primary) 80%,transparent)}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--primary);min-height:48px;font-size:17px;width:auto;padding:8px 14px}
 .btn.ghost:hover{background:var(--primary-soft);box-shadow:none;transform:none}
-.linkbtn{background:none;border:0;color:var(--muted);font-size:15px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:6px;border-radius:8px;width:auto;align-self:center}
+.linkbtn{background:none;border:0;color:var(--muted);font-size:15px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:10px 8px;min-height:44px;border-radius:8px;width:auto;align-self:center}
 .linkbtn:hover{color:var(--ink)}
 input.pw,.field input,.tplrow input,.tplrow select{width:100%;font-size:20px;padding:12px 14px;border:1px solid var(--line-2);border-radius:var(--r-m);background:var(--surface-2);color:var(--ink);
   transition:border-color var(--t) var(--ease),box-shadow var(--t) var(--ease),background-color var(--t) var(--ease)}
@@ -320,7 +320,7 @@ body.wide{padding-bottom:110px}
 .shot{position:relative;flex:0 0 auto;width:96px;scroll-snap-align:start;animation:pop var(--t-slow) var(--ease) both}
 .shot img{display:block;width:96px;height:128px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#fff;box-shadow:var(--shadow-1)}
 .shot .n{position:absolute;top:6px;inset-inline-start:6px;background:var(--primary);color:var(--primary-ink);font-size:12px;font-weight:800;border-radius:99px;padding:1px 8px}
-.shot .x{position:absolute;top:4px;inset-inline-end:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(15,23,42,.75);color:#fff;font-size:14px;display:grid;place-items:center;cursor:pointer}
+.shot .x{position:absolute;top:2px;inset-inline-end:2px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(15,23,42,.75);color:#fff;font-size:14px;display:grid;place-items:center;cursor:pointer}
 .shot.blur img{outline:3px solid var(--danger);outline-offset:-3px}
 .shot .warn{position:absolute;bottom:6px;inset-inline:6px;text-align:center;background:var(--danger);color:#fff;font-size:11px;font-weight:800;border-radius:99px;padding:2px 6px}
 .privacy{font-size:14px;max-width:560px;margin:0 auto;line-height:1.5}
@@ -391,7 +391,7 @@ body.wide{padding-bottom:110px}
 .utable{width:100%;border-collapse:collapse;font-size:15px}
 .utable th,.utable td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:start}
 .utable th{color:var(--muted);font-size:13px}
-.shot .view{position:absolute;bottom:6px;inset-inline-start:6px;border:0;border-radius:8px;background:rgba(15,23,42,.7);color:#fff;font-size:12px;font-weight:700;padding:4px 8px}
+.shot .view{position:absolute;bottom:4px;inset-inline-start:4px;border:0;border-radius:8px;background:rgba(15,23,42,.7);color:#fff;font-size:13px;font-weight:700;padding:10px 12px;min-height:40px}
 .shot img{cursor:zoom-in}
 
 /* ---------- KATEB18: alternatives in the pill, fields, language fixes ---------- */
@@ -465,7 +465,7 @@ body.wide{padding-bottom:110px}
 .outkinds .kind{min-height:52px;justify-content:center}
 @media (max-width:520px){.outkinds{grid-template-columns:1fr 1fr}.outkinds .kind{flex-direction:column;gap:2px;text-align:center;padding:8px 4px}.outkinds .kind b{font-size:14px}}
 .liveinterim.warn{color:#8a4b00;background:#fff4dc;border-radius:8px;font-family:inherit;font-size:18px;padding:8px 10px}
-.livehelp{font-size:16px;color:#555;margin:6px 2px 0}
+.livehelp{font-size:16px;color:var(--muted);margin:6px 2px 0}
 .syncnote{margin:0 0 6px}
 .syncnote.warn{color:#8a4b00}
 
@@ -484,4 +484,4 @@ body.wide{padding-bottom:110px}
 .prtopics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 12px}
 .chip[aria-pressed="true"]{background:var(--accent,#2563eb);color:#fff;border-color:transparent}
 #askText{width:100%;font-size:20px;line-height:1.6;padding:12px 14px;border:2px solid var(--line-2);border-radius:var(--r-m);background:var(--surface-2);color:var(--ink);resize:vertical;font-family:inherit}
-.askex .chip{font-size:14px;min-height:0;padding:6px 12px;text-align:right;font-family:inherit;font-weight:600}
+.askex .chip{font-size:14px;min-height:44px;padding:8px 12px;text-align:right;font-family:inherit;font-weight:600}

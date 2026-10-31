@@ -31,6 +31,8 @@ var Speech = (function () {
       if (opt.onError) opt.onError(e.error);
     };
     var onres = rec.onresult; rec.onresult = function (e) { got = true; onres(e); };
+    /* v52: the engine says when it hears a voice — silence is then not mistaken for a dead engine (phones) */
+    var heard = 0; rec.onspeechstart = function () { heard++; if (opt.onHeard) opt.onHeard(heard); }; rec.onsoundstart = function () { if (opt.onSound) opt.onSound(); };
     /* the engine stops by itself after silence: start again while the person is still recording */
     rec.onend = function () { if (on && !fatal) { clearTimeout(restartT); restartT = setTimeout(function () { try { rec.start(); } catch (e) {} }, 250); } else if (opt.onEnd) opt.onEnd(finals.slice()); };
     return {
@@ -39,7 +41,8 @@ var Speech = (function () {
       resume: function () { if (fatal) return; on = true; try { rec.start(); } catch (e) {} },
       failed: function () { return fatal; },
       stop: function () { on = false; clearTimeout(restartT); try { rec.stop(); } catch (e) {} },
-      finals: function () { return finals.slice(); }
+      finals: function () { return finals.slice(); },
+      heard: function () { return heard; }
     };
   }
 

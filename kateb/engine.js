@@ -158,6 +158,8 @@ var Engine = (function () {
         lastErr = { code: 'model_' + r.status }; break;                 // 404/403 for this model: next model
       }
     }
+    /* v52: every remembered model answered 404/403 (Google retired it): forget the list, so the next call lists afresh */
+    if (lastErr && /^model_/.test(lastErr.code) && !opt.models) { try { localStorage.removeItem(LS_MODEL); } catch (e) {} }
     throw lastErr || { code: 'unknown' };
   }
 

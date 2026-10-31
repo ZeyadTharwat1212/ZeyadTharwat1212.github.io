@@ -16,7 +16,7 @@ var Raster = (function () {
   function wordsOf(runs) {
     var out = [];
     (runs || []).forEach(function (r) {
-      var text = r.frac ? r.frac[0] + '/' + r.frac[1] : String(r.text || '');
+      var text = r.frac ? r.frac[0] + '/' + r.frac[1] : r.math ? (typeof ExamBuilder !== 'undefined' && ExamBuilder.texPlain ? ExamBuilder.texPlain(r.math) : r.math) : String(r.text || '');   // v52: a formula as readable text, not raw LaTeX
       if (digitsAr) text = arabicDigits(text);
       text.split(/(\s+|\t)/).forEach(function (w) { if (!w || /^\s+$/.test(w) && w !== '\t') return; out.push({ t: w === '\t' ? '   ' : w, b: !!r.b, u: !!r.u, hl: !!r.hl }); });
     });

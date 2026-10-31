@@ -44,8 +44,8 @@ var DocxBuilder = (function () {
     return '<w:p>' + ppr + runs + '</w:p>';
   }
 
-  function tableXml(rows, docRtl) {
-    var cols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 1), W = 9638, cw = Math.floor(W / cols), grid = '';
+  function tableXml(rows, docRtl, width) {
+    var cols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 1), W = width || 9638, cw = Math.floor(W / cols), grid = '';
     for (var i = 0; i < cols; i++) grid += '<w:gridCol w:w="' + cw + '"/>';
     var b = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (e) { return '<w:' + e + ' w:val="single" w:sz="6" w:space="0" w:color="000000"/>'; }).join('') + '</w:tblBorders>';
     var trs = rows.map(function (r) {
