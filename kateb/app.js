@@ -962,7 +962,7 @@
     var eqSave = function () {
       var mf = $('eqField'), raw = $('eqRaw'), tex = '';
       try { tex = mf ? mf.getValue('latex-without-placeholders') : raw ? raw.value : ''; } catch (e) { tex = mf ? mf.value : ''; }
-      tex = String(tex || '').trim();
+      tex = String(tex || '').replace(/\\frac(\d)(\d)/g, '\\frac{$1}{$2}').replace(/\\placeholder\{\}/g, '').trim();      // MathLive writes \frac34
       if (!tex) { if (eqTarget) { eqTarget.remove(); histCommit(); queueSave(); } eqClose(); return; }
       var w = document.createElement('span'); w.innerHTML = mathHtml(tex); var node = w.firstChild;
       if (eqTarget && eqTarget.isConnected) eqTarget.replaceWith(node);
