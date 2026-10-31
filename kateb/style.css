@@ -474,3 +474,12 @@ body.wide{padding-bottom:110px}
 #mathRefs details{margin:6px 0}
 .status.warn{background:#fff4dc;color:#7a4300;border:1px solid #f0d49a}
 .status.warn{display:block;border-radius:12px;text-align:center;line-height:1.6;font-weight:600}
+
+/* v50 equations (Temml MathML) and practice sheets */
+.mathx{display:inline-block;cursor:pointer;padding:0 2px;border-radius:6px;vertical-align:middle}
+.mathx:hover,.frac:hover{background:var(--surface-2)}
+.sheet .frac{cursor:pointer}
+.mathx math,#eqBox math{font-family:"Cambria Math","STIX Two Math","Latin Modern Math",math;font-size:1.05em}
+.modal.top{align-items:flex-start}
+.prtopics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 12px}
+.chip[aria-pressed="true"]{background:var(--accent,#2563eb);color:#fff;border-color:transparent}

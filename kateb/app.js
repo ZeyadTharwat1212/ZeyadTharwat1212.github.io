@@ -595,9 +595,15 @@
   function shown(t) { return EXAM ? t : Verify.rtlDates(Verify.arabicDigits(t)); }      // the office's papers show ٠-٩ (Word: Numeral = Context), dates read from the right
   function runsHtml(runs) {
     return (runs || []).map(function (r) {
-      var h = r.frac ? '<span class="frac" contenteditable="false" data-n="' + escH(r.frac[0]) + '" data-d="' + escH(r.frac[1]) + '"><span>' + escH(r.frac[0]) + '</span><span>' + escH(r.frac[1]) + '</span></span>' : escH(shown(r.text));
+      var h = r.math ? mathHtml(r.math) : r.frac ? '<span class="frac" contenteditable="false" data-n="' + escH(r.frac[0]) + '" data-d="' + escH(r.frac[1]) + '"><span>' + escH(r.frac[0]) + '</span><span>' + escH(r.frac[1]) + '</span></span>' : escH(shown(r.text));
       if (r.u) h = '<u>' + h + '</u>'; if (r.b) h = '<b>' + h + '</b>'; if (r.hl) { var why = /^\s*(؟+|[.…]{2,})\s*$/.test(r.text) ? 'unreadable' : (r.alts && r.alts.length) ? 'alts' : curDict[Verify.norm(r.text)] ? 'dict' : curAdded[Verify.norm(r.text)] ? 'disagree' : 'model'; h = '<mark data-o="' + escH(r.text) + '" data-why="' + why + '"' + (r.alts && r.alts.length ? ' data-alts="' + escH(r.alts.join('|')) + '"' : '') + '>' + h + '</mark>'; } return h;
     }).join('');
+  }
+  /* v50 a LaTeX equation shown as real mathematics (Temml → MathML, drawn by the browser); tap it to edit */
+  function mathHtml(tex) {
+    var inner = '';
+    try { if (window.temml) inner = temml.renderToString(tex, { throwOnError: true }); } catch (e) { inner = ''; }
+    return '<span class="mathx" contenteditable="false" data-tex="' + escH(tex) + '">' + (inner || escH(ExamBuilder.texPlain(tex))) + '</span>';
   }
   function dirOf(t) { return /[A-Za-z]/.test(t) && !DocxBuilder.isRtlText(t) ? 'ltr' : 'rtl'; }
   function tableHtml(rows, attrs) {
@@ -923,6 +929,83 @@
     var o = e.target.closest && e.target.closest('.orig'); if (o) { zoomCanvas = null; zoomShot = -1; zoomName = 'الأصل ' + stamp() + '.jpg'; $('zoomImg').src = o.querySelector('img').src; $('zoomImg').hidden = false; if ($('scanBar')) { $('scanBar').hidden = true; $('cropBox').hidden = true; } $('zoom').hidden = false; if ($('zoomSave')) $('zoomSave').hidden = false; $('zoomClose').focus(); }
   });
   $('pagesBox').addEventListener('input', function () { refreshDoubts(); histQueue(); queueSave(); });
+  /* ---------- v50 equation editor (MathLive, loaded only when first used): tap an equation or a fraction to fix it,
+     or «➗ إدخال معادلة» to add one where the cursor is. Phones get MathLive's own maths keyboard. ---------- */
+  var ML_URL = 'https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js', mlP = null, eqTarget = null, eqRange = null;
+  function loadMathLive() {
+    if (window.MathfieldElement) return Promise.resolve();
+    if (!mlP) mlP = new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = ML_URL; sc.onload = function () { res(); }; sc.onerror = function () { mlP = null; rej(new Error('mathlive')); }; document.head.appendChild(sc); });
+    return mlP;
+  }
+  if ($('eqDlg')) {
+    document.addEventListener('selectionchange', function () {
+      var sl = window.getSelection(); if (!sl || !sl.rangeCount) return;
+      var r = sl.getRangeAt(0), n = r.startContainer, el = n && (n.nodeType === 1 ? n : n.parentNode);
+      if (el && el.closest && el.closest('#pagesBox .sheet')) eqRange = r.cloneRange();
+    });
+    var eqClose = function () { $('eqDlg').hidden = true; eqTarget = null; try { if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide(); } catch (e) {} $('eqBox').innerHTML = ''; };
+    var openEq = async function (target) {
+      eqTarget = target || null;
+      var tex = !target ? '' : target.classList.contains('frac') ? '\\frac{' + target.dataset.n + '}{' + target.dataset.d + '}' : (target.dataset.tex || '');
+      $('eqErr').hidden = true; $('eqDel').hidden = !eqTarget; $('eqBox').innerHTML = '<p class="small center">جارٍ تجهيز لوحة المعادلات…</p>'; $('eqDlg').hidden = false;
+      try { await loadMathLive(); }
+      catch (e) {
+        $('eqBox').innerHTML = '<textarea id="eqRaw" dir="ltr" rows="2" style="width:100%;font-size:22px"></textarea>'; $('eqRaw').value = tex;
+        $('eqErr').textContent = 'لوحة المعادلات تحتاج إنترنت. اكتبي المعادلة هنا نصًا، مثل \\sqrt{49} أو 2^{5}.'; $('eqErr').hidden = false; return;
+      }
+      var mf = new window.MathfieldElement(); mf.id = 'eqField'; mf.setAttribute('dir', 'ltr');
+      try { mf.mathVirtualKeyboardPolicy = 'auto'; mf.smartFence = true; } catch (e) {}
+      mf.style.cssText = 'display:block;width:100%;font-size:30px;padding:10px;border:2px solid var(--line-2);border-radius:12px;background:var(--surface);color:var(--ink)';
+      $('eqBox').innerHTML = ''; $('eqBox').appendChild(mf); mf.value = tex;
+      setTimeout(function () { try { mf.focus(); } catch (e) {} }, 60);
+    };
+    var eqSave = function () {
+      var mf = $('eqField'), raw = $('eqRaw'), tex = '';
+      try { tex = mf ? mf.getValue('latex-without-placeholders') : raw ? raw.value : ''; } catch (e) { tex = mf ? mf.value : ''; }
+      tex = String(tex || '').trim();
+      if (!tex) { if (eqTarget) { eqTarget.remove(); histCommit(); queueSave(); } eqClose(); return; }
+      var w = document.createElement('span'); w.innerHTML = mathHtml(tex); var node = w.firstChild;
+      if (eqTarget && eqTarget.isConnected) eqTarget.replaceWith(node);
+      else {
+        var r = eqRange && eqRange.startContainer && eqRange.startContainer.isConnected ? eqRange : null;
+        if (r) { r.deleteContents(); r.insertNode(document.createTextNode(' ')); r.insertNode(node); }
+        else { var sh = sheets()[0]; if (!sh) { eqClose(); return; } var last = sh.querySelector('p:last-of-type') || sh; last.appendChild(document.createTextNode(' ')); last.appendChild(node); }
+      }
+      eqClose(); histCommit(); queueSave();
+    };
+    $('eqOk').addEventListener('click', eqSave);
+    $('eqCancel').addEventListener('click', eqClose);
+    $('eqDel').addEventListener('click', function () { if (eqTarget) { eqTarget.remove(); histCommit(); queueSave(); } eqClose(); });
+    $('eqDlg').addEventListener('click', function (e) { if (e.target === $('eqDlg')) eqClose(); });
+    if ($('eqBtn')) $('eqBtn').addEventListener('click', function () { openEq(null); });
+    $('pagesBox').addEventListener('click', function (e) { var q = e.target.closest && e.target.closest('.sheet .mathx, .sheet .frac'); if (q) openEq(q); });
+  }
+
+  /* ---------- v50 ready-made practice sheet (no photo, no AI): grade + topics → editable sheet → Word ---------- */
+  if ($('pracDlg') && typeof Practice !== 'undefined') {
+    var pracGrade = Practice.gradeOf(($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade')), pracTopics = null;
+    var paintPrac = function () {
+      $('pracGrades').innerHTML = Object.keys(Practice.GRADES).map(function (k) { return '<button class="chip" type="button" data-pg="' + k + '" aria-pressed="' + (k === pracGrade) + '">' + Practice.GRADES[k].label + '</button>'; }).join('');
+      var g = Practice.GRADES[pracGrade]; if (!pracTopics) pracTopics = g.topics.map(function (t) { return t[0]; });
+      $('pracTopics').innerHTML = g.topics.map(function (t) { return '<label class="chk"><input type="checkbox" data-pt="' + t[0] + '"' + (pracTopics.indexOf(t[0]) >= 0 ? ' checked' : '') + '> ' + t[1] + '</label>'; }).join('');
+    };
+    $('pracBtn').addEventListener('click', function () { pracTopics = null; paintPrac(); $('pracDlg').hidden = false; });
+    $('pracGrades').addEventListener('click', function (e) { var b = e.target.closest('[data-pg]'); if (!b) return; pracGrade = b.dataset.pg; pracTopics = null; paintPrac(); });
+    $('pracTopics').addEventListener('change', function () { pracTopics = Array.prototype.filter.call($('pracTopics').querySelectorAll('[data-pt]'), function (c) { return c.checked; }).map(function (c) { return c.dataset.pt; }); });
+    $('pracCancel').addEventListener('click', function () { $('pracDlg').hidden = true; });
+    $('pracDlg').addEventListener('click', function (e) { if (e.target === $('pracDlg')) $('pracDlg').hidden = true; });
+    $('pracOk').addEventListener('click', async function () {
+      if (running) return;
+      if (!pracTopics || !pracTopics.length) { window.alert('اختاري موضوعًا واحدًا على الأقل.'); return; }
+      $('pracDlg').hidden = true;
+      var text = Practice.make({ grade: pracGrade, topics: pracTopics, count: +$('pracCount').value || 12, answers: $('pracKey').checked });
+      plainRun = false; usedModels = {}; docCost = 0; curAdded = {}; reconvertDoc = null; pendingAudio = null;
+      var res = await toResult(text); res.text = text; res.type = null; res.secs = 0; res.agree = null;
+      results = [res]; finish();
+      if (curDoc) { curDoc.kind = 'revision'; curDoc.head = headPref('revision'); curDoc.kindTitle = 'Practice Sheet'; curDoc.kindOk = true; curDoc.name = 'ورقة تدريب ' + Practice.GRADES[pracGrade].label + ' ' + stamp(); curDoc.nameAuto = curDoc.name; if ($('docName')) $('docName').value = curDoc.name; kindLabel(); saveDraft(); }
+    });
+  }
+
   /* the keyboard's own undo (Ctrl+Z, or the phone keyboard's undo) goes through the app's history */
   $('pagesBox').addEventListener('beforeinput', function (e) {
     if (e.inputType === 'historyUndo') { e.preventDefault(); undo(); } else if (e.inputType === 'historyRedo') { e.preventDefault(); redo(); }
@@ -1981,6 +2064,7 @@
       n.childNodes.forEach(function (c) {
         if (c.nodeType === 3) { if (c.nodeValue) runs.push({ text: (EXAM ? c.nodeValue : Verify.west(Verify.stripMarks(c.nodeValue))).replace(/\n/g, ' '), b: f.b, u: f.u, hl: f.hl }); return; }
         if (c.nodeType !== 1 || c.tagName === 'BR') return;
+        if (c.classList.contains('mathx')) { runs.push({ math: c.dataset.tex, text: c.dataset.tex, b: f.b, u: f.u, hl: f.hl }); return; }
         if (c.classList.contains('frac')) { runs.push({ frac: [c.dataset.n, c.dataset.d], text: c.dataset.n + '/' + c.dataset.d, b: f.b, u: f.u, hl: f.hl }); return; }
         var g = { b: f.b || c.tagName === 'B' || c.tagName === 'STRONG', u: f.u || c.tagName === 'U', hl: f.hl || c.tagName === 'MARK' };
         walk(c, g);
@@ -2040,7 +2124,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '49';
+  var APP_VER = '50';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -2123,7 +2207,7 @@
     "[TABLE] cell | cell || cell | cell   (tables and bar models; || separates rows; a shorter row's last cell spans the rest)\n" +
     "[FIG] <svg …>…</svg>   (any drawing, shape, diagram, number line, clock, grid or graph: REDRAW it as clean SVG on ONE line right after its question. viewBox about 120-320 wide, black strokes stroke-width=\"2\", fill=\"none\", true straight geometry, right-angle marks as small squares, heights dashed, keep proportions and orientation, every label as <text font-family=\"Times New Roman\" font-size=\"16\"> exactly as written and inside the viewBox. No scripts, images or links.)\n" +
     "[GAP]   (after each question in sections where students write a worked answer)\n" +
-    "MATH: fractions as {3/4}; mixed numbers 2 {1/3}; powers with ² ³; symbols × ÷ − = %; keep units.\n" +
+    "MATH: fractions as {3/4}; mixed numbers 2 {1/3}; powers with ² ³; symbols × ÷ − = %; anything else a plain line cannot show is LaTeX inside \\( \\): square root \\(\\sqrt{49}\\), cube root \\(\\sqrt[3]{27}\\), powers other than ² ³ \\(10^{6}\\) \\((-2)^{5}\\), line segment \\(\\overline{AB}\\), ray \\(\\overrightarrow{AB}\\), straight line \\(\\overleftrightarrow{AB}\\), angle \\(\\angle ABC\\), degrees \\(60^{\\circ}\\), recurring decimal \\(0.\\overline{3}\\), absolute value \\(|-5|\\) — only what the page shows; keep units.\n" +
     "Wrap anything not fully sure in ⟦ ⟧ like ⟦28.8⟧; two plausible readings → ⟦28.8|28.3⟧ (most likely first). Never guess a number silently.\n" +
     "Fix English spelling, capitals and small grammar slips in the wording, but NEVER change a number, unit, answer choice or the mathematics.\n" +
     "Leave out crossed-out work, ticks, scores, page numbers and anything not part of the exam.";
@@ -2138,7 +2222,7 @@
   var EXAM_PLAIN_FORMAT =
     "OUTPUT FORMAT (plain text lines, no code fences, no commentary):\n" +
     "- Everything written on the page, in reading order, one line per written line or paragraph — exactly as written: do not add section headings, numbering, answer gaps or choices that are not on the page.\n" +
-    "- MATH: fractions as {3/4}; mixed numbers 2 {1/3}; powers with ² ³; symbols × ÷ − = % < >; keep units.\n" +
+    "- MATH: fractions as {3/4}; mixed numbers 2 {1/3}; powers with ² ³; symbols × ÷ − = % < >; anything else a plain line cannot show is LaTeX inside \\( \\): square root \\(\\sqrt{49}\\), cube root \\(\\sqrt[3]{27}\\), powers other than ² ³ \\(10^{6}\\) \\((-2)^{5}\\), line segment \\(\\overline{AB}\\), ray \\(\\overrightarrow{AB}\\), straight line \\(\\overleftrightarrow{AB}\\), angle \\(\\angle ABC\\), degrees \\(60^{\\circ}\\), recurring decimal \\(0.\\overline{3}\\), absolute value \\(|-5|\\) — only what the page shows; keep units.\n" +
     "- A drawing, shape, number line, clock or graph: REDRAW it as clean SVG on ONE line: [FIG] <svg …>…</svg> (viewBox about 120-320 wide, black strokes, fill=\"none\", every label as <text> exactly as written).\n" +
     "- A table: [TABLE] cell | cell || cell | cell.\n" +
     "- Wrap anything not fully sure in ⟦ ⟧ like ⟦28.8⟧ (two readings → ⟦28.8|28.3⟧). Never change a number. Leave out crossed-out work, ticks and scores.";

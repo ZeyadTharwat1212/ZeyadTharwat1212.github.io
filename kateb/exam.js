@@ -1,6 +1,6 @@
 /* Math exam Word builder (Word 2007/2010 compatible) in Ms. Hanan's layout.
    blocks: {k:'q'|'item'|'p'|'opt'|'table'|'gap'|'fig', ...}
-   runs:   {text, b, u, hl, frac:[num, den]} */
+   runs:   {text, b, u, hl, frac:[num, den], math: 'LaTeX'} */
 var ExamBuilder = (function () {
   var NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
     'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" ' +
@@ -26,12 +26,38 @@ var ExamBuilder = (function () {
     });
     return out;
   }
+  function mrpr(o) {
+    return '<w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/>' + (o && o.sz ? '<w:sz w:val="' + o.sz + '"/><w:szCs w:val="' + o.sz + '"/>' : '') + (o && o.hl ? '<w:highlight w:val="yellow"/>' : '') + '</w:rPr>';
+  }
   function mrun(t, o) {
-    return '<m:r>' + (o && o.hl ? '<w:rPr><w:highlight w:val="yellow"/></w:rPr>' : '') + '<m:t xml:space="preserve">' + esc(t) + '</m:t></m:r>';
+    return '<m:r>' + mrpr(o) + '<m:t xml:space="preserve">' + esc(t) + '</m:t></m:r>';
+  }
+  /* v50 any mathematics written as LaTeX \( … \): Temml (LaTeX → MathML, MIT) then mathml2omml (MathML → Word's own
+     equation format, LGPL) — square roots, powers, segment/ray/line bars, angles, recurring decimals become real Word equations */
+  function libs() { var g = typeof globalThis !== 'undefined' ? globalThis : window; return g.temml && g.MML2OMML ? { T: g.temml, M: g.MML2OMML } : null; }
+  function texPlain(t) {
+    return String(t).replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1/$2').replace(/\\sqrt\[(\d+)\]\{([^{}]*)\}/g, '$1√$2').replace(/\\sqrt\{([^{}]*)\}/g, '√$1')
+      .replace(/\^\{?\\circ\}?/g, '°').replace(/\\(overline|overrightarrow|overleftrightarrow)\{([^{}]*)\}/g, '$2').replace(/\\angle\s*/g, '∠').replace(/\\times/g, '×').replace(/\\div/g, '÷')
+      .replace(/\\left|\\right/g, '').replace(/\\[a-zA-Z]+/g, '').replace(/[{}]/g, '').replace(/\s+/g, ' ').trim();
+  }
+  function mathXml(tex, o) {
+    var L = libs();
+    if (L) {
+      try {
+        var x = L.M.mml2omml(L.T.renderToString(tex, { xml: true, throwOnError: true }));
+        x = x.replace(/<m:oMath\b[^>]*>/, '<m:oMath>')
+          .replace(/<m:chr m:val="([^"]*)" m:pos="(top|bot)"\/>/g, '<m:chr m:val="$1"/><m:pos m:val="$2"/><m:vertJc m:val="$2"/>')       // the library writes pos as an attribute: Word wants an element
+          .replace(/(<m:t[^>]*>)([^<]*)/g, function (a, t, v) { return t + v.replace(/\|/g, '∣'); })                   // |−5|: the bar sign every Word and LibreOffice draws
+          .replace(/<m:borderBox><m:borderBoxPr><m:hideBot m:val="on"\/><m:hideLeft m:val="on"\/><m:hideRight m:val="on"\/><\/m:borderBoxPr>([\s\S]*?)<\/m:borderBox>/g, function (a, e) { return '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>' + e + '</m:bar>'; }).replace(/<m:r>(<m:rPr>[\s\S]*?<\/m:rPr>)?/g, function (all, mp) { return '<m:r>' + (mp || '') + mrpr(o); });
+        if (/^<m:oMath>[\s\S]*<\/m:oMath>$/.test(x)) return x;
+      } catch (e) {}
+    }
+    return textRuns(texPlain(tex), o);
   }
   function runsXml(runs, base) {
     return (runs || []).map(function (r) {
       var o = Object.assign({}, base || {}, { b: r.b || (base && base.b), u: r.u || (base && base.u), hl: r.hl });
+      if (r.math) return mathXml(r.math, o);
       if (r.frac) return '<m:oMath><m:f><m:num>' + mrun(r.frac[0], o) + '</m:num><m:den>' + mrun(r.frac[1], o) + '</m:den></m:f></m:oMath>';
       return textRuns(r.text, o);
     }).join('');
@@ -169,16 +195,31 @@ var ExamBuilder = (function () {
   /* inline: **b** __u__ ⟦doubt⟧ {a/b} */
   function parseInline(line) {
     var runs = [], b = false, u = false, hl = false, buf = '';
-    var re = /(_{3,}|\*\*|__|⟦|⟧|\{([^{}\/]{1,20})\/([^{}\/]{1,20})\})/g, last = 0, m;
+    var re = /(\\\(([\s\S]+?)\\\)|_{3,}|\*\*|__|⟦|⟧|\{([^{}\/]{1,20})\/([^{}\/]{1,20})\})/g, last = 0, m;
     function push() { if (buf) runs.push({ text: buf, b: b, u: u, hl: hl }); buf = ''; }
     while ((m = re.exec(line))) {
       buf += line.slice(last, m.index); push();
-      if (/^_{3,}$/.test(m[1])) { buf = m[1]; push(); } else if (m[1] === '**') b = !b; else if (m[1] === '__') u = !u; else if (m[1] === '⟦') hl = true; else if (m[1] === '⟧') hl = false;
-      else runs.push({ frac: [m[2].trim(), m[3].trim()], b: b, u: u, hl: hl, text: m[2].trim() + '/' + m[3].trim() });
+      if (m[2] !== undefined) runs.push({ math: m[2].trim(), text: m[2].trim(), b: b, u: u, hl: hl });
+      else if (/^_{3,}$/.test(m[1])) { buf = m[1]; push(); } else if (m[1] === '**') b = !b; else if (m[1] === '__') u = !u; else if (m[1] === '⟦') hl = true; else if (m[1] === '⟧') hl = false;
+      else runs.push({ frac: [m[3].trim(), m[4].trim()], b: b, u: u, hl: hl, text: m[3].trim() + '/' + m[4].trim() });
       last = re.lastIndex;
     }
     buf += line.slice(last); push();
     return runs;
+  }
+
+  /* split a line on | or || but never inside \( … \) or ⟦ … ⟧ (|x| and ⟦a|b⟧ stay whole) */
+  function splitTop(str, sep) {
+    var out = [], cur = '', depthM = 0, depthD = 0;
+    for (var i = 0; i < str.length; i++) {
+      if (str.substr(i, 2) === '\\(') { depthM++; cur += '\\('; i++; continue; }
+      if (str.substr(i, 2) === '\\)' && depthM) { depthM--; cur += '\\)'; i++; continue; }
+      var ch = str[i];
+      if (ch === '⟦') depthD++; else if (ch === '⟧' && depthD) depthD--;
+      if (!depthM && !depthD && str.substr(i, sep.length) === sep && (sep === '||' || str[i + 1] !== '|')) { out.push(cur); cur = ''; i += sep.length - 1; continue; }
+      cur += ch;
+    }
+    out.push(cur); return out;
   }
 
   /* model output → {meta, blocks}. Figures keep their box for the page to crop. */
@@ -191,8 +232,8 @@ var ExamBuilder = (function () {
       if ((mm = line.match(/^TITLE:\s*(.+)$/i))) { meta.title = mm[1].trim(); return; }
       if ((mm = line.match(/^\[Q\]\s*(.*)$/))) { blocks.push({ k: 'q', runs: parseInline(mm[1]) }); return; }
       if ((mm = line.match(/^\[I\]\s*(.*)$/))) { blocks.push({ k: 'item', runs: parseInline(mm[1]) }); return; }
-      if ((mm = line.match(/^\[OPT\]\s*(.*)$/))) { blocks.push({ k: 'opt', cells: mm[1].split('|').map(function (c) { return parseInline(c.trim()); }) }); return; }
-      if ((mm = line.match(/^\[TABLE\]\s*(.*)$/))) { blocks.push({ k: 'table', rows: mm[1].split('||').map(function (r) { return r.split('|').map(function (c) { return parseInline(c.trim()); }); }) }); return; }
+      if ((mm = line.match(/^\[OPT\]\s*(.*)$/))) { blocks.push({ k: 'opt', cells: splitTop(mm[1], '|').map(function (c) { return parseInline(c.trim()); }) }); return; }
+      if ((mm = line.match(/^\[TABLE\]\s*(.*)$/))) { blocks.push({ k: 'table', rows: splitTop(mm[1], '||').map(function (r) { return splitTop(r, '|').map(function (c) { return parseInline(c.trim()); }); }) }); return; }
       if (/^\[GAP\]/.test(line)) { blocks.push({ k: 'gap', n: 3 }); return; }
       if ((mm = line.match(/^\[FIG[^\]]*\]\s*(.*)$/))) {
         var sv = (mm[1].match(/<svg[\s\S]*<\/svg>/i) || [])[0] || '';
@@ -205,7 +246,7 @@ var ExamBuilder = (function () {
     return { meta: meta, blocks: blocks };
   }
 
-  return { build: build, parseExam: parseExam, parseInline: parseInline };
+  return { build: build, parseExam: parseExam, parseInline: parseInline, splitTop: splitTop, texPlain: texPlain };
 })();
 
 

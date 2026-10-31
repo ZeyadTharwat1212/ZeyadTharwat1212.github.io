@@ -15,7 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=49">
+<link rel="stylesheet" href="kateb/style.css?v=50">
+<link rel="stylesheet" href="kateb/vendor/temml.css?v=50">
 </head>
 <body>
 <main>
@@ -72,6 +73,7 @@
       <button class="way" id="pickBtn" type="button"><span class="wi">🖼️</span><b>رفع صورة أو ملف</b><small>صور أو PDF من الجهاز</small></button>
       <button class="way" id="voiceBtn" type="button"><span class="wi">🎙️</span><b>إملاء صوتي</b><small>اقرأ الورقة بصوتك وتتحول لنص</small></button>
       <button class="way" id="audioBtn" type="button"><span class="wi">🎧</span><b>رفع تسجيل صوتي</b><small>تسجيل من واتساب أو الهاتف</small></button>
+      <button class="way" id="pracBtn" type="button"><span class="wi">🧮</span><b>ورقة تدريب جاهزة</b><small>تمارين بالصف والدرس بدون تصوير، مجانًا</small></button>
     </div>
     <label class="chk"><input type="checkbox" id="enhanceChk" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label>
     <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
@@ -212,6 +214,7 @@
       <button class="btn sm" id="firstTextBtn" type="button">استرجاع النص الأول</button>
       <button class="btn sm" id="reconvertBtn" type="button">🔄 إعادة التحويل</button>
       <button class="btn sm" id="fixBtn" type="button">✍️ تصحيح اللغة والإملاء</button>
+      <button class="btn sm" id="eqBtn" type="button" title="أو اضغطي على أي معادلة أو كسر لتعديله">➗ إدخال معادلة</button>
     </div>
     <div class="card vpanel" id="fixPanel" hidden><div class="vhead"><b>✍️ تصحيح اللغة والإملاء</b><button class="iconbtn sm" id="fixClose" type="button" aria-label="إغلاق">✕</button></div><p class="small">النص الأصلي كما هو يبقى هو المستند. هذه اقتراحات إملائية ونحوية فقط، تقبل أو ترفض كل واحدة بنفسك، وكل تغيير يظهر بلون مميز ويمكن التراجع عنه.</p><div id="fixList"></div></div>
     <div class="card vpanel" id="versionsPanel" hidden><b>🕘 نسخ سابقة</b><p class="small">تُحفظ نسخة من النص عند كل قراءة وقبل كل تصدير وكل عشر دقائق أثناء التعديل. الاستعادة لا تحذف شيئًا.</p><div id="versionsList"></div></div>
@@ -300,27 +303,46 @@
   <div id="kindExtra"></div>
   <div class="actions2"><button class="btn go" id="kindOk" type="button">متابعة</button><button class="btn" id="kindCancel" type="button">إلغاء</button></div>
 </div></div>
+<div class="modal top" id="eqDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="eqQ">
+  <h3 id="eqQ">➗ المعادلة</h3>
+  <p class="small center">اكتبي بلوحة الرموز: الكسر <b>/</b> ، الأس <b>^</b> ، الجذر √ ، والأسهم والزوايا من اللوحة.</p>
+  <div id="eqBox" dir="ltr"></div>
+  <p class="err" id="eqErr" hidden></p>
+  <div class="actions2"><button class="btn go" id="eqOk" type="button">✅ حفظ</button><button class="btn" id="eqDel" type="button">🗑️ حذف المعادلة</button><button class="btn" id="eqCancel" type="button">إلغاء</button></div>
+</div></div>
+<div class="modal" id="pracDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="pracQ">
+  <h3 id="pracQ">🧮 ورقة تدريب جاهزة</h3>
+  <p class="small center">تمارين جديدة كل مرة، تظهر للمراجعة والتعديل ثم تنزل Word بنفس تنسيقك.</p>
+  <b>الصف</b><div class="chips" id="pracGrades"></div>
+  <b>الدروس</b><div class="prtopics" id="pracTopics"></div>
+  <label class="tplrow">عدد التمارين<select id="pracCount"><option>8</option><option selected>12</option><option>16</option><option>20</option><option>30</option></select></label>
+  <label class="chk"><input type="checkbox" id="pracKey"> إضافة الإجابات في آخر الورقة</label>
+  <div class="actions2"><button class="btn go" id="pracOk" type="button">✨ اعملي الورقة</button><button class="btn" id="pracCancel" type="button">إلغاء</button></div>
+</div></div>
 <div id="printRoot"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=49"></script>
-<script src="kateb/scan.js?v=49"></script>
-<script src="kateb/verify.js?v=49"></script>
-<script src="kateb/arabic.js?v=49"></script>
-<script src="kateb/bank.js?v=49"></script>
-<script src="kateb/store.js?v=49"></script>
-<script src="kateb/sync.js?v=49"></script>
-<script src="kateb/learn.js?v=49"></script>
-<script src="kateb/fields.js?v=49"></script>
-<script src="kateb/speech.js?v=49"></script>
-<script src="kateb/localasr.js?v=49"></script>
-<script src="kateb/geminilive.js?v=49"></script>
-<script src="kateb/raster.js?v=49"></script>
-<script src="kateb/docx.js?v=49"></script>
-<script src="kateb/exam.js?v=49"></script>
+<script src="kateb/engine.js?v=50"></script>
+<script src="kateb/scan.js?v=50"></script>
+<script src="kateb/verify.js?v=50"></script>
+<script src="kateb/arabic.js?v=50"></script>
+<script src="kateb/bank.js?v=50"></script>
+<script src="kateb/store.js?v=50"></script>
+<script src="kateb/sync.js?v=50"></script>
+<script src="kateb/learn.js?v=50"></script>
+<script src="kateb/fields.js?v=50"></script>
+<script src="kateb/speech.js?v=50"></script>
+<script src="kateb/localasr.js?v=50"></script>
+<script src="kateb/geminilive.js?v=50"></script>
+<script src="kateb/raster.js?v=50"></script>
+<script src="kateb/docx.js?v=50"></script>
+<script src="kateb/vendor/temml.min.js?v=50"></script>
+<script src="kateb/vendor/mathml2omml.js?v=50"></script>
+<script src="kateb/exam.js?v=50"></script>
+<script src="kateb/practice.js?v=50"></script>
 
-<script src="kateb/app.js?v=49"></script>
+<script src="kateb/app.js?v=50"></script>
 </body>
 </html>

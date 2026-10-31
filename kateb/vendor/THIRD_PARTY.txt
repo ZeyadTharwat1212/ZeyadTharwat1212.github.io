@@ -1,0 +1,6 @@
+Third-party code used by Kateb (unmodified):
+- temml.min.js — Temml 0.14.0, (c) Ron Kok, MIT License. https://github.com/ronkok/Temml
+- mathml2omml.js — mathml2omml 0.5.0, (c) Johannes Wilm, LGPL-3.0-or-later, bundled with its dependency
+  "entities" (BSD-2-Clause). Source: https://github.com/fiduswriter/mathml2omml — you may replace this file with
+  any other build of that library.
+- MathLive 0.110.0 (equation editor), (c) Arno Gourdol, MIT License — loaded on demand from cdn.jsdelivr.net.

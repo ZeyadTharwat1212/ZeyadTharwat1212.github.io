@@ -18,8 +18,8 @@ const LEGAL = {
   J: '[H] **مذكرة بدفاع**\n[S] الوقائع\nالسيد / أحمد محمد علي\tبصفته\nفي القضية رقم 1234 لسنة ٢٠٢٤ مدني كلي\n[N] ١- رفض الدعوى\n[TABLE] الاسم | الصفة || أحمد | مدعي\n[L] **المحامي**'
 };
 const EXAM = {
-  A: 'GRADE: Primary 4\n[Q] Question (1) Choose the correct answer\n[I] **1)** 3 + {1/2} = __________\n[OPT] a) 3 | b) 3.5 | c) 4 | d) 5\n[FIG] <svg viewBox="0 0 120 80"><rect x="10" y="10" width="100" height="60" stroke="black" fill="none" stroke-width="2"/></svg>',
-  B: 'GRADE: Primary 4\n[Q] Question (1) Choose the correct answer\n[I] **1)** 3 + {1/2} = __________\n[OPT] a) 3 | b) 3.5 | c) 4 | d) 5\n[FIG] <svg viewBox="0 0 120 80"><rect x="10" y="10" width="100" height="60" stroke="black" fill="none" stroke-width="2"/></svg>'
+  A: 'GRADE: Primary 4\n[Q] Question (1) Choose the correct answer\n[I] **1)** 3 + {1/2} = __________\n[OPT] a) 3 | b) 3.5 | c) 4 | d) 5\n[I] **2)** \\(\\sqrt{49}\\) + \\(\\overline{AB}\\) = __________\n[OPT] a) \\(|-5|\\) | b) ⟦7|9⟧ | c) 8 | d) 6\n[FIG] <svg viewBox="0 0 120 80"><rect x="10" y="10" width="100" height="60" stroke="black" fill="none" stroke-width="2"/></svg>',
+  B: 'GRADE: Primary 4\n[Q] Question (1) Choose the correct answer\n[I] **1)** 3 + {1/2} = __________\n[OPT] a) 3 | b) 3.5 | c) 4 | d) 5\n[I] **2)** \\(\\sqrt{49}\\) + \\(\\overline{AB}\\) = __________\n[OPT] a) \\(|-5|\\) | b) ⟦7|9⟧ | c) 8 | d) 6\n[FIG] <svg viewBox="0 0 120 80"><rect x="10" y="10" width="100" height="60" stroke="black" fill="none" stroke-width="2"/></svg>'
 };
 
 function serve() {
@@ -194,11 +194,14 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.deepStrictEqual(calls.sort(), ['numbers', 'read', 'read2']);
     assert.strictEqual(await page.locator('#pagesBox figure img').count(), 1);
     assert.strictEqual(await page.locator('#pagesBox .frac').count(), 1);
-    assert.strictEqual(await page.locator('#pagesBox .opt [data-cell]').count(), 4);
+    assert.strictEqual(await page.locator('#pagesBox .opt [data-cell]').count(), 8, 'v50: |−5| and ⟦7|9⟧ do not split a choice');
+    assert.strictEqual(await page.locator('#pagesBox .mathx math').count(), 3, 'v50: √, segment bar, |−5| drawn as mathematics');
     const [dl] = await Promise.all([page.waitForEvent('download'), exportWord(page)]);
     const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
     assert.ok(zip.file('word/media/image1.png'), 'figure embedded');
-    assert.ok((await zip.file('word/document.xml').async('string')).includes('Primary 4'));
+    const xdoc = await zip.file('word/document.xml').async('string');
+    assert.ok(xdoc.includes('Primary 4'));
+    assert.ok(xdoc.includes('<m:rad>') && xdoc.includes('<m:bar>') && xdoc.includes('∣−5∣'), 'v50: native Word equations');
     await exportPdf(page); await page.waitForFunction(() => window.__printed === 1);
     assert.ok((await page.innerHTML('#printRoot')).includes('xhead'));
     if (SHOTS) { await page.screenshot({ path: path.join(SHOTS, 'exam-review.png'), fullPage: true }); await page.emulateMedia({ media: 'print' }); await page.pdf({ path: path.join(SHOTS, 'exam.pdf'), format: 'A4', preferCSSPageSize: true }); }
@@ -1325,6 +1328,34 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('#reconvertBtn'); await page.waitForSelector('#done', { state: 'hidden' }); await page.waitForSelector('#done:not([hidden])', { timeout: 60000 });
     assert.strictEqual(calls.audio.length, 1, 'إعادة التحويل transcribes the stored recording again');
     assert.match(await page.textContent('#versionsBtn'), /نسخ سابقة/);
+  }));
+
+  await step('v50 Hanan: «ورقة تدريب جاهزة» makes a Prep 1 sheet with no AI call (roots and powers as real equations); tapping an equation edits it; Word has native equations, the Practice Sheet title and the answers', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page, calls) => {
+    await page.click('#pracBtn'); await page.waitForSelector('#pracDlg:not([hidden])');
+    await page.click('#pracGrades [data-pg="PREP1"]');
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'practice-dialog.png') });
+    for (const k of ['intadd', 'intmul', 'equation']) await page.uncheck('#pracTopics [data-pt="' + k + '"]');
+    await page.selectOption('#pracCount', '8'); await page.check('#pracKey');
+    await page.click('#pracOk'); await page.waitForSelector('#done:not([hidden])');
+    assert.strictEqual((calls.claude || []).length, 0, 'no AI call');
+    const n = await page.locator('#pagesBox .mathx').count();
+    assert.ok(n >= 8, 'equations shown: ' + n);
+    assert.ok(await page.locator('#pagesBox .mathx math').count() >= 8, 'drawn as MathML');
+    await page.locator('#pagesBox .mathx').first().click();
+    await page.waitForSelector('#eqDlg:not([hidden])');
+    await page.waitForSelector('#eqRaw, #eqField', { timeout: 15000 });
+    if (SHOTS) { await page.screenshot({ path: path.join(SHOTS, 'practice-eq.png') }); }
+    if (await page.locator('#eqRaw').count()) await page.fill('#eqRaw', '\\overline{AB}');
+    else await page.evaluate(() => { document.getElementById('eqField').value = '\\overline{AB}'; });
+    await page.click('#eqOk');
+    assert.ok(await page.locator('#eqDlg').isHidden());
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'practice-sheet.png'), fullPage: true });
+    assert.strictEqual(await page.locator('#pagesBox .mathx[data-tex="\\\\overline{AB}"]').count(), 1, 'edited equation in place');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    const doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
+    assert.ok(doc.includes('Practice Sheet') && doc.includes('Answers'), 'title and answer key');
+    assert.ok((doc.match(/<m:oMath>/g) || []).length >= 8, 'native Word equations');
+    assert.ok(doc.includes('<m:bar>') && (doc.includes('<m:rad>') || doc.includes('<m:sSup>')), 'bar, root/power');
   }));
 
   await browser.close(); server.close();
