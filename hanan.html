@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=50">
-<link rel="stylesheet" href="kateb/vendor/temml.css?v=50">
+<link rel="stylesheet" href="kateb/style.css?v=51">
+<link rel="stylesheet" href="kateb/vendor/temml.css?v=51">
 </head>
 <body>
 <main>
@@ -73,6 +73,7 @@
       <button class="way" id="pickBtn" type="button"><span class="wi">🖼️</span><b>رفع صورة أو ملف</b><small>صور أو PDF من الجهاز</small></button>
       <button class="way" id="voiceBtn" type="button"><span class="wi">🎙️</span><b>إملاء صوتي</b><small>اقرأ الورقة بصوتك وتتحول لنص</small></button>
       <button class="way" id="audioBtn" type="button"><span class="wi">🎧</span><b>رفع تسجيل صوتي</b><small>تسجيل من واتساب أو الهاتف</small></button>
+      <button class="way" id="askBtn" type="button"><span class="wi">✍️</span><b>اكتبي طلبك</b><small>مذكرة أو امتحان أو ورقة عمل تتعمل تلقائيًا من منهج الوزارة</small></button>
       <button class="way" id="pracBtn" type="button"><span class="wi">🧮</span><b>ورقة تدريب جاهزة</b><small>تمارين بالصف والدرس بدون تصوير، مجانًا</small></button>
     </div>
     <label class="chk"><input type="checkbox" id="enhanceChk" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label>
@@ -310,6 +311,20 @@
   <p class="err" id="eqErr" hidden></p>
   <div class="actions2"><button class="btn go" id="eqOk" type="button">✅ حفظ</button><button class="btn" id="eqDel" type="button">🗑️ حذف المعادلة</button><button class="btn" id="eqCancel" type="button">إلغاء</button></div>
 </div></div>
+<div class="modal top" id="askDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="askQ">
+  <h3 id="askQ">✍️ اكتبي طلبك</h3>
+  <p class="small center">اكتبي (أو اتكلمي بزرار الميكروفون في الكيبورد) نوع الورقة والدروس ومكوناتها وعددها، والتطبيق يكتبها كاملة من منهج الوزارة. تظهر للمراجعة والتعديل ثم تنزل Word.</p>
+  <textarea id="askText" rows="5" dir="auto" placeholder="مثال: عايزة مذكرة عن الكسور الاعتيادية فيها شرح وقاعدة وأمثلة محلولة و10 تمارين أكمل و5 اختر"></textarea>
+  <div class="chips askex" id="askEx">
+    <button class="chip" type="button" data-ex>مذكرة شرح جمع وطرح الكسور: القاعدة + 3 أمثلة محلولة + 10 تمارين + 5 اختر</button>
+    <button class="chip" type="button" data-ex>امتحان شهري على الوحدة الأولى: 5 اختر + 5 أكمل + سؤالين مسائل</button>
+    <button class="chip" type="button" data-ex>ورقة عمل ضرب عدد من رقمين في رقمين: 15 تمرين ومسألتين كلاميتين</button>
+  </div>
+  <b>الصف</b><div class="chips" id="askGrades"></div>
+  <label class="chk"><input type="checkbox" id="askKey"> إضافة الإجابات في آخر الورقة</label>
+  <p class="err" id="askErr" hidden></p>
+  <div class="actions2"><button class="btn go" id="askOk" type="button">✨ اعملي الورقة</button><button class="btn" id="askCancel" type="button">إلغاء</button></div>
+</div></div>
 <div class="modal" id="pracDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="pracQ">
   <h3 id="pracQ">🧮 ورقة تدريب جاهزة</h3>
   <p class="small center">تمارين جديدة كل مرة، تظهر للمراجعة والتعديل ثم تنزل Word بنفس تنسيقك.</p>
@@ -324,25 +339,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=50"></script>
-<script src="kateb/scan.js?v=50"></script>
-<script src="kateb/verify.js?v=50"></script>
-<script src="kateb/arabic.js?v=50"></script>
-<script src="kateb/bank.js?v=50"></script>
-<script src="kateb/store.js?v=50"></script>
-<script src="kateb/sync.js?v=50"></script>
-<script src="kateb/learn.js?v=50"></script>
-<script src="kateb/fields.js?v=50"></script>
-<script src="kateb/speech.js?v=50"></script>
-<script src="kateb/localasr.js?v=50"></script>
-<script src="kateb/geminilive.js?v=50"></script>
-<script src="kateb/raster.js?v=50"></script>
-<script src="kateb/docx.js?v=50"></script>
-<script src="kateb/vendor/temml.min.js?v=50"></script>
-<script src="kateb/vendor/mathml2omml.js?v=50"></script>
-<script src="kateb/exam.js?v=50"></script>
-<script src="kateb/practice.js?v=50"></script>
+<script src="kateb/engine.js?v=51"></script>
+<script src="kateb/scan.js?v=51"></script>
+<script src="kateb/verify.js?v=51"></script>
+<script src="kateb/arabic.js?v=51"></script>
+<script src="kateb/bank.js?v=51"></script>
+<script src="kateb/store.js?v=51"></script>
+<script src="kateb/sync.js?v=51"></script>
+<script src="kateb/learn.js?v=51"></script>
+<script src="kateb/fields.js?v=51"></script>
+<script src="kateb/speech.js?v=51"></script>
+<script src="kateb/localasr.js?v=51"></script>
+<script src="kateb/geminilive.js?v=51"></script>
+<script src="kateb/raster.js?v=51"></script>
+<script src="kateb/docx.js?v=51"></script>
+<script src="kateb/vendor/temml.min.js?v=51"></script>
+<script src="kateb/vendor/mathml2omml.js?v=51"></script>
+<script src="kateb/exam.js?v=51"></script>
+<script src="kateb/practice.js?v=51"></script>
 
-<script src="kateb/app.js?v=50"></script>
+<script src="kateb/app.js?v=51"></script>
 </body>
 </html>

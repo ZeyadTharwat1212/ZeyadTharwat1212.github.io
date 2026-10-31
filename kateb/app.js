@@ -981,6 +981,97 @@
     $('pagesBox').addEventListener('click', function (e) { var q = e.target.closest && e.target.closest('.sheet .mathx, .sheet .frac'); if (q) openEq(q); });
   }
 
+  /* ---------- v51 «اكتبي طلبك»: Ms. Hanan writes what she wants in her own words («مذكرة الكسور: شرح + أمثلة محلولة +
+     10 تمارين + اختر») and the AI writes the whole document from the ministry curriculum of her grade → editable sheet → Word ---------- */
+  var ASK_FORMAT =
+    "OUTPUT FORMAT (plain text lines, no code fences, no commentary):\n" +
+    "KIND: notes | exam | monthly | revision   (first line: notes = مذكرة / شرح, exam = final exam, monthly = monthly test, revision = worksheet / revision sheet)\n" +
+    "TITLE: <short English title of the document>   (second line)\n" +
+    "[H] <heading>   (a centred bold heading, e.g. a lesson name in a note)\n" +
+    "[Q] Question (1) Choose the correct answer   (a section heading; sections numbered (1), (2), (3)… in order)\n" +
+    "[I] **1)** <question or exercise>   (numbered items, restarting at 1 in each section; blanks as __________)\n" +
+    "[OPT] a) … | b) … | c) … | d) …   (the 4 choices of the item above, one line, exactly one correct)\n" +
+    "[TABLE] cell | cell || cell | cell   (tables, place-value charts, bar models; || between rows)\n" +
+    "[FIG] <svg …>…</svg>   (a needed drawing — shape, number line, clock, grid, graph — as clean SVG on ONE line: viewBox about 120-320 wide, black strokes stroke-width=\"2\", fill=\"none\", labels as <text font-family=\"Times New Roman\" font-size=\"16\">; no scripts or images)\n" +
+    "[GAP]   (space for a worked answer)\n" +
+    "Any other line is a normal paragraph (explanations, rules, worked-example steps). **text** = bold, __text__ = underlined.\n" +
+    "MATH: fractions as {3/4}; mixed numbers 2 {1/3}; powers ² ³; symbols × ÷ − = % < >; anything else as LaTeX inside \\( \\): \\(\\sqrt{49}\\), \\(10^{6}\\), \\(\\overline{AB}\\), \\(\\overrightarrow{AB}\\), \\(\\angle ABC\\), \\(60^{\\circ}\\), \\(0.\\overline{3}\\).";
+  async function askSystem(gk) {
+    if (mathBank === undefined) { try { mathBank = await Bank.load('exam_math'); } catch (e) { mathBank = null; } }
+    var t = "You are an experienced Egyptian maths teacher at a governmental LANGUAGE school (maths taught in English) writing ready-to-print material for Ms. Hanan's pupils.\n";
+    var G = mathBank && mathBank.grades && mathBank.grades[gk];
+    if (G) {
+      var units = function (k) { return (G.terms[k] || []).map(function (u) { return '- ' + u.unit + (u.lessons && u.lessons.length ? ': ' + u.lessons.join('; ') : ''); }).join('\n'); };
+      t += "MINISTRY CURRICULUM (" + (mathBank.school_year || '') + ") — " + G.label + (G.curriculum ? ' — ' + G.curriculum : '') + "\nTERM 1:\n" + units('1') + "\nTERM 2:\n" + units('2') +
+        "\nMATH WORDS AS IN THE MINISTRY BOOK: " + G.vocab.join(', ') + "\nUNITS AND SYMBOLS: " + (G.units || []).join(', ') + "\n";
+    }
+    if (mathBank) {
+      t += "STANDARD EXAM INSTRUCTIONS: " + (mathBank.instructions || []).join(' / ') + "\n";
+      if (mathBank.structure) t += "EXAM STRUCTURE IN EGYPT: " + Object.keys(mathBank.structure).map(function (k) { return k + ': ' + mathBank.structure[k]; }).join(' | ') + "\n";
+    }
+    return t + "Use the ministry book's terms, units and style, at the level of this grade. Every number, answer and choice must be mathematically correct — check each one.";
+  }
+  function askPrompt(req, gradeLabel, answers) {
+    return "Ms. Hanan's request (it may be in Egyptian Arabic): «" + req + "»\nGrade: " + gradeLabel + ".\n\n" +
+      "Write the COMPLETE document she asked for, ready to print, in correct English (Arabic only if she asks for it):\n" +
+      "- Include EVERY part she listed, in her order, with exactly the counts she gave (e.g. «10 تمارين» = 10 items). If she gives no counts, choose sensible amounts for one or two pages.\n" +
+      "- A note / مذكرة / شرح: for each idea a [H] heading, a short clear explanation with the **rule** in bold, worked examples step by step, then practice in [Q] sections.\n" +
+      "- An exam or worksheet: [Q] sections with the standard instructions, easy to hard, 4 choices in every multiple-choice item.\n" +
+      "- Draw a [FIG] only where a picture is really needed.\n" +
+      (answers ? "- End with a section [Q] Answers giving the answer of every item (worked answers short).\n" : "- Do not include the answers.\n") +
+      "\n" + ASK_FORMAT + "\n\nReply with the document only.";
+  }
+  if ($('askDlg')) {
+    var askGrade = '';
+    var GRADE_KEYS = [['P3', 'Primary 3'], ['P4', 'Primary 4'], ['P5', 'Primary 5'], ['P6', 'Primary 6'], ['Prep1', 'Prep 1']];
+    var paintAsk = function () { $('askGrades').innerHTML = GRADE_KEYS.map(function (g) { return '<button class="chip" type="button" data-ag="' + g[0] + '" aria-pressed="' + (g[0] === askGrade) + '">' + g[1] + '</button>'; }).join(''); };
+    $('askBtn').addEventListener('click', function () {
+      askGrade = askGrade || gradeKey(($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade')) || 'P4';
+      paintAsk(); $('askErr').hidden = true; $('askText').value = Engine.lsGet('exam.askDraft') || ''; $('askDlg').hidden = false; setTimeout(function () { $('askText').focus(); }, 50);
+    });
+    $('askGrades').addEventListener('click', function (e) { var b = e.target.closest('[data-ag]'); if (!b) return; askGrade = b.dataset.ag; paintAsk(); });
+    $('askEx').addEventListener('click', function (e) { var b = e.target.closest('[data-ex]'); if (!b) return; $('askText').value = b.textContent; $('askText').focus(); });
+    $('askText').addEventListener('input', function () { Engine.lsSet('exam.askDraft', $('askText').value); });
+    $('askCancel').addEventListener('click', function () { $('askDlg').hidden = true; });
+    $('askDlg').addEventListener('click', function (e) { if (e.target === $('askDlg')) $('askDlg').hidden = true; });
+    $('askOk').addEventListener('click', async function () {
+      var req = ($('askText').value || '').trim();
+      if (req.length < 6) { $('askErr').textContent = 'اكتبي طلبك أولاً: نوع الورقة، الدروس، ومكوناتها.'; $('askErr').hidden = false; return; }
+      if (!KEY) { $('askErr').textContent = 'هذه الخاصية تحتاج مفتاح القراءة. افتحي رابط التطبيق من زياد مرة واحدة.'; $('askErr').hidden = false; return; }
+      if (running) return;
+      $('askDlg').hidden = true;
+      running = true; plainRun = false; results = []; usedModels = {}; docCost = 0; curAdded = {}; reconvertDoc = null; pendingAudio = null;
+      runAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      show('work'); stageNames(['فهم الطلب', 'كتابة الورقة', 'التنسيق']); setStage(1); setProgress(1, 3, 'جارٍ كتابة الورقة من منهج الوزارة… (قد يستغرق دقيقة أو اثنتين)'); $('waitText').hidden = true; $('thumbs').innerHTML = '';
+      if ($('cancelBtn')) $('cancelBtn').hidden = false;
+      var t0 = Date.now(), label = (GRADE_KEYS.filter(function (g) { return g[0] === askGrade; })[0] || [0, ''])[1];
+      try {
+        var r = await Engine.generate(KEY, askPrompt(req, label, $('askKey').checked), [], { best: true, effort: 'high', temperature: 0.4, maxTokens: 16000, system: await askSystem(askGrade), signal: sig(), onWait: onWait });
+        if (r.model) usedModels[r.model] = 1;
+        var text = Engine.clean(r.text), kind = 'notes', title = '';
+        text = text.replace(/^\s*KIND:\s*(\w+)\s*$/im, function (a, k) { k = k.toLowerCase(); if (/^(notes|exam|monthly|revision)$/.test(k)) kind = k; return ''; })
+          .replace(/^\s*TITLE:\s*(.+)$/im, function (a, t) { title = t.trim(); return ''; }).replace(/^\s*\n/, '');
+        if (!/\S/.test(text)) throw { code: 'empty' };
+        setStage(2); setProgress(2, 3, 'جارٍ التنسيق…');
+        Engine.lsSet('exam.hGrade', label); if ($('hGrade')) $('hGrade').value = label;
+        var res = await toResult('GRADE: ' + label + '\n' + text); res.text = text; res.type = null; res.secs = Math.round((Date.now() - t0) / 1000); res.agree = null;
+        results = [res]; setProgress(3, 3, 'تم'); finish();
+        if (curDoc) {
+          curDoc.kind = kind; curDoc.head = headPref(kind); curDoc.kindOk = true; curDoc.request = req;
+          var kk = EXAM_KINDS.filter(function (x) { return x.key === kind; })[0];
+          curDoc.kindTitle = title || (kk ? kk.title() : '');
+          curDoc.name = (title || req).slice(0, 60); curDoc.nameAuto = curDoc.name; if ($('docName')) $('docName').value = curDoc.name;
+          kindLabel(); saveDraft();
+        }
+        try { localStorage.removeItem('exam.askDraft'); } catch (e) {}
+      } catch (e) {
+        if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; toStart(); return; }
+        fail(e);
+      }
+      running = false; stageNames(STAGE_IMG);
+    });
+  }
+
   /* ---------- v50 ready-made practice sheet (no photo, no AI): grade + topics → editable sheet → Word ---------- */
   if ($('pracDlg') && typeof Practice !== 'undefined') {
     var pracGrade = Practice.gradeOf(($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade')), pracTopics = null;
@@ -2124,7 +2215,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '50';
+  var APP_VER = '51';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

@@ -52,13 +52,13 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
   await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
-    const kind = /OCR OUTPUT:/.test(prompt) ? 'printed' : /writing UPRIGHT/.test(prompt) ? 'orient' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /against the standard wording of Egyptian court formulas/.test(prompt) ? 'form' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    const kind = /Ms\. Hanan's request/.test(prompt) ? 'ask' : /OCR OUTPUT:/.test(prompt) ? 'printed' : /writing UPRIGHT/.test(prompt) ? 'orient' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /against the standard wording of Egyptian court formulas/.test(prompt) ? 'form' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
     calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, p: prompt.slice(0, 6000), model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta, ocr: kind === 'printed' ? prompt.split('OCR OUTPUT:\n')[1] : undefined });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
     const short = /MARKED PLACES/.test(prompt);
     if (kind === 'orient') calls.rotDone = true;
-    const text = kind === 'orient' ? (answers.UP || '1') : short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', form: answers.FORM || 'لا شيء', format: answers.FMT || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    const text = kind === 'orient' ? (answers.UP || '1') : short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', form: answers.FORM || 'لا شيء', format: answers.FMT || answers.A, ask: answers.ASK || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
     calls.claude[calls.claude.length - 1].short = short; calls.claude[calls.claude.length - 1].cache = body.messages[0].content.some(c => c.cache_control);
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: ((kind === 'read' || kind === 'read2') && answers.ROT && !calls.rotDone ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
@@ -1356,6 +1356,29 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(doc.includes('Practice Sheet') && doc.includes('Answers'), 'title and answer key');
     assert.ok((doc.match(/<m:oMath>/g) || []).length >= 8, 'native Word equations');
     assert.ok(doc.includes('<m:bar>') && (doc.includes('<m:rad>') || doc.includes('<m:sSup>')), 'bar, root/power');
+  }));
+
+  const ASK_DOC = 'KIND: notes\nTITLE: Adding and Subtracting Fractions\n[H] Adding fractions\n**Rule:** make the denominators equal, then add the numerators.\nExample 1: {1/2} + {1/4} = {2/4} + {1/4} = {3/4}\n[Q] Question (1) Complete\n[I] **1)** {1/3} + {1/6} = __________\n[I] **2)** \\(\\sqrt{49}\\) = __________\n[Q] Question (2) Choose the correct answer\n[I] **1)** {1/2} − {1/4} = ……\n[OPT] a) {1/4} | b) {1/2} | c) {3/4} | d) 1\n[Q] Answers\n1) {1/2}';
+  await step('v51 Hanan: «اكتبي طلبك» — her request in Arabic + grade → one AI call with her grade\'s ministry curriculum → the whole note in the editable preview (title, kind, equations) → Word', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A, ASK: ASK_DOC }, null, 'sk-ant-test', async (page, calls) => {
+    await page.click('#askBtn'); await page.waitForSelector('#askDlg:not([hidden])');
+    await page.click('#askOk'); assert.ok(await page.locator('#askErr').isVisible(), 'empty request is refused with a message');
+    await page.click('#askEx [data-ex] >> nth=0');
+    assert.match(await page.inputValue('#askText'), /مذكرة/);
+    await page.click('#askGrades [data-ag="P6"]'); await page.check('#askKey');
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'ask-dialog.png') });
+    await page.click('#askOk'); await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+    const c = calls.claude.filter(x => x.kind === 'ask');
+    assert.strictEqual(c.length, 1, 'one AI call'); assert.strictEqual(calls.claude.length, 1, 'nothing else');
+    assert.match(c[0].p, /مذكرة شرح جمع وطرح الكسور/); assert.match(c[0].p, /Grade: Primary 6/); assert.match(c[0].p, /End with a section \[Q\] Answers/);
+    assert.match(c[0].system, /MINISTRY CURRICULUM/); assert.match(c[0].system, /Primary 6/);
+    assert.strictEqual(await page.inputValue('#docName'), 'Adding and Subtracting Fractions');
+    assert.ok(await page.locator('#pagesBox .sheet p.h').count() >= 1, 'heading');
+    assert.ok(await page.locator('#pagesBox .frac').count() >= 5 && await page.locator('#pagesBox .mathx').count() === 1);
+    assert.ok(!(await page.textContent('#pagesBox')).includes('KIND:'), 'control lines removed');
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'ask-result.png'), fullPage: true });
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
+    const doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
+    assert.ok(doc.includes('Adding and Subtracting Fractions') && doc.includes('Rule:') && doc.includes('<m:f>') && doc.includes('<m:rad>'), 'Word: title, rule, equations');
   }));
 
   await browser.close(); server.close();

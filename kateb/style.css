@@ -483,3 +483,5 @@ body.wide{padding-bottom:110px}
 .modal.top{align-items:flex-start}
 .prtopics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 12px}
 .chip[aria-pressed="true"]{background:var(--accent,#2563eb);color:#fff;border-color:transparent}
+#askText{width:100%;font-size:20px;line-height:1.6;padding:12px 14px;border:2px solid var(--line-2);border-radius:var(--r-m);background:var(--surface-2);color:var(--ink);resize:vertical;font-family:inherit}
+.askex .chip{font-size:14px;min-height:0;padding:6px 12px;text-align:right;font-family:inherit;font-weight:600}
