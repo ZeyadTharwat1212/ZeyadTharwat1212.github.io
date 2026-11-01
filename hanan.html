@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=52">
-<link rel="stylesheet" href="kateb/vendor/temml.css?v=52">
+<link rel="stylesheet" href="kateb/style.css?v=53">
+<link rel="stylesheet" href="kateb/vendor/temml.css?v=53">
 </head>
 <body>
 <main>
@@ -49,6 +49,7 @@
 </section>
 
 <section id="start" class="row" hidden>
+  <p class="status warn" id="capWarn" hidden></p>
   <div class="hero"><h2>من <em>مسودة الامتحان</em> إلى ملف Word جاهز للطباعة</h2><p>صوّري صفحات الامتحان، والذكاء الاصطناعي يقرأها ويرتّبها بالتنسيق المدرسي، وتراجعينها قبل الحفظ.</p></div>
   <div class="card outmode" id="outBox">
     <b class="outq">ماذا تريدين في ملف Word؟</b>
@@ -74,6 +75,7 @@
       <button class="way" id="voiceBtn" type="button"><span class="wi">🎙️</span><b>إملاء صوتي</b><small>اقرأ الورقة بصوتك وتتحول لنص</small></button>
       <button class="way" id="audioBtn" type="button"><span class="wi">🎧</span><b>رفع تسجيل صوتي</b><small>تسجيل من واتساب أو الهاتف</small></button>
       <button class="way" id="askBtn" type="button"><span class="wi">✍️</span><b>اكتبي طلبك</b><small>مذكرة أو امتحان أو ورقة عمل تتعمل تلقائيًا من منهج الوزارة</small></button>
+      <button class="way" id="bankBtn" type="button"><span class="wi">📚</span><b>بنك أسئلتي</b><small>امتحان جديد من أسئلتك القديمة، مجانًا وفي ثوانٍ</small></button>
       <button class="way" id="pracBtn" type="button"><span class="wi">🧮</span><b>ورقة تدريب جاهزة</b><small>تمارين بالصف والدرس بدون تصوير، مجانًا</small></button>
     </div>
     <label class="chk"><input type="checkbox" id="enhanceChk" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label>
@@ -89,6 +91,7 @@
       <button class="btn go" id="goBtn" type="button"><span>✨ تحويل إلى نص</span></button>
     </div>
     <p class="small center">اضغط على أي صورة لتراها بعد التحسين أو لتحميلها. <button class="linkbtn" id="clearTrayBtn" type="button">إلغاء الكل</button></p>
+    <label class="chk" id="batchRow"><input type="checkbox" id="batchChk"> كل صورة ورقة منفصلة (ملف لكل ورقة)</label>
   </div>
   <button class="btn resume" id="resumeBtn" type="button" hidden><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></span><span>استكمال آخر مستند<small id="resumeWhen"></small></span></button>
   <div class="menu">
@@ -215,6 +218,8 @@
       <button class="btn sm" id="firstTextBtn" type="button">استرجاع النص الأول</button>
       <button class="btn sm" id="reconvertBtn" type="button">🔄 إعادة التحويل</button>
       <button class="btn sm" id="fixBtn" type="button">✍️ تصحيح اللغة والإملاء</button>
+      <button class="btn sm" id="toolsBtn" type="button">🧩 أدوات الامتحان</button>
+      <button class="btn sm" id="reportBtn" type="button">⚠️ في مشكلة؟</button>
       <button class="btn sm" id="eqBtn" type="button" title="أو اضغطي على أي معادلة أو كسر لتعديله">➗ إدخال معادلة</button>
     </div>
     <div class="card vpanel" id="fixPanel" hidden><div class="vhead"><b>✍️ تصحيح اللغة والإملاء</b><button class="iconbtn sm" id="fixClose" type="button" aria-label="إغلاق">✕</button></div><p class="small">النص الأصلي كما هو يبقى هو المستند. هذه اقتراحات إملائية ونحوية فقط، تقبل أو ترفض كل واحدة بنفسك، وكل تغيير يظهر بلون مميز ويمكن التراجع عنه.</p><div id="fixList"></div></div>
@@ -227,10 +232,13 @@
 
 <section id="files" class="row" hidden>
   <h2 class="h2">📁 ملفاتي السابقة</h2>
+  <p class="status ok" id="filesNote" hidden></p>
   <p class="small center syncnote" id="syncNote" hidden></p>
   <input class="search" id="filesSearch" type="search" placeholder="ابحث باسم الملف أو كلمة منه…" aria-label="بحث في الملفات" autocomplete="off">
   <div class="doclist" id="docList"></div>
   <p class="empty" id="filesEmpty" hidden></p>
+  <div class="actions2 backup"><button class="btn sm" id="backupBtn" type="button">⬇️ تنزيل كل ملفاتي</button><button class="btn sm" id="restoreBtn" type="button">⬆️ استرجاع نسخة</button><input type="file" id="restoreFile" accept=".zip,application/zip" hidden></div>
+  <p class="small center" id="backupNote" hidden></p>
   <button class="btn" id="trashBtn" type="button">🗑️ المحذوفات <span id="trashCount"></span></button>
 </section>
 
@@ -311,6 +319,26 @@
   <p class="err" id="eqErr" hidden></p>
   <div class="actions2"><button class="btn go" id="eqOk" type="button">✅ حفظ</button><button class="btn" id="eqDel" type="button">🗑️ حذف المعادلة</button><button class="btn" id="eqCancel" type="button">إلغاء</button></div>
 </div></div>
+<div class="modal" id="toolsDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="toolsQ">
+  <h3 id="toolsQ">🧩 أدوات الامتحان</h3>
+  <div class="tlist">
+    <div class="tl"><button class="btn go" id="tlKey" type="button">🔑 الإجابات وتوزيع الدرجات</button><label class="tplrow">مجموع الدرجات<input id="tlMarks" inputmode="numeric" dir="ltr" placeholder="30"></label><small>يحل كل الأسئلة ويضيف نموذج الإجابة بالدرجات في آخر الورقة.</small></div>
+    <div class="tl"><button class="btn" id="tlB" type="button">🔀 نموذج B</button><small>نفس الأسئلة بترتيب مختلف والاختيارات متبدّلة — ملف جديد، مجانًا.</small></div>
+    <div class="tl"><button class="btn" id="tlEasy" type="button">🐢 نسخة مبسّطة لضعاف التحصيل</button><small>نفس الدروس، أسئلة أقل وأرقام أسهل — ملف جديد.</small></div>
+    <div class="tl"><button class="btn" id="tlTwo" type="button">🖨️ طباعة نسختين في الورقة</button><small>نسختان جنب بعض على ورقة A4 بالعرض — للاختبار القصير (صفحة واحدة).</small></div>
+  </div>
+  <div class="actions2"><button class="btn" id="toolsCancel" type="button">إغلاق</button></div>
+</div></div>
+<div class="modal top" id="bankDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="bankQ">
+  <h3 id="bankQ">📚 بنك أسئلتي</h3>
+  <p class="small center" id="bankCount"></p>
+  <div class="chips" id="bankGrades"></div>
+  <div class="chips" id="bankKinds"></div>
+  <input class="search" id="bankSearch" type="search" placeholder="ابحثي بكلمة من السؤال (مثلاً fraction أو 25)…" autocomplete="off" dir="auto">
+  <div class="bankrand"><button class="btn sm" id="bankRandom" type="button">🎲 اختاري عشوائيًا</button><input id="bankN" inputmode="numeric" value="10" dir="ltr" aria-label="العدد"><span class="small">سؤال</span><button class="linkbtn" id="bankClear" type="button">إلغاء الاختيار</button></div>
+  <div class="banklist" id="bankList"></div>
+  <div class="actions2"><button class="btn go" id="bankMake" type="button" disabled>✨ اعملي امتحان من المختار</button><button class="btn" id="bankCancel" type="button">إغلاق</button></div>
+</div></div>
 <div class="modal top" id="askDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="askQ">
   <h3 id="askQ">✍️ اكتبي طلبك</h3>
   <p class="small center">اكتبي (أو اتكلمي بزرار الميكروفون في الكيبورد) نوع الورقة والدروس ومكوناتها وعددها، والتطبيق يكتبها كاملة من منهج الوزارة. تظهر للمراجعة والتعديل ثم تنزل Word.</p>
@@ -339,25 +367,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=52"></script>
-<script src="kateb/scan.js?v=52"></script>
-<script src="kateb/verify.js?v=52"></script>
-<script src="kateb/arabic.js?v=52"></script>
-<script src="kateb/bank.js?v=52"></script>
-<script src="kateb/store.js?v=52"></script>
-<script src="kateb/sync.js?v=52"></script>
-<script src="kateb/learn.js?v=52"></script>
-<script src="kateb/fields.js?v=52"></script>
-<script src="kateb/speech.js?v=52"></script>
-<script src="kateb/localasr.js?v=52"></script>
-<script src="kateb/geminilive.js?v=52"></script>
-<script src="kateb/raster.js?v=52"></script>
-<script src="kateb/docx.js?v=52"></script>
-<script src="kateb/vendor/temml.min.js?v=52"></script>
-<script src="kateb/vendor/mathml2omml.js?v=52"></script>
-<script src="kateb/exam.js?v=52"></script>
-<script src="kateb/practice.js?v=52"></script>
+<script src="kateb/engine.js?v=53"></script>
+<script src="kateb/scan.js?v=53"></script>
+<script src="kateb/verify.js?v=53"></script>
+<script src="kateb/arabic.js?v=53"></script>
+<script src="kateb/bank.js?v=53"></script>
+<script src="kateb/store.js?v=53"></script>
+<script src="kateb/sync.js?v=53"></script>
+<script src="kateb/learn.js?v=53"></script>
+<script src="kateb/fields.js?v=53"></script>
+<script src="kateb/speech.js?v=53"></script>
+<script src="kateb/localasr.js?v=53"></script>
+<script src="kateb/geminilive.js?v=53"></script>
+<script src="kateb/raster.js?v=53"></script>
+<script src="kateb/docx.js?v=53"></script>
+<script src="kateb/vendor/temml.min.js?v=53"></script>
+<script src="kateb/vendor/mathml2omml.js?v=53"></script>
+<script src="kateb/exam.js?v=53"></script>
+<script src="kateb/practice.js?v=53"></script>
 
-<script src="kateb/app.js?v=52"></script>
+<script src="kateb/app.js?v=53"></script>
 </body>
 </html>

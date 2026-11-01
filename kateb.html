@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=52">
+<link rel="stylesheet" href="kateb/style.css?v=53">
 </head>
 <body>
 <main>
@@ -48,6 +48,7 @@
 </section>
 
 <section id="start" class="row" hidden>
+  <p class="status warn" id="capWarn" hidden></p>
   <div class="hero"><h2>من <em>خط اليد</em> إلى Word و PDF بتنسيق المكتب</h2><p>صوّر الورقة، والذكاء الاصطناعي يقرأها قراءتين ويراجعها بصيغ المكتب، ثم تراجع الكلمات غير الواضحة بنفسك قبل الحفظ.</p></div>
   <div class="card outmode" id="outBox">
     <b class="outq">ماذا تريد في ملف Word؟</b>
@@ -79,6 +80,7 @@
       <button class="btn go" id="goBtn" type="button"><span>✨ تحويل إلى نص</span></button>
     </div>
     <p class="small center">اضغط على أي صورة لتراها بعد التحسين أو لتحميلها. <button class="linkbtn" id="clearTrayBtn" type="button">إلغاء الكل</button></p>
+    <label class="chk" id="batchRow"><input type="checkbox" id="batchChk"> كل صورة ورقة منفصلة (ملف لكل ورقة)</label>
   </div>
   <button class="btn resume" id="resumeBtn" type="button" hidden><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></span><span>استكمال آخر مستند<small id="resumeWhen"></small></span></button>
   <div class="menu">
@@ -200,6 +202,7 @@
       <button class="btn sm" id="firstTextBtn" type="button">استرجاع النص الأول</button>
       <button class="btn sm" id="reconvertBtn" type="button">🔄 إعادة التحويل</button>
       <button class="btn sm" id="fixBtn" type="button">✍️ تصحيح اللغة والإملاء</button>
+      <button class="btn sm" id="reportBtn" type="button">⚠️ في مشكلة؟</button>
       <button class="btn sm" id="formBtn" type="button">⚖️ تحسين صيغة المحاماة</button>
     </div>
     <div class="card vpanel" id="fixPanel" hidden><div class="vhead"><b id="fixTitle">✍️ تصحيح اللغة والإملاء</b><button class="iconbtn sm" id="fixClose" type="button" aria-label="إغلاق">✕</button></div><p class="small" id="fixDesc">النص الأصلي كما هو يبقى هو المستند. هذه اقتراحات إملائية ونحوية فقط، تقبل أو ترفض كل واحدة بنفسك، وكل تغيير يظهر بلون مميز ويمكن التراجع عنه.</p><div id="fixList"></div></div>
@@ -212,10 +215,13 @@
 
 <section id="files" class="row" hidden>
   <h2 class="h2">📁 ملفاتي السابقة</h2>
+  <p class="status ok" id="filesNote" hidden></p>
   <p class="small center syncnote" id="syncNote" hidden></p>
   <input class="search" id="filesSearch" type="search" placeholder="ابحث باسم الملف أو كلمة منه…" aria-label="بحث في الملفات" autocomplete="off">
   <div class="doclist" id="docList"></div>
   <p class="empty" id="filesEmpty" hidden></p>
+  <div class="actions2 backup"><button class="btn sm" id="backupBtn" type="button">⬇️ تنزيل كل ملفاتي</button><button class="btn sm" id="restoreBtn" type="button">⬆️ استرجاع نسخة</button><input type="file" id="restoreFile" accept=".zip,application/zip" hidden></div>
+  <p class="small center" id="backupNote" hidden></p>
   <button class="btn" id="trashBtn" type="button">🗑️ المحذوفات <span id="trashCount"></span></button>
 </section>
 
@@ -295,25 +301,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"legal"};</script>
-<script src="kateb/engine.js?v=52"></script>
-<script src="kateb/scan.js?v=52"></script>
-<script src="kateb/verify.js?v=52"></script>
-<script src="kateb/arabic.js?v=52"></script>
-<script src="kateb/bank.js?v=52"></script>
-<script src="kateb/store.js?v=52"></script>
-<script src="kateb/sync.js?v=52"></script>
-<script src="kateb/learn.js?v=52"></script>
-<script src="kateb/fields.js?v=52"></script>
-<script src="kateb/memory.js?v=52"></script>
-<script src="kateb/speech.js?v=52"></script>
-<script src="kateb/localasr.js?v=52"></script>
-<script src="kateb/geminilive.js?v=52"></script>
-<script src="kateb/raster.js?v=52"></script>
-<script src="kateb/dict.js?v=52"></script>
-<script src="kateb/ocr.js?v=52"></script>
-<script src="kateb/docx.js?v=52"></script>
-<script src="kateb/exam.js?v=52"></script>
-<script src="kateb/office.js?v=52"></script>
-<script src="kateb/app.js?v=52"></script>
+<script src="kateb/engine.js?v=53"></script>
+<script src="kateb/scan.js?v=53"></script>
+<script src="kateb/verify.js?v=53"></script>
+<script src="kateb/arabic.js?v=53"></script>
+<script src="kateb/bank.js?v=53"></script>
+<script src="kateb/store.js?v=53"></script>
+<script src="kateb/sync.js?v=53"></script>
+<script src="kateb/learn.js?v=53"></script>
+<script src="kateb/fields.js?v=53"></script>
+<script src="kateb/memory.js?v=53"></script>
+<script src="kateb/speech.js?v=53"></script>
+<script src="kateb/localasr.js?v=53"></script>
+<script src="kateb/geminilive.js?v=53"></script>
+<script src="kateb/raster.js?v=53"></script>
+<script src="kateb/dict.js?v=53"></script>
+<script src="kateb/ocr.js?v=53"></script>
+<script src="kateb/docx.js?v=53"></script>
+<script src="kateb/exam.js?v=53"></script>
+<script src="kateb/office.js?v=53"></script>
+<script src="kateb/app.js?v=53"></script>
 </body>
 </html>

@@ -391,7 +391,7 @@ body.wide{padding-bottom:110px}
 .utable{width:100%;border-collapse:collapse;font-size:15px}
 .utable th,.utable td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:start}
 .utable th{color:var(--muted);font-size:13px}
-.shot .view{position:absolute;bottom:4px;inset-inline-start:4px;border:0;border-radius:8px;background:rgba(15,23,42,.7);color:#fff;font-size:13px;font-weight:700;padding:10px 12px;min-height:40px}
+.shot .view{position:absolute;top:84px;inset-inline-start:4px;border:0;border-radius:8px;background:rgba(15,23,42,.7);color:#fff;font-size:13px;font-weight:700;padding:10px 12px;min-height:40px}
 .shot img{cursor:zoom-in}
 
 /* ---------- KATEB18: alternatives in the pill, fields, language fixes ---------- */
@@ -485,3 +485,29 @@ body.wide{padding-bottom:110px}
 .chip[aria-pressed="true"]{background:var(--accent,#2563eb);color:#fff;border-color:transparent}
 #askText{width:100%;font-size:20px;line-height:1.6;padding:12px 14px;border:2px solid var(--line-2);border-radius:var(--r-m);background:var(--surface-2);color:var(--ink);resize:vertical;font-family:inherit}
 .askex .chip{font-size:14px;min-height:44px;padding:8px 12px;text-align:right;font-family:inherit;font-weight:600}
+.pgtools{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:8px 0 4px}
+.pgtools .pgbusy{flex-basis:100%;text-align:center;font-weight:700;color:var(--accent)}
+.pg.busy .sheet{opacity:.5;pointer-events:none}
+.shot .mv{display:flex;gap:6px;justify-content:center;margin-top:6px}
+.shot .mv button{width:44px;height:40px;border:1px solid var(--line-2);border-radius:10px;background:var(--surface);color:var(--ink);font-size:18px;font-weight:800}
+@media print{.pgtools{display:none}}
+.tlist{display:flex;flex-direction:column;gap:12px}
+.tl{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--line);border-radius:var(--r-m);background:var(--surface-2)}
+.tl small{color:var(--muted);font-size:14px}
+.banklist{display:flex;flex-direction:column;gap:6px;max-height:46dvh;overflow:auto;padding:2px}
+.bq{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface);cursor:pointer;text-align:left}
+.bq input{width:24px;height:24px;flex:0 0 auto;margin-top:2px;accent-color:var(--primary)}
+.bq .bqt{display:block;font-family:"Times New Roman",serif;font-size:17px;color:var(--ink)}
+.bq .bqo{display:block;color:var(--ink);font-family:"Times New Roman",serif;font-size:15px;margin-top:2px}
+.bq .bqs{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.bankrand{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+.bankrand input{width:64px;font-size:18px;padding:8px;border:1px solid var(--line-2);border-radius:10px;text-align:center;background:var(--surface-2);color:var(--ink)}
+.chip.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.actions2.backup{justify-content:center;flex-wrap:wrap}
+#printRoot.twoup{display:none}
+@media print{
+  #printRoot.twoup{display:grid!important;grid-template-columns:1fr 1fr;column-gap:10mm;font-size:10.5pt!important;line-height:1.45!important}
+  #printRoot.twoup .cp{min-width:0;overflow:hidden}
+  #printRoot.twoup .cp+.cp{border-left:1px dashed #888;padding-left:8mm}
+  #printRoot.twoup figure img{max-width:100%;height:auto}
+}

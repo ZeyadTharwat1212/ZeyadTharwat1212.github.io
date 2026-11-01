@@ -52,13 +52,13 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
   await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
-    const kind = /Ms\. Hanan's request/.test(prompt) ? 'ask' : /OCR OUTPUT:/.test(prompt) ? 'printed' : /writing UPRIGHT/.test(prompt) ? 'orient' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /against the standard wording of Egyptian court formulas/.test(prompt) ? 'form' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    const kind = /Ms\. Hanan's request/.test(prompt) ? 'ask' : /Solve EVERY question/.test(prompt) ? 'key' : /EASIER version of it for SLOW LEARNERS/.test(prompt) ? 'easy' : /OCR OUTPUT:/.test(prompt) ? 'printed' : /writing UPRIGHT/.test(prompt) ? 'orient' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /against the standard wording of Egyptian court formulas/.test(prompt) ? 'form' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
     calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, p: prompt.slice(0, 6000), model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta, ocr: kind === 'printed' ? prompt.split('OCR OUTPUT:\n')[1] : undefined });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
     const short = /MARKED PLACES/.test(prompt);
     if (kind === 'orient') calls.rotDone = true;
-    const text = kind === 'orient' ? (answers.UP || '1') : short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', form: answers.FORM || 'لا شيء', format: answers.FMT || answers.A, ask: answers.ASK || answers.A, kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    const text = kind === 'orient' ? (answers.UP || '1') : short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', form: answers.FORM || 'لا شيء', format: answers.FMT || answers.A, ask: answers.ASK || answers.A, key: answers.KEY || '[Q] Answer key and marks (total 30 marks)\n**Question (1) — 30 marks**\n1) 5   (1 mark)', easy: answers.EASY || 'KIND: exam\nTITLE: Easy test\n[Q] Question (1) Complete\n[I] **1)** 2 + 2 = ____', kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
     calls.claude[calls.claude.length - 1].short = short; calls.claude[calls.claude.length - 1].cache = body.messages[0].content.some(c => c.cache_control);
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: ((kind === 'read' || kind === 'read2') && answers.ROT && !calls.rotDone ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
@@ -1379,6 +1379,95 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wordBtn')]);
     const doc = await (await JSZip.loadAsync(fs.readFileSync(await dl.path()))).file('word/document.xml').async('string');
     assert.ok(doc.includes('Adding and Subtracting Fractions') && doc.includes('Rule:') && doc.includes('<m:f>') && doc.includes('<m:rad>'), 'Word: title, rule, equations');
+  }));
+
+  async function toHome(page) { for (let i = 0; i < 6 && !(await page.locator('#start').isVisible()); i++) { await page.click('#backBtn'); await page.waitForTimeout(250); } await page.waitForSelector('#start:not([hidden])'); }
+  async function toFiles(page) { await toHome(page); await page.click('#filesBtn'); await page.waitForSelector('#files:not([hidden])'); }
+  await step('v53 Hanan: exam tools (answer key + marks, form B without the key, a simpler copy, two copies per A4), the phone back button closes a dialog, and «بنك أسئلتي» builds a new exam from her saved questions with no AI call', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page, calls) => {
+    await page.click('#pracBtn'); await page.waitForSelector('#pracDlg:not([hidden])');
+    await page.click('#pracGrades [data-pg="P4"]'); await page.selectOption('#pracCount', '8');
+    await page.click('#pracOk'); await page.waitForSelector('#done:not([hidden])');
+    await page.waitForTimeout(900);
+    /* back button closes the dialog, the review screen stays */
+    await page.click('#toolsBtn'); await page.waitForSelector('#toolsDlg:not([hidden])');
+    await page.goBack(); await page.waitForSelector('#toolsDlg', { state: 'hidden' });
+    assert.ok(await page.locator('#done').isVisible(), 'still on the review screen');
+    /* answer key with marks */
+    await page.click('#toolsBtn'); assert.strictEqual(await page.inputValue('#tlMarks'), '', 'a revision sheet has no marks by default'); await page.fill('#tlMarks', '30');
+    await page.click('#tlKey'); await page.waitForFunction(() => /Answer key and marks/.test(document.getElementById('pagesBox').textContent));
+    const k = calls.claude.filter(c => c.kind === 'key'); assert.strictEqual(k.length, 1); assert.match(k[0].p, /exactly 30 marks/); assert.match(k[0].p, /EXAM:\n\[Q\] Question \(1\)/);
+    /* form B: a new file, same number of questions, no key */
+    const nameA = await page.inputValue('#docName');
+    await page.click('#toolsBtn'); await page.click('#tlB'); await page.waitForFunction(() => /نموذج B/.test(document.getElementById('docName').value));
+    assert.ok(!/Answer key/.test(await page.textContent('#pagesBox')), 'the key is left out of form B');
+    assert.strictEqual(await page.locator('#pagesBox [data-k="item"]').count(), 8);
+    /* a simpler copy */
+    await page.click('#toolsBtn'); await page.click('#tlEasy'); await page.waitForFunction(() => /مبسّط/.test(document.getElementById('docName').value));
+    assert.match(await page.textContent('#pagesBox'), /2 \+ 2/);
+    /* two copies on one landscape A4 */
+    await page.evaluate(() => { window.__printed = 0; });
+    await page.click('#toolsBtn'); await page.click('#tlTwo');
+    const dlg = page.locator('#kindDlg:not([hidden])'); if (await dlg.count()) await page.click('#kindOk');
+    await page.waitForFunction(() => window.__printed === 1);
+    assert.strictEqual(await page.locator('#printRoot.twoup .cp').count(), 2);
+    /* the question bank: questions of every saved exam, a random pick → a new exam, no AI call */
+    const before = calls.claude.length;
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#bankBtn'); await page.waitForSelector('#bankList .bq');
+    assert.ok(await page.locator('#bankList .bq').count() >= 8, 'questions collected from «ملفاتي»');
+    await page.fill('#bankN', '3'); await page.click('#bankRandom');
+    assert.match(await page.textContent('#bankCount'), /المختار 3/);
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'bank.png') });
+    await page.click('#bankMake'); await page.waitForFunction(() => /بنك أسئلتي/.test(document.getElementById('docName').value));
+    assert.strictEqual(await page.locator('#pagesBox [data-k="item"]').count(), 3);
+    assert.strictEqual(calls.claude.length, before, 'no AI call');
+    assert.ok(nameA);
+    /* phone back from the review screen goes home, not out of the app */
+    await page.goBack(); await page.waitForSelector('#start:not([hidden])');
+  }));
+
+  await step('v53 father: page order in the tray, «كل صورة ورقة منفصلة» → one file per paper; one page re-read / turned; «⚠️ في مشكلة؟» marks the file; «ورقة زي دي»; «تنزيل كل ملفاتي» + restore; the monthly limit stops reading with a clear message', () => runMode(browser, base, 'kateb.html', { A: LEGAL.J, B: LEGAL.J }, null, 'sk-ant-test', async (page, calls, context) => {
+    await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+    const photo = await pagePhoto(browser);
+    await page.setInputFiles('#file', [{ name: 'p1.png', mimeType: 'image/png', buffer: photo }, { name: 'p2.png', mimeType: 'image/png', buffer: photo }]);
+    await page.waitForSelector('#tray:not([hidden])');
+    assert.ok(await page.locator('#batchRow').isVisible());
+    await page.click('#shots [data-mv="0"]');
+    await page.check('#batchChk'); await page.click('#goBtn');
+    await page.waitForSelector('#files:not([hidden])', { timeout: 30000 });
+    assert.match(await page.textContent('#filesNote'), /2 ورقات/);
+    assert.strictEqual(await page.locator('#docList .doc').count(), 2, 'two separate files');
+    /* open one: re-read and turn one page */
+    await page.click('#docList .doc >> nth=0 >> [data-act="open"]'); await page.waitForSelector('#done:not([hidden])');
+    const reads = calls.filter(c => c === 'read').length;
+    await page.click('[data-pgread="0"]'); await page.waitForFunction(() => /تمت إعادة قراءة/.test(document.querySelector('.pgbusy').textContent), null, { timeout: 20000 });
+    assert.strictEqual(calls.filter(c => c === 'read').length, reads + 1, 'one page read again');
+    const src0 = await page.getAttribute('.pg .orig img', 'src'); await page.click('[data-pgrot="0"]'); await page.waitForFunction(s => document.querySelector('.pg .orig img').src !== s, src0);
+    /* report */
+    await page.click('#reportBtn'); await page.waitForFunction(() => /البلاغ/.test(document.getElementById('savedNote').textContent));
+    assert.ok((await page.evaluate(() => window.__opened[0] || '')).startsWith('https://wa.me/?text='), 'no sync here: WhatsApp opens with the report');
+    await toFiles(page); await page.waitForSelector('#docList .chip.warn');
+    /* a paper like this one */
+    await page.click('#docList .doc >> nth=0 >> [data-act="copy"]'); await page.waitForSelector('#done:not([hidden])');
+    assert.match(await page.inputValue('#docName'), /^جديد — /);
+    /* backup + restore */
+    await toFiles(page); await page.waitForSelector('#files:not([hidden])');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#backupBtn')]);
+    const z = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
+    const bj = JSON.parse(await z.file('kateb-backup.json').async('string'));
+    assert.strictEqual(bj.docs.length, 3); assert.strictEqual(Object.keys(z.files).filter(n => /^Word\/.+\.docx$/.test(n)).length, 3);
+    await page.setInputFiles('#restoreFile', { name: 'b.zip', mimeType: 'application/zip', buffer: fs.readFileSync(await dl.path()) });
+    await page.waitForFunction(() => /تم الاسترجاع: 0 ملف جديد/.test(document.getElementById('backupNote').textContent));
+    /* the family's monthly limit */
+    await toHome(page); await page.click('#settingsBtn'); await page.waitForSelector('#capIn');
+    await page.fill('#capIn', '0.001'); await page.click('#capSave');
+    assert.match(await page.textContent('#usageBox'), /الحد الشهري \$0.00/);
+    await toHome(page);
+    assert.match(await page.textContent('#capWarn'), /وصلتم للحد الشهري/);
+    await page.setInputFiles('#file', { name: 'p3.png', mimeType: 'image/png', buffer: photo });
+    await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
+    await page.waitForSelector('#fail:not([hidden])', { timeout: 20000 });
+    assert.match(await page.textContent('#failMsg'), /الشهري.*\(cap\)/);
   }));
 
   await browser.close(); server.close();

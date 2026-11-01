@@ -260,7 +260,81 @@ var ExamBuilder = (function () {
     return { meta: meta, blocks: blocks };
   }
 
-  return { build: build, parseExam: parseExam, parseInline: parseInline, splitTop: splitTop, texPlain: texPlain };
+  /* ---------- v53 the sheet back to the exam format, question groups, form B ---------- */
+  function runsText(runs) {
+    return (runs || []).map(function (r) {
+      var t = r.math ? '\\(' + r.math + '\\)' : r.frac ? '{' + r.frac[0] + '/' + r.frac[1] + '}' : String(r.text || '');
+      if (r.u) t = '__' + t + '__'; if (r.b) t = '**' + t + '**'; if (r.hl) t = '⟦' + t + '⟧';
+      return t;
+    }).join('').replace(/\*\*\*\*/g, '').replace(/\s+/g, ' ').trim();
+  }
+  function blocksToText(blocks) {
+    return (blocks || []).map(function (b) {
+      if (b.k === 'q') return '[Q] ' + runsText(b.runs);
+      if (b.k === 'item') return '[I] ' + runsText(b.runs);
+      if (b.k === 'opt') return '[OPT] ' + b.cells.map(runsText).join(' | ');
+      if (b.k === 'table') return '[TABLE] ' + b.rows.map(function (r) { return r.map(runsText).join(' | '); }).join(' || ');
+      if (b.k === 'gap') return '[GAP]';
+      if (b.k === 'fig') return b.svg ? '[FIG] ' + b.svg : '[FIG] (a drawing)';
+      var t = runsText(b.runs); return (b.heading ? '[H] ' : b.align === 'C' ? '[C] ' : '') + t;
+    }).filter(function (l) { return l.trim(); }).join('\n');
+  }
+  /* sections → questions; a question = its [I] line + the options / table / drawing / gap under it */
+  function groups(blocks) {
+    var out = [], sec = null, q = null;
+    (blocks || []).forEach(function (b) {
+      if (b.k === 'q') { sec = { head: b, items: [], pre: [] }; out.push(sec); q = null; return; }
+      if (!sec) { sec = { head: null, items: [], pre: [] }; out.push(sec); }
+      if (b.k === 'item') { q = { blocks: [b] }; sec.items.push(q); return; }
+      if (q && (b.k === 'opt' || b.k === 'table' || b.k === 'fig' || b.k === 'gap')) { q.blocks.push(b); return; }
+      if (q) q.blocks.push(b); else sec.pre.push(b);
+    });
+    return out;
+  }
+  var NUM = /^\s*\(?\d+\s*[).\-]\s*/;
+  function renumber(item, n) {
+    var runs = (item.runs || []).map(function (r) { return Object.assign({}, r); });
+    for (var i = 0; i < runs.length; i++) {
+      if (runs[i].math || runs[i].frac) break;
+      if (!String(runs[i].text || '').trim()) continue;
+      if (NUM.test(runs[i].text)) { runs[i].text = runs[i].text.replace(NUM, ''); if (!runs[i].text.trim()) runs.splice(i, 1); }
+      break;
+    }
+    runs.unshift({ text: ' ' }); runs.unshift({ text: n + ')', b: true });
+    return Object.assign({}, item, { runs: runs });
+  }
+  var LET = /^\s*\(?[a-dA-Dأبجد]\s*[).\-]\s*/;
+  function relabel(cells, letters) {
+    return cells.map(function (c, k) {
+      var runs = c.map(function (r) { return Object.assign({}, r); });
+      for (var i = 0; i < runs.length; i++) { if (runs[i].math || runs[i].frac) break; if (!String(runs[i].text || '').trim()) continue; if (LET.test(runs[i].text)) { runs[i].text = runs[i].text.replace(LET, ''); if (!runs[i].text.trim()) runs.splice(i, 1); } break; }
+      runs.unshift({ text: letters[k] + ') ' });
+      return runs;
+    });
+  }
+  function isKeyHead(b) { return /^(question\s*\(\d+\)\s*)?(answers?|answer key|the answers|model answers?|marking scheme|الإجابات|الاجابات|نموذج الإجابة)\b/i.test(runsText(b.runs).replace(/\*/g, '').trim()) || /^(الإجابات|الاجابات|نموذج الإجابة)/.test(runsText(b.runs).replace(/\*/g, '').trim()); }
+  function shuffle(a, rnd) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  /* form B: the same questions in another order inside each section, the choices of each question in another order;
+     an answer-key section is left out (it would not match) */
+  function variant(blocks, rnd) {
+    rnd = rnd || Math.random; var out = [];
+    groups(blocks).forEach(function (g) {
+      if (g.head && isKeyHead(g.head)) return;
+      if (g.head) out.push(g.head);
+      out = out.concat(g.pre);
+      shuffle(g.items, rnd).forEach(function (q, n) {
+        q.blocks.forEach(function (b, k) {
+          if (k === 0 && b.k === 'item') out.push(renumber(b, n + 1));
+          else if (b.k === 'opt' && b.cells.length >= 2 && b.cells.length <= 6) { var letters = 'abcdef'.slice(0, b.cells.length).split(''); out.push(Object.assign({}, b, { cells: relabel(shuffle(b.cells, rnd), letters) })); }
+          else out.push(b);
+        });
+      });
+    });
+    return out;
+  }
+
+  return { build: build, parseExam: parseExam, parseInline: parseInline, splitTop: splitTop, texPlain: texPlain,
+    runsText: runsText, blocksToText: blocksToText, groups: groups, renumber: renumber, variant: variant, isKeyHead: isKeyHead };
 })();
 
 

@@ -570,3 +570,14 @@ test('v52 arabic amounts: «اثني عشر ألف» (accusative, as the office 
   assert.ok(Arabic.sameAmount(12000, 'اثني عشر ألف جنيه'));
   for (let i = 0; i < 300; i++) for (const g of ['P3', 'P6', 'PREP1']) (Practice.make({ grade: g, count: 12 }).match(/\[OPT\][^\n]*/g) || []).forEach(l => assert.strictEqual(l.split('|').length, 4, l));
 });
+
+test('v53 office template Word files carry «صفحة ١ من ٣» in a footer (part, relationship, content type, sectPr reference)', async () => {
+  const zip = await Office.build(JSZip, DocxBuilder.parseMarkup(SIHHA), 'sihha', { lawyer: Office.lawyerFrom(SIHHA) });
+  const out = await JSZip.loadAsync(await zip.generateAsync({ type: 'nodebuffer' }));
+  const f = await out.file('word/footer1.xml').async('string'), d = await out.file('word/document.xml').async('string');
+  assert.ok(/PAGE/.test(f) && /NUMPAGES/.test(f));
+  assert.ok((await out.file('word/_rels/document.xml.rels').async('string')).includes('Target="footer1.xml"'));
+  assert.ok((await out.file('[Content_Types].xml').async('string')).includes('/word/footer1.xml'));
+  assert.strictEqual((d.match(/<w:footerReference/g) || []).length, 1);
+  fs.writeFileSync('/tmp/claude-0/-home-claude/d98ac6c5-8ea1-5c18-bbf9-0e0c4aa5090d/scratchpad/sihha-footer.docx', await out.generateAsync({ type: 'nodebuffer' }));
+});

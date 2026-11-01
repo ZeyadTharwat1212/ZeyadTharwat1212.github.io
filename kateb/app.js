@@ -16,9 +16,12 @@
   var nav = [], curScreen = null, backing = false;
   function show(id, noPush) {
     if (id === 'start') nav = [];
+    else if (id === 'done' && !noPush && !backing && (curScreen === 'work' || curScreen === 'fail')) {
+      nav = ['start']; pushHist({ k: id });   // v53: phone «back» from the review screen goes home, it does not close the app
+    }
     else if (!noPush && !backing && curScreen && curScreen !== id && STACKED.indexOf(curScreen) >= 0 && STACKED.indexOf(id) >= 0) {
       nav.push(curScreen);
-      try { history.pushState({ k: id }, '', location.href); } catch (e) {}
+      pushHist({ k: id });
     }
     curScreen = id;
     if (id === 'files' || id === 'settings') paintSync(typeof Sync !== 'undefined' ? Sync.status() : null);
@@ -49,7 +52,30 @@
     var st = null; try { st = history.state; } catch (e) {}
     if (nav.length && st && st.k === curScreen) history.back(); else goBack();
   });
+  /* v53: dialogs (kind, request, practice, equation, photo zoom, …) get their own history entry: the phone's back button
+     closes the dialog instead of leaving the app or changing the screen underneath */
+  var modalPushed = false, skipPop = false, spareHist = 0;
+  /* a dialog closed by its own button leaves its history entry behind (going back there raced with the next screen);
+     the next screen or dialog reuses that entry instead of adding one */
+  function pushHist(st) { try { if (spareHist > 0) { spareHist--; history.replaceState(st, '', location.href); } else history.pushState(st, '', location.href); } catch (e) {} }
+  function topModal() { var ms = document.querySelectorAll('.modal:not([hidden]), #zoom:not([hidden])'); return ms.length ? ms[ms.length - 1] : null; }
+  function closeModal(m) {
+    var b = m.querySelector('#zoomClose, [id$="Cancel"], [id$="Close"]');
+    if (b) b.click(); else m.hidden = true;
+    if (!m.hidden) m.hidden = true;
+  }
+  if (typeof MutationObserver !== 'undefined') {
+    var modalWatch = new MutationObserver(function () {
+      var open = !!topModal();
+      if (open && !modalPushed) { modalPushed = true; pushHist({ k: curScreen, modal: 1 }); }
+      else if (!open && modalPushed) { modalPushed = false; spareHist++; }
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.modal, #zoom'), function (m) { modalWatch.observe(m, { attributes: true, attributeFilter: ['hidden'] }); });
+  }
   window.addEventListener('popstate', function () {
+    if (skipPop) { skipPop = false; return; }
+    var m = topModal(); if (m) { modalPushed = false; closeModal(m); return; }
+    if (spareHist > 0) spareHist--;
     if (running) { try { history.pushState({ k: curScreen }, '', location.href); } catch (e) {} return; }
     if (curScreen !== 'start') goBack();
   });
@@ -102,6 +128,7 @@
     var name = Engine.provider(KEY) === 'claude' ? 'Claude' : 'Gemini';
     var b = $('providerBadge'); if (b) { b.textContent = name; b.hidden = false; }
     var w = $('readerNote'); if (w) w.textContent = 'القارئ: ' + name + (name === 'Claude' ? ' (Opus 5.5' + (Engine.fastOn() ? ' ⚡ وضع السرعة' : '') + (econ() ? ' 💰 وضع التوفير' : ' 🎯 أقصى دقة') + ' — قراءتان + مراجعة + فحص الأرقام)' : ' (المجاني — أبطأ)') + '. اترك الصفحة مفتوحة.';
+    try { var cp = capUsd(), fs = familySpend(); if ($('capWarn')) { $('capWarn').hidden = !(cp && fs.usd >= cp * 0.8); $('capWarn').textContent = cp && fs.usd >= cp ? '⛔ وصلتم للحد الشهري لتكلفة القراءة (' + money(cp) + '). زياد يقدر يرفعه من ⚙️ الإعدادات.' : '⚠️ استهلاك هذا الشهر ' + money(fs.usd) + ' من الحد ' + money(cp) + '.'; } } catch (e) {}
     var d = loadDraft();
     $('resumeBtn').hidden = !d;
     if (d) $('resumeWhen').textContent = new Date(d.t).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
@@ -191,11 +218,11 @@
   }
   function renderTray() {
     var box = $('shots'); if (!box) return;
-    box.innerHTML = shots.map(function (sh, i) { return '<div class="shot' + (blur[i] ? ' blur' : '') + '"><img alt="صفحة ' + (i + 1) + '" src="' + Engine.scaled(sh.clean, 260).toDataURL('image/jpeg', 0.7) + '"><span class="n">' + (i + 1) + '</span>' + (sh.quad ? '<span class="cut" title="تم قص الورقة وتعديل الميل">✂️</span>' : '') + (blur[i] ? '<span class="warn">غير واضحة</span>' : '') + '<button class="x" type="button" data-rm="' + i + '" aria-label="حذف الصفحة">✕</button><button class="view" type="button" data-view="' + i + '" aria-label="عرض الصفحة بعد التحسين">🔍 عرض</button></div>'; }).join('');
+    box.innerHTML = shots.map(function (sh, i) { return '<div class="shot' + (blur[i] ? ' blur' : '') + '"><img alt="صفحة ' + (i + 1) + '" src="' + Engine.scaled(sh.clean, 260).toDataURL('image/jpeg', 0.7) + '"><span class="n">' + (i + 1) + '</span>' + (sh.quad ? '<span class="cut" title="تم قص الورقة وتعديل الميل">✂️</span>' : '') + (blur[i] ? '<span class="warn">غير واضحة</span>' : '') + (shots.length > 1 ? '<span class="mv">' + (i > 0 ? '<button type="button" data-mv="' + i + '" data-d="-1" aria-label="قبلها">→</button>' : '') + (i < shots.length - 1 ? '<button type="button" data-mv="' + i + '" data-d="1" aria-label="بعدها">←</button>' : '') + '</span>' : '') + '<button class="x" type="button" data-rm="' + i + '" aria-label="حذف الصفحة">✕</button><button class="view" type="button" data-view="' + i + '" aria-label="عرض الصفحة بعد التحسين">🔍 عرض</button></div>'; }).join('');
     var nb = blur.filter(Boolean).length;
     $('trayCount').textContent = shots.length === 1 ? 'صفحة واحدة جاهزة' : shots.length + ' صفحات جاهزة';
     $('blurNote').hidden = !nb; $('blurNote').textContent = nb ? 'الصورة غير واضحة. من فضلك التقط صورة أوضح (الصفحة ' + blur.map(function (b, i) { return b ? i + 1 : null; }).filter(Boolean).join('، ') + '). يمكنك حذفها وتصويرها مرة أخرى.' : '';
-    $('tray').hidden = !shots.length;
+    $('tray').hidden = !shots.length; if ($('batchRow')) $('batchRow').hidden = shots.length < 2;
     $('goBtn').querySelector('span').textContent = '✨ تحويل المستند بذكاء' + (shots.length > 1 ? ' (' + shots.length + ' صفحات)' : '');
   }
   if ($('camBtn')) {
@@ -207,6 +234,8 @@
       catch (e) { fail(e); }
     });
     $('shots').addEventListener('click', function (e) {
+      var mv = e.target.closest('[data-mv]');                      // v53: change the order of the pages
+      if (mv) { var a = +mv.dataset.mv, b2 = a + (+mv.dataset.d); if (b2 < 0 || b2 >= shots.length) return; var t = shots[a]; shots[a] = shots[b2]; shots[b2] = t; t = blur[a]; blur[a] = blur[b2]; blur[b2] = t; renderTray(); return; }
       var v = e.target.closest('[data-view]') || e.target.closest('img');
       if (v) { var i = v.dataset.view !== undefined ? +v.dataset.view : +v.parentNode.querySelector('[data-view]').dataset.view; openScan(i); return; }
       var b = e.target.closest('[data-rm]'); if (!b) return; shots.splice(+b.dataset.rm, 1); blur.splice(+b.dataset.rm, 1); renderTray();
@@ -215,9 +244,14 @@
     $('goBtn').addEventListener('click', function () {
       if (!shots.length || running) return;
       if (blur.some(Boolean) && !window.confirm('فيه صورة غير واضحة وقد تُقرأ بأخطاء. هل تريد المتابعة؟')) return;
-      startCanvases(shots.map(function (sh) { return { base: sh.clean, raw: sh.plain || sh.orig }; })); shots = []; blur = []; renderTray();
+      var cs = shots.map(function (sh) { return { base: sh.clean, raw: sh.plain || sh.orig }; });
+      batchQueue = ($('batchChk') && $('batchChk').checked && cs.length > 1) ? cs.slice(1).map(function (c) { return [c]; }) : [];
+      batchDone = []; batchTotal = batchQueue.length ? cs.length : 0;
+      startCanvases(batchTotal ? [cs[0]] : cs); shots = []; blur = []; renderTray();
     });
   }
+  /* v53 several papers at once: each photo is read as its own paper and saved as its own file, one after the other */
+  var batchQueue = [], batchDone = [], batchTotal = 0;
   function startCanvases(cs) {
     show('work'); setProgress(0, 1, 'جارٍ تجهيز الصفحات…'); setStage(0); $('waitText').hidden = true; $('thumbs').innerHTML = '';
     if ($('cancelBtn')) $('cancelBtn').hidden = false;
@@ -255,6 +289,35 @@
       });
     }).catch(function () {}).then(function () { pulling = false; });
   }
+  /* v53 «ورقة زي دي»: a new paper from an old one — same layout, template and wording; change names, dates and the court */
+  function copyDoc(doc) {
+    var ps = (doc.pages || []).map(function (p) { return { html: p.html, img: p.img, text: p.text }; });
+    var nd = Store.newDoc(MODE, 'جديد — ' + doc.name, ps, { type: doc.type || null });
+    ['kind', 'head', 'kindTitle', 'kindOk', 'plain', 'tpl', 'lawName', 'lawTitle'].forEach(function (k) { if (doc[k] !== undefined) nd[k] = doc[k]; });
+    nd.copyOf = doc.id; nd.nameAuto = nd.name;
+    Store.saveDoc(nd).then(function () {
+      openDoc(nd);
+      $('savedNote').hidden = false;
+      $('savedNote').textContent = '📄 نسخة جديدة من «' + doc.name + '» — غيّر الأسماء والتواريخ والمحكمة في النص، ثم نزّل Word. الملف القديم كما هو.';
+    });
+  }
+  /* v53 «⚠️ في مشكلة؟»: the person says what is wrong; the document (photo + text) is marked and reaches Zeyad through
+     the private sync, or by WhatsApp when sync is not set up on this device */
+  function reportProblem() {
+    if (!curDoc) return;
+    var note = window.prompt('اكتب في سطر واحد إيه المشكلة في الورقة دي (مثلاً: كلمات كتير غلط في الصفحة التانية):', (curDoc.report && curDoc.report.note) || '');
+    if (note === null) return;
+    note = note.trim() || 'بدون وصف';
+    curDoc.report = { note: note, at: Date.now(), ver: typeof APP_VER !== 'undefined' ? APP_VER : '', models: Object.keys(usedModels || {}), ua: (navigator.userAgent || '').slice(0, 120) };
+    clearTimeout(saveT);
+    saveDraft(true).then(function () {
+      var synced = typeof Sync !== 'undefined' && Sync.cfg && Sync.cfg();
+      if (synced) { try { Sync.soon(0); } catch (e) {} }
+      $('savedNote').hidden = false;
+      $('savedNote').textContent = synced ? '✅ وصل البلاغ لزياد مع صورة الورقة والنص. هيظهر عنده في «ملفاتي» بعلامة ⚠️.' : '✅ تم حفظ البلاغ. اختار زياد في واتساب وابعت الرسالة.';
+      if (!synced) { try { window.open('https://wa.me/?text=' + encodeURIComponent('⚠️ بلاغ من ' + (EXAM ? 'برنامج الامتحانات' : 'الكاتب') + ': ' + note + '\nالملف: ' + curDoc.name), '_blank'); } catch (e) {} }
+    });
+  }
   function openDoc(doc) {
     curDoc = doc; results = doc.pages.map(function (p) { return { html: p.html, img: p.img, text: p.text, type: doc.type }; });
     usedModels = {}; finish(true);
@@ -283,7 +346,7 @@
     run();
   }
   function fail(e, retry) {
-    running = false; reconvertDoc = null; stageNames(STAGE_IMG);
+    running = false; reconvertDoc = null; stageNames(STAGE_IMG); batchQueue = []; batchTotal = 0;
     retryFn = retry || null; if (!retry) pages = [];
     var code = e && e.code ? String(e.code) : (e && e.message ? String(e.message).slice(0, 60) : '');
     $('failMsg').textContent = Engine.errText(e) + (code ? ' (' + code + ')' : '');
@@ -621,7 +684,7 @@
       setProgress(1, 1, 'تم'); setStage('all');
       finish();
     } catch (e) {
-      if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; reconvertDoc = null; pages = []; results = []; toStart(); return; }
+      if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; reconvertDoc = null; pages = []; results = []; batchQueue = []; batchTotal = 0; toStart(); return; }
       var rd = reconvertDoc; fail(e, function () { reconvertDoc = rd; run(); });
     }
     running = false;
@@ -654,32 +717,39 @@
       return '<p class="' + (p.heading ? 'h' : p.sub ? 'sub' : p.list ? 'li al-' + p.align : 'al-' + p.align) + '" dir="' + dirOf(t) + '">' + runsHtml(p.runs) + '</p>'; }).join('') };
     var parsed = ExamBuilder.parseExam(text);
     if (parsed.meta.grade && $('hGrade') && !results.length) { $('hGrade').value = parsed.meta.grade.replace(/^grade\s*/i, ''); Engine.lsSet('exam.hGrade', $('hGrade').value); }
+    return { html: await blocksHtml(parsed.blocks) };
+  }
+  /* v53: exam blocks → the editable sheet (also for the question bank and form B, whose drawings are already pictures) */
+  async function blocksHtml(blocks) {
     var html = '';
-    for (var i = 0; i < parsed.blocks.length; i++) {
-      var b = parsed.blocks[i];
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i];
       if (b.k === 'q') html += '<p data-k="q" class="q">' + runsHtml(b.runs) + '</p>';
       else if (b.k === 'item') html += '<p data-k="item" class="item">' + runsHtml(b.runs) + '</p>';
       else if (b.k === 'opt') html += '<div data-k="opt" class="opt">' + b.cells.map(function (c) { return '<span data-cell>' + runsHtml(c) + '</span>'; }).join('') + '</div>';
       else if (b.k === 'table') html += tableHtml(b.rows, ' data-k="table"');
       else if (b.k === 'gap') html += '<div data-k="gap" class="gap" contenteditable="false"></div>';
-      else if (b.k === 'fig') { var f = b.svg ? await svgToPng(b.svg) : null;
+      else if (b.k === 'fig') { var f = b.data ? { data: b.data, w: b.w || 300, h: b.h || 200 } : b.svg ? await svgToPng(b.svg) : null;
         html += f ? '<figure data-k="fig" contenteditable="false" data-w="' + f.w + '" data-h="' + f.h + '" style="width:' + Math.min(f.w * 1.3, 420) + 'px"><img alt="" src="' + f.data + '"></figure>'
                   : '<p data-k="p" class="al-R"><mark>[ ارسمي الشكل هنا ]</mark></p>'; }
       else html += '<p data-k="p" class="' + (b.heading ? 'h' : 'al-' + (b.align || 'J')) + '">' + runsHtml(b.runs) + '</p>';
     }
-    return { html: html };
+    return html;
   }
 
   function sheets() { return Array.prototype.slice.call(document.querySelectorAll('#pagesBox .sheet')); }
   function marks() { return Array.prototype.slice.call(document.querySelectorAll('#pagesBox .sheet mark')); }
 
   function finish(restored) {
+    if (!restored) pages = [];                                     // v53: the full-size page canvases are not needed any more (phone memory)
     var box = $('pagesBox'), n = results.length;
     box.innerHTML = results.map(function (r, i) {
       return '<section class="pg" data-i="' + i + '">' + (n > 1 ? '<p class="pgno">صفحة ' + (i + 1) + ' من ' + n + '</p>' : '') +
         '<div class="pgrid' + (r.img ? '' : ' noimg') + '">' +
         (r.img ? '<button class="orig" type="button" aria-label="تكبير صورة الأصل"><img alt="الأصل" src="' + r.img + '"></button>' : '') +
-        '<div class="sheet' + (EXAM ? ' exam' : '') + '" dir="' + (EXAM ? 'ltr' : 'rtl') + '" contenteditable="true" spellcheck="false">' + r.html + '</div></div></section>';
+        '<div class="sheet' + (EXAM ? ' exam' : '') + '" dir="' + (EXAM ? 'ltr' : 'rtl') + '" contenteditable="true" spellcheck="false">' + r.html + '</div></div>' +
+        '<div class="pgtools">' + (r.img ? '<button class="btn sm" type="button" data-pgrot="' + i + '">↻ تدوير الصورة</button><button class="btn sm" type="button" data-pgread="' + i + '">🔄 إعادة قراءة هذه الصفحة</button>' : '') +
+        (n > 1 ? '<button class="btn sm" type="button" data-pgdel="' + i + '">🗑️ حذف الصفحة</button>' : '') + '<span class="pgbusy" hidden></span></div></section>';
     }).join('');
     $('savedNote').hidden = true; cur = -1;
     $('restoredNote').hidden = !restored;
@@ -693,7 +763,7 @@
         curDoc = Store.newDoc(MODE, autoName(), ps, { type: results[0] && results[0].type || null });
         /* the choice made on the start screen: text only → a plain page, nothing to ask; Hanan's kind chosen up front */
         curDoc.plain = plainRun;
-        if (EXAM) { curDoc.kind = plainRun ? 'plain' : startKind(); curDoc.head = !plainRun && headPref(curDoc.kind); var kk = EXAM_KINDS.filter(function (x) { return x.key === curDoc.kind; })[0]; if (kk && curDoc.kind !== 'exam') curDoc.kindTitle = kk.title(); }
+        if (EXAM) { curDoc.grade = (($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade') || '').trim(); curDoc.kind = plainRun ? 'plain' : startKind(); curDoc.head = !plainRun && headPref(curDoc.kind); var kk = EXAM_KINDS.filter(function (x) { return x.key === curDoc.kind; })[0]; if (kk && curDoc.kind !== 'exam') curDoc.kindTitle = kk.title(); }
       }
       curDoc.cost = (curDoc.cost || 0) + docCost; curDoc.kindOk = !!(curDoc.plain || (EXAM && curDoc.kind)); curDoc.nameAuto = curDoc.name;
     }
@@ -713,6 +783,18 @@
     renderFields();
     histReset();
     refreshDoubts();
+    if (!restored && batchTotal) {                                 // v53: several papers — save this one and go on to the next
+      batchDone.push(curDoc ? curDoc.name : '');
+      var more = batchQueue.length ? batchQueue.shift() : null, total = batchTotal;
+      if (!more) batchTotal = 0;
+      saveDraft().then(function () {
+        setTimeout(function () {
+          if (more) { curDoc = null; startCanvases(more); return; }
+          renderFiles(); var fn = $('filesNote'); if (fn) { fn.hidden = false; fn.textContent = '✅ تم تحويل ' + total + ' ورقات وحفظ كل واحدة في ملف منفصل.'; }
+        }, 30);
+      });
+      return;
+    }
     show('done');
     if (!restored) saveDraft(); else setSave(curDoc ? 'ok' : '');
     setupTemplate();
@@ -965,6 +1047,49 @@
     var m = e.target.closest && e.target.closest('mark'); if (m) { marks().forEach(function (x) { x.classList.toggle('cur', x === m); }); }
     var o = e.target.closest && e.target.closest('.orig'); if (o) { zoomCanvas = null; zoomShot = -1; zoomName = 'الأصل ' + stamp() + '.jpg'; $('zoomImg').src = o.querySelector('img').src; $('zoomImg').hidden = false; if ($('scanBar')) { $('scanBar').hidden = true; $('cropBox').hidden = true; } $('zoom').hidden = false; if ($('zoomSave')) $('zoomSave').hidden = false; $('zoomClose').focus(); }
   });
+  /* ---------- v53 one page at a time: turn its photo, read it again, or remove it — without redoing the whole document ---------- */
+  $('pagesBox').addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-pgrot],[data-pgread],[data-pgdel]'); if (!b || running) return;
+    if (b.dataset.pgrot !== undefined) rotatePage(+b.dataset.pgrot);
+    else if (b.dataset.pgread !== undefined) rereadPage(+b.dataset.pgread);
+    else deletePage(+b.dataset.pgdel);
+  });
+  async function rotatePage(i) {
+    var r = results[i]; if (!r || !r.img) return;
+    try { var c = await imgToCanvas(r.img); r.img = Engine.rotated(c, 90).toDataURL('image/jpeg', 0.85); } catch (e) { return; }
+    var im = document.querySelector('.pg[data-i="' + i + '"] .orig img'); if (im) im.src = r.img;
+    queueSave();
+  }
+  async function rereadPage(i) {
+    var r0 = results[i]; if (!r0 || !r0.img || running) return;
+    if (!window.confirm('إعادة قراءة هذه الصفحة من صورتها؟ النص الحالي يبقى في «نسخ سابقة».')) return;
+    clearTimeout(saveT); await saveDraft(true);
+    var sec = document.querySelector('.pg[data-i="' + i + '"]'), busy = sec && sec.querySelector('.pgbusy'); if (!sec) return;
+    running = true; runAbort = typeof AbortController !== 'undefined' ? new AbortController() : null; docCost = 0;
+    sec.classList.add('busy'); busy.hidden = false; busy.textContent = 'جارٍ إعادة قراءة الصفحة…';
+    try {
+      learnItems = learnOn() ? await loadLearn() : [];
+      var c = await imgToCanvas(r0.img);
+      var r = await readPage({ base: c }, 'الصفحة ' + (i + 1), function (k, text) { busy.textContent = text; });
+      r.img = r0.img; results[i] = r;
+      sec.querySelector('.sheet').innerHTML = r.html;
+      if (curDoc) curDoc.cost = (curDoc.cost || 0) + docCost;
+      histCommit(); refreshDoubts(); await saveDraft(true);
+      busy.textContent = '✅ تمت إعادة قراءة الصفحة';
+      setTimeout(function () { busy.hidden = true; }, 4000);
+    } catch (e) {
+      busy.textContent = (e && e.code === 'cancelled') ? '' : '⚠️ ' + Engine.errText(e) + (e && e.code ? ' (' + e.code + ')' : '');
+    }
+    sec.classList.remove('busy'); running = false;
+  }
+  async function deletePage(i) {
+    if (results.length < 2 || !window.confirm('حذف الصفحة ' + (i + 1) + ' من هذا المستند؟ يمكن استرجاعها من «نسخ سابقة».')) return;
+    clearTimeout(saveT); await saveDraft(true);
+    var sec = document.querySelector('.pg[data-i="' + i + '"]'); if (sec) sec.remove();
+    results.splice(i, 1);
+    await saveDraft(true);
+    if (curDoc) openDoc(curDoc);
+  }
   $('pagesBox').addEventListener('input', function () { refreshDoubts(); histQueue(); queueSave(); });
   /* ---------- v50 equation editor (MathLive, loaded only when first used): tap an equation or a fraction to fix it,
      or «➗ إدخال معادلة» to add one where the cursor is. Phones get MathLive's own maths keyboard. ---------- */
@@ -1106,6 +1231,162 @@
         fail(e, function () { $('askText').value = req; $('askOk').click(); });
       }
       running = false; stageNames(STAGE_IMG);
+    });
+  }
+
+  /* ---------- v53 Hanan's exam tools: answer key with marks, form B, a simpler copy for slow learners, two copies per A4,
+     and her own question bank built from every exam she has made ---------- */
+  function sheetBlocks() { var b = []; sheets().forEach(function (s) { b = b.concat(domBlocks(s)); }); return b; }
+  async function newExamDoc(name, blocks, o) {
+    o = o || {}; var old = curDoc;
+    var html = await blocksHtml(blocks);
+    results = [{ html: html, text: ExamBuilder.blocksToText(blocks) }]; usedModels = {}; docCost = o.cost || 0; curAdded = {}; reconvertDoc = null; plainRun = false; pendingAudio = null;
+    finish();
+    if (curDoc) {
+      curDoc.kind = o.kind || (old && old.kind) || 'exam'; curDoc.head = headPref(curDoc.kind); curDoc.kindOk = true;
+      curDoc.kindTitle = o.title || (old && old.kindTitle) || ''; curDoc.grade = o.grade || (old && old.grade) || (Engine.lsGet('exam.hGrade') || '');
+      if (old && old.id) curDoc.copyOf = old.id;
+      curDoc.name = name; curDoc.nameAuto = name; if ($('docName')) $('docName').value = name;
+      kindLabel(); saveDraft();
+    }
+  }
+  function toolNote(t) { $('savedNote').hidden = !t; $('savedNote').textContent = t || ''; }
+  async function aiTool(label, promptText, onText) {
+    if (!KEY) { toolNote('هذه الخاصية تحتاج مفتاح القراءة.'); return; }
+    if (running) return;
+    running = true; runAbort = typeof AbortController !== 'undefined' ? new AbortController() : null; docCost = 0;
+    toolNote('⏳ ' + label + '… (دقيقة تقريبًا، اتركي الصفحة مفتوحة)');
+    try {
+      var gk = gradeKey((curDoc && curDoc.grade) || ($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade')) || 'P4';
+      var r = await Engine.generate(KEY, promptText, [], { best: true, effort: 'high', temperature: 0.3, maxTokens: 12000, system: await askSystem(gk), signal: sig(), onWait: onWait });
+      if (r.model) usedModels[r.model] = 1;
+      running = false;
+      await onText(Engine.clean(r.text));
+    } catch (e) { running = false; toolNote('⚠️ ' + Engine.errText(e) + (e && e.code ? ' (' + e.code + ')' : '')); }
+    running = false;
+  }
+  function examForAi() { return ExamBuilder.blocksToText(sheetBlocks().filter(function () { return true; })); }
+  if ($('toolsDlg')) {
+    $('toolsBtn').addEventListener('click', function () { if (!sheets().length) return; var k = examKind(); $('tlMarks').value = k === 'monthly' ? '10' : k === 'revision' || k === 'notes' ? '' : '30'; $('toolsDlg').hidden = false; });
+    $('toolsCancel').addEventListener('click', function () { $('toolsDlg').hidden = true; });
+    $('toolsDlg').addEventListener('click', function (e) { if (e.target === $('toolsDlg')) $('toolsDlg').hidden = true; });
+    $('tlKey').addEventListener('click', function () {
+      var total = parseInt($('tlMarks').value, 10); $('toolsDlg').hidden = true;
+      var p = "Here is a maths exam written by Ms. Hanan. Solve EVERY question carefully (check each answer twice) and write the answer key" + (total > 0 ? " with marks. The whole paper is worth exactly " + total + " marks: give every section and every item its marks (one multiple-choice or completion item is usually 1 mark; worked problems more) so that they add up to exactly " + total : "") + ".\n" +
+        "OUTPUT FORMAT (plain text lines, no commentary):\n[Q] " + (total > 0 ? "Answer key and marks (total " + total + " marks)" : "Answer key") + "\n" +
+        "then for each section one line: **Question (n)" + (total > 0 ? " — X marks" : "") + "**\nthen one line per item: n) <the answer>" + (total > 0 ? "   (m mark / marks)" : "") + " — for a multiple-choice item the letter and the value, e.g. 1) c) 24; for a worked problem the short working, then the answer.\n" +
+        "MATH: fractions as {3/4}; mixed numbers 2 {1/3}; powers ² ³; symbols × ÷ − =; anything else as LaTeX inside \\( \\).\n\nEXAM:\n" + examForAi();
+      aiTool('جارٍ حل الامتحان وتوزيع الدرجات', p, async function (t) {
+        var html = (await toResult(t)).html, last = sheets().pop(); if (!last) return;
+        last.insertAdjacentHTML('beforeend', html); histCommit(); refreshDoubts(); queueSave();
+        toolNote('✅ أُضيفت الإجابات' + (total > 0 ? ' وتوزيع الدرجات (' + total + ')' : '') + ' في آخر الورقة — راجعيها، ويمكن حذفها قبل طباعة نسخة الطلاب.');
+        try { last.lastElementChild.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+      });
+    });
+    $('tlB').addEventListener('click', function () {
+      $('toolsDlg').hidden = true;
+      var b = ExamBuilder.variant(sheetBlocks()); if (!b.length) return;
+      var name = ((curDoc && curDoc.name) || 'امتحان') + ' — نموذج B';
+      newExamDoc(name, b).then(function () { toolNote('🔀 نموذج B: نفس الأسئلة بترتيب مختلف والاختيارات متبدّلة. الملف الأصلي كما هو في «ملفاتي».'); });
+    });
+    $('tlEasy').addEventListener('click', function () {
+      $('toolsDlg').hidden = true;
+      var src = curDoc, p = "Here is a maths exam written by Ms. Hanan. Write an EASIER version of it for SLOW LEARNERS in the same grade: the same lessons and the same kinds of sections, about two thirds of the items, smaller and friendlier numbers, short simple sentences, more multiple-choice and completion items, word problems in one step. Keep drawings only where they are needed (as [FIG] SVG). Do not include the answers.\n\n" + ASK_FORMAT + "\n\nEXAM:\n" + examForAi() + "\n\nReply with the new exam only.";
+      aiTool('جارٍ كتابة نسخة مبسّطة', p, async function (t) {
+        var title = '', kind = src && src.kind;
+        t = t.replace(/^\s*KIND:\s*(\w+)\s*$/im, '').replace(/^\s*TITLE:\s*(.+)$/im, function (a, x) { title = x.trim(); return ''; }).replace(/^\s*\n/, '');
+        await newExamDoc(((src && src.name) || 'امتحان') + ' — مبسّط', ExamBuilder.parseExam(t).blocks, { kind: kind, title: src && src.kindTitle, cost: docCost });
+        toolNote('🐢 النسخة المبسّطة جاهزة كملف جديد — راجعيها قبل الطباعة.');
+      });
+    });
+    $('tlTwo').addEventListener('click', function () { $('toolsDlg').hidden = true; if (nothingToExport()) return; withKind(printTwoUp); });
+  }
+  /* two copies side by side on a landscape A4 (short quizzes and worksheets) */
+  function printTwoUp() {
+    var root = $('printRoot'), h = examHeader();
+    marks().forEach(function (m) { m.classList.remove('cur'); });
+    var head = h ? (h.noTable ? '' : '<table class="xhead"><tbody>' + [[h.line1, h.right[0]], [h.line2, h.right[1]], [h.line3, h.right[2]]].map(function (r) { return '<tr><td>' + escH(r[0] || '') + '</td><td>' + escH(r[1] || '') + '</td></tr>'; }).join('') + '</tbody></table>') + (h.title ? '<p class="xtitle">' + escH(h.title) + '</p>' : '') : '';
+    var one = head + sheets().map(function (s) { return s.innerHTML; }).join('');
+    root.className = 'sheet doc exam twoup'; root.dir = 'ltr';
+    root.innerHTML = '<div class="cp">' + one + '</div><div class="cp">' + one + '</div>';
+    Array.prototype.forEach.call(root.querySelectorAll('[contenteditable]'), function (el) { el.removeAttribute('contenteditable'); });
+    var st = $('tplPage') || document.head.appendChild(Object.assign(document.createElement('style'), { id: 'tplPage' }));
+    st.textContent = '@page{size:A4 landscape;margin:8mm}';
+    printNow(function () { st.textContent = ''; });
+  }
+
+  /* the question bank: every question of every exam in «ملفاتي» (synced, so the same on every device), by grade and kind */
+  var BANK_TYPES = [['choose', 'اختر', 'Choose the correct answer'], ['complete', 'أكمل', 'Complete'], ['tf', 'صح وخطأ', 'Put (✓) or (✗)'], ['match', 'صل', 'Match'], ['answer', 'مسائل / أجب', 'Answer the following questions'], ['other', 'أخرى', 'Answer the following']];
+  function bankType(h) { h = String(h || '').toLowerCase(); return /choose|circle/.test(h) ? 'choose' : /complete|fill/.test(h) ? 'complete' : /✓|✗|true|false|put \(|right|wrong/.test(h) ? 'tf' : /match|join/.test(h) ? 'match' : /answer|find|solve|calculate|work out|problem/.test(h) ? 'answer' : 'other'; }
+  var bankAll = [], bankSel = {}, bankGrade = '', bankKind = '';
+  async function loadBank() {
+    var ds = await Store.listDocs(MODE), out = [], seen = {}, box = document.createElement('div');
+    ds.forEach(function (d) {
+      if (d.plain) return;
+      (d.pages || []).forEach(function (p) {
+        box.innerHTML = p.html || '';
+        ExamBuilder.groups(domBlocks(box)).forEach(function (g) {
+          if (g.head && ExamBuilder.isKeyHead(g.head)) return;
+          var head = g.head ? ExamBuilder.runsText(g.head.runs).replace(/\*/g, '').replace(/^question\s*\(?\d+\)?\s*[:.\-]?\s*/i, '').trim() : '';
+          g.items.forEach(function (q) {
+            var t = ExamBuilder.blocksToText(q.blocks), key = t.replace(/^\[I\]\s*(\*\*)?\s*\(?\d+\s*[).\-]\s*(\*\*)?\s*/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+            if (key.length < 3 || seen[key]) return; seen[key] = 1;
+            out.push({ id: out.length, blocks: q.blocks, head: head, type: bankType(head), grade: (d.grade || '').replace(/^grade\s*/i, ''), doc: d.name, text: key });
+          });
+        });
+      });
+    });
+    return out;
+  }
+  function bankFiltered() {
+    var q = ($('bankSearch').value || '').trim().toLowerCase();
+    return bankAll.filter(function (x) { return (!bankGrade || x.grade === bankGrade) && (!bankKind || x.type === bankKind) && (!q || x.text.indexOf(q) >= 0); });
+  }
+  function paintBank() {
+    var grades = {}; bankAll.forEach(function (x) { if (x.grade) grades[x.grade] = 1; });
+    $('bankGrades').innerHTML = ['<button class="chip" type="button" data-bg="" aria-pressed="' + !bankGrade + '">كل الصفوف</button>'].concat(Object.keys(grades).sort().map(function (g) { return '<button class="chip" type="button" data-bg="' + escH(g) + '" aria-pressed="' + (g === bankGrade) + '">' + escH(g) + '</button>'; })).join('');
+    $('bankKinds').innerHTML = ['<button class="chip" type="button" data-bk="" aria-pressed="' + !bankKind + '">كل الأنواع</button>'].concat(BANK_TYPES.filter(function (t) { return bankAll.some(function (x) { return x.type === t[0]; }); }).map(function (t) { return '<button class="chip" type="button" data-bk="' + t[0] + '" aria-pressed="' + (t[0] === bankKind) + '">' + t[1] + '</button>'; })).join('');
+    var list = bankFiltered();
+    $('bankList').innerHTML = list.slice(0, 400).map(function (x) {
+      var item = x.blocks[0], opt = x.blocks.filter(function (b) { return b.k === 'opt'; })[0];
+      return '<label class="bq" dir="ltr"><input type="checkbox" data-bq="' + x.id + '"' + (bankSel[x.id] ? ' checked' : '') + '><span><span class="bqt" dir="ltr">' + runsHtml(item.runs || []) + '</span>' + (opt ? '<small class="bqo" dir="ltr">' + opt.cells.map(function (c) { return runsHtml(c); }).join(' &nbsp; ') + '</small>' : '') + '<small class="bqs" dir="auto">' + escH(x.doc || '') + (x.grade ? ' · ' + escH(x.grade) : '') + '</small></span></label>';
+    }).join('') || '<p class="small center">' + (bankAll.length ? 'لا توجد أسئلة بهذا البحث.' : 'البنك فاضي لسه: كل امتحان أو ورقة عمل تعمليها في التطبيق تتضاف أسئلتها هنا تلقائيًا.') + '</p>';
+    var n = Object.keys(bankSel).length;
+    $('bankCount').textContent = bankAll.length + ' سؤال في البنك — المختار ' + n;
+    $('bankMake').disabled = !n;
+  }
+  if ($('bankDlg')) {
+    $('bankBtn').addEventListener('click', async function () {
+      $('bankDlg').hidden = false; $('bankList').innerHTML = '<p class="small center">جارٍ جمع الأسئلة من ملفاتك…</p>';
+      bankSel = {}; bankKind = ''; bankAll = await loadBank().catch(function () { return []; });
+      var g = (($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade') || '').replace(/^grade\s*/i, '').trim();
+      bankGrade = bankAll.some(function (x) { return x.grade === g; }) ? g : '';
+      paintBank();
+    });
+    $('bankGrades').addEventListener('click', function (e) { var b = e.target.closest('[data-bg]'); if (!b) return; bankGrade = b.dataset.bg; paintBank(); });
+    $('bankKinds').addEventListener('click', function (e) { var b = e.target.closest('[data-bk]'); if (!b) return; bankKind = b.dataset.bk; paintBank(); });
+    $('bankSearch').addEventListener('input', paintBank);
+    $('bankList').addEventListener('change', function (e) { var c = e.target.closest('[data-bq]'); if (!c) return; if (c.checked) bankSel[c.dataset.bq] = 1; else delete bankSel[c.dataset.bq]; paintBank(); });
+    $('bankRandom').addEventListener('click', function () {
+      var n = parseInt($('bankN').value, 10) || 10, pool = bankFiltered().filter(function (x) { return !bankSel[x.id]; });
+      for (var i = pool.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+      pool.slice(0, n).forEach(function (x) { bankSel[x.id] = 1; }); paintBank();
+    });
+    $('bankClear').addEventListener('click', function () { bankSel = {}; paintBank(); });
+    $('bankCancel').addEventListener('click', function () { $('bankDlg').hidden = true; });
+    $('bankMake').addEventListener('click', async function () {
+      var chosen = bankAll.filter(function (x) { return bankSel[x.id]; }); if (!chosen.length) return;
+      $('bankDlg').hidden = true;
+      var blocks = [], k = 0;
+      BANK_TYPES.forEach(function (t) {
+        var qs = chosen.filter(function (x) { return x.type === t[0]; }); if (!qs.length) return;
+        var head = qs[0].head && bankType(qs[0].head) === t[0] && t[0] !== 'other' ? qs[0].head : t[2];
+        blocks.push({ k: 'q', runs: [{ text: 'Question (' + (++k) + ') ' + head }] });
+        qs.forEach(function (x, n) { x.blocks.forEach(function (b, j) { blocks.push(j === 0 && b.k === 'item' ? ExamBuilder.renumber(b, n + 1) : b); }); });
+      });
+      var g = bankGrade || (chosen[0] && chosen[0].grade) || '';
+      await newExamDoc('امتحان من بنك أسئلتي ' + (g ? g + ' ' : '') + stamp(), blocks, { kind: startKind(), grade: g });
+      toolNote('📚 امتحان جديد من ' + chosen.length + ' سؤال من بنك أسئلتك — راجعيه ثم نزّليه Word.');
     });
   }
 
@@ -1407,14 +1688,65 @@
       '<div class="dbody"><b class="dname">' + escH(d.name) + '</b>' +
       '<small>' + (trash ? 'حُذف ' + when(d.deletedAt) + ' — يُحذف نهائيًا بعد ' + Store.daysLeft(d) + ' يوم' : 'آخر تعديل ' + when(d.updated)) + ' · ' + (n === 1 ? 'صفحة واحدة' : n + ' صفحات') + '</small>' +
       '<span class="chip ' + (d.status === 'exported' ? 'ok' : '') + '">' + (d.status === 'exported' ? 'تم التصدير' : 'مسودة') + '</span>' +
+      (d.report && !trash ? '<span class="chip warn">⚠️ بلاغ: ' + escH(String(d.report.note || '').slice(0, 60)) + '</span>' : '') +
       (preview ? '<p class="dprev">' + escH(preview) + '…</p>' : '') + '</div>' +
       '<div class="dacts">' + (trash
         ? '<button class="btn sm" type="button" data-act="restore">↩️ استرجاع</button><button class="btn sm danger" type="button" data-act="purge">حذف نهائي</button>'
-        : '<button class="btn sm go" type="button" data-act="open">فتح</button><button class="btn sm" type="button" data-act="rename">إعادة تسمية</button><button class="btn sm danger" type="button" data-act="trash">حذف</button>') + '</div></article>';
+        : '<button class="btn sm go" type="button" data-act="open">فتح</button><button class="btn sm" type="button" data-act="copy">📄 ورقة زي دي</button><button class="btn sm" type="button" data-act="rename">إعادة تسمية</button>' + (d.report ? '<button class="btn sm" type="button" data-act="solved">✅ تم حل البلاغ</button>' : '') + '<button class="btn sm danger" type="button" data-act="trash">حذف</button>') + '</div></article>';
   }
+  /* ---------- v53 «⬇️ تنزيل كل ملفاتي»: one zip with every document as a Word file + a full backup the app can read back ---------- */
+  function blobToData(b) { return new Promise(function (res) { var fr = new FileReader(); fr.onload = function () { res(fr.result); }; fr.onerror = function () { res(null); }; fr.readAsDataURL(b); }); }
+  function dataToBlob(u) { var m = /^data:([^;,]+)?(;base64)?,(.*)$/.exec(u || ''); if (!m) return null; var bin = m[2] ? atob(m[3]) : decodeURIComponent(m[3]), a = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: m[1] || 'application/octet-stream' }); }
+  function backupNote(t) { var el = $('backupNote'); if (el) { el.hidden = !t; el.textContent = t || ''; } }
+  async function docWord(d) {
+    var box = document.createElement('div');
+    if (!EXAM) { var paras = []; (d.pages || []).forEach(function (p) { box.innerHTML = p.html || ''; paras = paras.concat(sheetToParas(box)); }); return DocxBuilder.build(JSZip, paras, { pageNumbers: true, title: d.name || 'مستند' }); }
+    var blocks = []; (d.pages || []).forEach(function (p) { box.innerHTML = p.html || ''; blocks = blocks.concat(domBlocks(box)); });
+    return ExamBuilder.build(JSZip, blocks, d.kindTitle ? { title: d.kindTitle, noTable: true } : null, {});
+  }
+  if ($('backupBtn')) {
+    $('backupBtn').addEventListener('click', async function () {
+      if (typeof JSZip === 'undefined') { backupNote('افتح التطبيق وأنت متصل بالإنترنت مرة واحدة ثم حاول.'); return; }
+      backupNote('جارٍ تجهيز الملف…'); this.disabled = true;
+      try {
+        var ds = await Store.listDocs(MODE), zip = new JSZip(), out = [], used = {};
+        for (var i = 0; i < ds.length; i++) {
+          var d = Object.assign({}, ds[i]);
+          if (d.audio instanceof Blob) d.audio = await blobToData(d.audio);
+          out.push(d);
+          var nm = String(ds[i].name || 'مستند').replace(/[\\\/:*?"<>|]/g, '-').slice(0, 80), k = nm, c = 2; while (used[k]) k = nm + ' (' + (c++) + ')'; used[k] = 1;
+          try { zip.file('Word/' + k + '.docx', await (await docWord(ds[i])).generateAsync({ type: 'uint8array' })); } catch (e) {}
+          backupNote('جارٍ تجهيز الملف… ' + (i + 1) + ' من ' + ds.length);
+        }
+        zip.file('kateb-backup.json', JSON.stringify({ app: 'kateb', mode: MODE, v: 1, at: Date.now(), docs: out }));
+        zip.file('اقرأني.txt', 'نسخة احتياطية من ' + (EXAM ? 'برنامج الامتحانات' : 'الكاتب') + ' — ' + new Date().toLocaleString('ar-EG') + '\r\nمجلد Word: كل ملف كمستند Word.\r\nلاسترجاع كل الملفات في التطبيق: «ملفاتي» ← «⬆️ استرجاع نسخة» واختر هذا الملف المضغوط.\r\n');
+        Engine.download(await zip.generateAsync({ type: 'blob' }), (EXAM ? 'امتحانات' : 'الكاتب') + ' — كل الملفات ' + stamp() + '.zip');
+        backupNote('✅ تم تنزيل ' + ds.length + ' ملف (Word + نسخة احتياطية) في ملف مضغوط واحد.');
+      } catch (e) { backupNote('⚠️ تعذّر تجهيز النسخة: ' + Engine.errText(e)); }
+      this.disabled = false;
+    });
+    $('restoreBtn').addEventListener('click', function () { $('restoreFile').click(); });
+    $('restoreFile').addEventListener('change', async function () {
+      var f = this.files && this.files[0]; this.value = ''; if (!f) return;
+      backupNote('جارٍ قراءة النسخة…');
+      try {
+        var z = await JSZip.loadAsync(f), jf = z.file('kateb-backup.json'); if (!jf) throw { code: 'badbackup' };
+        var j = JSON.parse(await jf.async('string')), ds = (j.docs || []).filter(function (d) { return d && d.id && d.mode === MODE; }), added = 0, newer = 0;
+        for (var i = 0; i < ds.length; i++) {
+          var d = ds[i], have = await Store.getDoc(d.id);
+          if (typeof d.audio === 'string') d.audio = dataToBlob(d.audio);
+          if (!have) { await Store.put('docs', d); added++; } else if ((d.updated || 0) > (have.updated || 0)) { await Store.put('docs', d); newer++; }
+        }
+        backupNote('✅ تم الاسترجاع: ' + added + ' ملف جديد' + (newer ? '، و' + newer + ' ملف أحدث' : '') + '. الملفات الموجودة لم تُحذف.');
+        if (typeof Sync !== 'undefined' && Sync.cfg && Sync.cfg()) try { Sync.soon(0); } catch (e) {}
+        renderFiles(); backupNote('✅ تم الاسترجاع: ' + added + ' ملف جديد' + (newer ? '، و' + newer + ' ملف أحدث' : '') + '.');
+      } catch (e) { backupNote('⚠️ هذا الملف ليس نسخة احتياطية من التطبيق.'); }
+    });
+  }
+  if ($('reportBtn')) $('reportBtn').addEventListener('click', reportProblem);
   var filesAll = [];
   function renderFiles() {
-    show('files');
+    show('files'); if ($('filesNote')) $('filesNote').hidden = true; backupNote('');
     Store.listDocs(MODE).then(function (ds) { filesAll = ds; drawFiles(); return Store.listTrash(MODE); }).then(function (ts) { $('trashCount').textContent = ts.length ? '(' + ts.length + ')' : ''; }).catch(function () { filesAll = []; drawFiles(); });
   }
   function drawFiles() {
@@ -1436,6 +1768,8 @@
       var b = e.target.closest('[data-act]'), card = e.target.closest('.doc'); if (!b || !card) return;
       var id = card.dataset.id, d = filesAll.filter(function (x) { return x.id === id; })[0]; if (!d) return;
       if (b.dataset.act === 'open') { Store.getDoc(id).then(function (doc) { if (doc) openDoc(doc); }); }
+      else if (b.dataset.act === 'copy') { Store.getDoc(id).then(function (doc) { if (doc) copyDoc(doc); }); }
+      else if (b.dataset.act === 'solved') { Store.getDoc(id).then(function (doc) { if (!doc) return; delete doc.report; return Store.saveDoc(doc); }).then(function () { if (curDoc && curDoc.id === id) delete curDoc.report; renderFiles(); }); }
       else if (b.dataset.act === 'rename') { var n = window.prompt('اسم الملف الجديد:', d.name); if (n && n.trim()) Store.renameDoc(id, n.trim()).then(function () { if (curDoc && curDoc.id === id) curDoc.name = n.trim(); renderFiles(); }); }
       else if (b.dataset.act === 'trash') { if (window.confirm('نقل «' + d.name + '» إلى المحذوفات؟ يمكنك استرجاعه خلال 30 يومًا.')) Store.trashDoc(id).then(function () { if (curDoc && curDoc.id === id) { curDoc = null; results = []; try { localStorage.removeItem(DRAFT); localStorage.removeItem(LAST); } catch (e) {} } renderFiles(); }); }   // v52: no «استكمال» of a trashed file
     });
@@ -1476,12 +1810,31 @@
   }
   function money(x) { return '$' + (x < 0.01 && x > 0 ? x.toFixed(3) : x.toFixed(2)); }
   function tok(n) { return n >= 1e6 ? (n / 1e6).toFixed(2) + ' مليون' : n >= 1000 ? Math.round(n / 1000) + ' ألف' : String(n); }
+  /* ---------- v53 monthly limit for the whole family: every device publishes its own month cost (synced as
+     kateb.spend.<device>), the limit kateb.cap is shared; at the limit Claude calls stop with a clear message ---------- */
+  function devId() { var d = Engine.lsGet('kateb.devid'); if (!d) { d = Math.random().toString(36).slice(2, 10); Engine.lsSet('kateb.devid', d); } return d; }
+  function monthKey() { var t = new Date(); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); }
+  function publishSpend() {
+    try { var u = Engine.usageSummary().month; Engine.lsSet('kateb.spend.' + devId(), JSON.stringify({ m: monthKey(), usd: +u.usd.toFixed(4), calls: u.calls, dev: /Android/i.test(navigator.userAgent) ? 'موبايل' : /iPhone|iPad/i.test(navigator.userAgent) ? 'آيفون' : 'كمبيوتر', t: Date.now() })); } catch (e) {}
+  }
+  function familySpend() {
+    var m = monthKey(), out = { usd: 0, calls: 0, devices: [] };
+    try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k.indexOf('kateb.spend.') !== 0) continue; var v = JSON.parse(localStorage.getItem(k) || 'null'); if (v && v.m === m) { out.usd += v.usd || 0; out.calls += v.calls || 0; out.devices.push(v); } } } catch (e) {}
+    return out;
+  }
+  function capUsd() { var v = parseFloat(Engine.lsGet('kateb.cap') || ''); return v > 0 ? v : 0; }
+  Engine.onUsage(function () { publishSpend(); var c = capUsd(); if (c && familySpend().usd >= c * 0.8 && $('capWarn')) { $('capWarn').hidden = false; $('capWarn').textContent = '⚠️ استهلاك هذا الشهر ' + money(familySpend().usd) + ' من الحد ' + money(c) + '.'; } });
+  Engine.setGuard(function () { var c = capUsd(); if (c && familySpend().usd >= c) throw { code: 'cap' }; });
+  publishSpend();
   function renderUsage() {
     var box = $('usageBox'); if (!box) return;
-    var u = Engine.usageSummary();
-    if (!u.total.calls) { box.innerHTML = '<p class="small">لم تُسجَّل أي قراءة بـ Claude على هذا الجهاز بعد.</p>'; return; }
+    var u = Engine.usageSummary(), fam = familySpend(), cap = capUsd();
+    var capHtml = '<div class="caprow"><p class="small"><b>كل الأجهزة هذا الشهر: ' + money(fam.usd) + '</b> (' + fam.calls + ' طلب' + (fam.devices.length > 1 ? '، ' + fam.devices.length + ' أجهزة' : '') + ')' + (cap ? ' — الحد الشهري ' + money(cap) : '') + '</p>' +
+      '<label class="tplrow">حد شهري بالدولار لكل العائلة (فارغ = بدون حد)<input id="capIn" inputmode="decimal" dir="ltr" value="' + (cap || '') + '" placeholder="مثلاً 10"></label><button class="btn sm" id="capSave" type="button">حفظ الحد</button></div>';
+    setTimeout(function () { if ($('capSave')) $('capSave').onclick = function () { var v = parseFloat(($('capIn').value || '').replace(',', '.')); Engine.lsSet('kateb.cap', v > 0 ? String(v) : ''); if (typeof Sync !== 'undefined' && Sync.soon) try { Sync.soon(0); } catch (e) {} renderUsage(); }; }, 0);
+    if (!u.total.calls) { box.innerHTML = capHtml + '<p class="small">لم تُسجَّل أي قراءة بـ Claude على هذا الجهاز بعد.</p>'; return; }
     var rows = [['اليوم', u.today], ['هذا الشهر', u.month], ['الإجمالي' + (u.first ? ' منذ ' + u.first : ''), u.total]];
-    box.innerHTML = '<table class="utable"><thead><tr><th></th><th>طلبات</th><th>رموز (tokens)</th><th>التكلفة التقديرية</th></tr></thead><tbody>' +
+    box.innerHTML = capHtml + '<table class="utable"><thead><tr><th></th><th>طلبات</th><th>رموز (tokens)</th><th>التكلفة التقديرية</th></tr></thead><tbody>' +
       rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + r[1].calls + '</td><td>' + tok(r[1].tokens) + '</td><td><b>' + money(r[1].usd) + '</b></td></tr>'; }).join('') + '</tbody></table>' +
       '<p class="small">حسب الموديل: ' + Object.keys(u.models).map(function (m) { var x = u.models[m]; return m.replace('claude-', '') + ' ' + money(x.usd) + ' (' + x.calls + ' طلب)'; }).join(' · ') + '</p>' +
       '<p class="small">التكلفة محسوبة من عدد الرموز في كل رد على أسعار Anthropic المعلنة (Opus 5.5: $4 / $20 للمليون، ومع ⚡ وضع السرعة $8 / $40؛ Sonnet 5.5: $2 / $10؛ Haiku 5.5: $0.10 / $0.50؛ الذاكرة المؤقتة أرخص). الرقم الرسمي والرصيد المتبقي في console.anthropic.com → Usage. هذا الجهاز فقط: كل جهاز يحسب استهلاكه.</p>';
@@ -2283,7 +2636,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '52';
+  var APP_VER = '53';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

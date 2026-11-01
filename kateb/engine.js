@@ -73,7 +73,10 @@ var Engine = (function () {
 
   /* Claude Messages API straight from the browser (the key is locked in the link, like the Gemini one).
      opt.system goes in a cached system block (the formula bank), opt.effort low|medium|high, opt.fast → Haiku. */
+  var spendGuard = null;                                            // v53: the family's monthly limit (set by the app)
+  function setGuard(fn) { spendGuard = fn; }
   async function generateClaude(key, prompt, blobs, opt) {
+    if (spendGuard) spendGuard();
     var content = [];
     for (var i = 0; i < (blobs || []).length; i++) content.push({ type: 'image', source: { type: 'base64', media_type: blobs[i].type || 'image/jpeg', data: await blobToB64(blobs[i]) } });
     /* the page images are the big input: cached on the first Opus call so the judge reads them at 5% of the price */
@@ -169,18 +172,24 @@ var Engine = (function () {
     if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
       var pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise, out = [];
       for (var n = 1; n <= pdf.numPages; n++) {
-        var pg = await pdf.getPage(n), v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(4, 3000 / Math.max(v1.width, v1.height)) });
+        var pg = await pdf.getPage(n), v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(4, 2400 / Math.max(v1.width, v1.height)) });   // v53: 2400 px is all the reader uses; 3000 px pages filled a phone's memory on long PDFs
         var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
         var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
-        await pg.render({ canvasContext: x, viewport: vp }).promise; out.push(c);
+        await pg.render({ canvasContext: x, viewport: vp }).promise; out.push(c); try { pg.cleanup(); } catch (e) {}
       }
+      try { pdf.destroy(); } catch (e) {}
       return out;
     }
     if (/\.(heic|heif)$/i.test(f.name)) throw { code: 'heic' };
     var bmp;
     try { bmp = await createImageBitmap(f, { imageOrientation: 'from-image' }); }
     catch (e) { bmp = await new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej({ code: 'badimg' }); }; im.src = URL.createObjectURL(f); }); }
-    return [canvasOf(bmp)];
+    /* v53: a 50-megapixel phone photo is 200 MB as a canvas; 3200 px on the long side keeps every letter for the reader */
+    var k = Math.min(1, 3200 / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    var g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height);
+    try { if (bmp.close) bmp.close(); } catch (e) {}
+    return [c];
   }
   function scaled(c, maxSide) {
     var k = Math.min(1, maxSide / Math.max(c.width, c.height)); if (k === 1) return c;
@@ -220,6 +229,7 @@ var Engine = (function () {
   }
 
   var ERR = {
+    cap: 'وصلتم للحد الشهري المسموح لتكلفة القراءة. زياد يقدر يرفعه من ⚙️ الإعدادات ← «حد شهري».',
     no_audio_key: 'تحويل التسجيلات يحتاج مفتاح الصوت (Gemini). أضفه من ⚙️ الإعدادات أو اطلب رابطًا جديدًا من زياد.',
     audio_decode: 'تعذر فتح هذا التسجيل على هذا المتصفح. جرّب صيغة أخرى (MP3 أو M4A أو WAV) أو متصفح كروم.',
     empty_audio: 'لم يُسمع أي كلام في التسجيل. تأكد من الميكروفون وجرّب مرة أخرى.',
@@ -283,7 +293,7 @@ var Engine = (function () {
   return { provider: provider, lock: lock, unlock: unlock, blobFromHash: blobFromHash, audioBlobFromHash: audioBlobFromHash, audioKey: audioKey, setAudioKey: setAudioKey, audioModels: audioModels, savedKey: savedKey, saveKey: saveKey, forget: forget,
     listModels: listModels, rank: rank, generate: generate, fileToCanvases: fileToCanvases, scaled: scaled, rotated: rotated,
     pageImages: pageImages, detectRotation: detectRotation, clean: clean, download: download, errText: errText, lsGet: lsGet, lsSet: lsSet,
-    recordUsage: recordUsage, onUsage: onUsage, usageSummary: usageSummary, usageReset: usageReset, usd: usd, priceOf: priceOf, fastOn: fastOn, setFast: setFast };
+    recordUsage: recordUsage, onUsage: onUsage, setGuard: setGuard, usageSummary: usageSummary, usageReset: usageReset, usd: usd, priceOf: priceOf, fastOn: fastOn, setFast: setFast };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = Engine;

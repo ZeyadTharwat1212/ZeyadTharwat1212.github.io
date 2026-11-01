@@ -197,8 +197,8 @@ var Sync = (function () {
   /* ---------- v41: one app on every device — settings, the handwriting learning and the office memory travel too ----------
      prefs/<mode>.json (encrypted like the files): {s: {key: {v, t}}, learn: [records], memory: {key: {c, t}}}.
      A setting changed here (its value differs from what was last synced) is sent; one changed elsewhere is taken. */
-  var PREF_KEYS = ['kateb.mode', 'kateb.ocr', 'kateb.dict', 'kateb.learn', 'kateb.fast', 'kateb.out', 'kateb.lawName', 'kateb.lawTitle', 'kateb.audiokey', 'kateb.enhance'];
-  var PREF_PREFIX = ['kateb.profile.', 'exam.'];
+  var PREF_KEYS = ['kateb.mode', 'kateb.ocr', 'kateb.dict', 'kateb.learn', 'kateb.fast', 'kateb.out', 'kateb.lawName', 'kateb.lawTitle', 'kateb.audiokey', 'kateb.enhance', 'kateb.cap'];
+  var PREF_PREFIX = ['kateb.profile.', 'exam.', 'kateb.spend.'];   // v53: kateb.spend.<device> = this month's AI cost of each device (each device writes only its own)
   var prefsHooks = [];
   function prefKeys() {
     var out = PREF_KEYS.slice();

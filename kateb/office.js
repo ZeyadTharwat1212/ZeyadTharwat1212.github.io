@@ -276,9 +276,26 @@ var Office = (function () {
     var doc = await zip.file('word/document.xml').async('string');
     if (doc.indexOf('<!--KATEB-BODY-->') < 0) throw { code: 'template' };
     zip.file('word/document.xml', doc.replace('<!--KATEB-BODY-->', function () { return body; }));   // v52: a «$'» in the paper must not be read as a replacement pattern
+    await addPageNumbers(zip);
     return zip;
   }
 
+  /* v53: «صفحة ١ من ٣» at the foot of every page (the office's own files have it; the master skeleton had no footer) */
+  async function addPageNumbers(zip) {
+    var doc = await zip.file('word/document.xml').async('string');
+    if (/<w:footerReference\b/.test(doc)) return;
+    var W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+    var rp = '<w:rPr><w:rFonts w:ascii="Simplified Arabic" w:hAnsi="Simplified Arabic" w:cs="Simplified Arabic"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:rtl/><w:lang w:bidi="ar-EG"/></w:rPr>';
+    function t(x) { return '<w:r>' + rp + '<w:t xml:space="preserve">' + x + '</w:t></w:r>'; }
+    function fld(code) { return '<w:r>' + rp + '<w:fldChar w:fldCharType="begin"/></w:r><w:r>' + rp + '<w:instrText xml:space="preserve"> ' + code + ' </w:instrText></w:r><w:r>' + rp + '<w:fldChar w:fldCharType="separate"/></w:r>' + t('1') + '<w:r>' + rp + '<w:fldChar w:fldCharType="end"/></w:r>'; }
+    var ftr = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + W + '><w:p><w:pPr><w:bidi/><w:jc w:val="center"/></w:pPr>' + t('صفحة ') + fld('PAGE') + t(' من ') + fld('NUMPAGES') + '</w:p></w:ftr>';
+    zip.file('word/footer1.xml', ftr);
+    var rels = await zip.file('word/_rels/document.xml.rels').async('string');
+    if (rels.indexOf('rIdKFooter') < 0) zip.file('word/_rels/document.xml.rels', rels.replace('</Relationships>', '<Relationship Id="rIdKFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>'));
+    var ct = await zip.file('[Content_Types].xml').async('string');
+    if (ct.indexOf('/word/footer1.xml') < 0) zip.file('[Content_Types].xml', ct.replace('</Types>', '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>'));
+    zip.file('word/document.xml', doc.replace(/(<w:sectPr\b[^>]*>)(?![\s\S]*<w:sectPr\b)/, '$1<w:footerReference w:type="default" r:id="rIdKFooter"/>'));
+  }
   /* the stamp box sits in the left margin but reaches into the text column; in the office files it floats over
      the text (wrapNone). Here the first lines flow beside it instead (wrapSquare), so nothing is covered. */
   function intrusion(xml) {
