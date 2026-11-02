@@ -511,3 +511,38 @@ body.wide{padding-bottom:110px}
   #printRoot.twoup .cp+.cp{border-left:1px dashed #888;padding-left:8mm}
   #printRoot.twoup figure img{max-width:100%;height:auto}
 }
+
+/* ---------- v54 the simple look (body.simple): fewer buttons, bigger and clearer ---------- */
+.simpleonly{display:none!important}
+body.simple .simpleonly{display:inline-flex!important}
+body.simple:not(.showadv) .adv{display:none!important}
+body.simple{font-size:21px}
+body.simple .small{font-size:18px;color:var(--ink-2,var(--ink))}
+body.simple .hero h2{font-size:clamp(28px,6vw,38px)}
+body.simple .drop{padding:22px 14px;gap:12px;border-style:solid}
+body.simple .drop h3{font-size:25px}
+body.simple .ways{grid-template-columns:1fr;gap:12px}
+body.simple .way{display:grid;grid-template-columns:auto 1fr;align-items:center;justify-items:start;column-gap:16px;row-gap:2px;min-height:84px;padding:14px 18px;text-align:start;border-width:2px}
+body.simple .way .wi{grid-row:1 / span 2}
+body.simple .way b,body.simple .way small{grid-column:2}
+body.simple .way .wi{font-size:40px;flex:0 0 auto}
+body.simple .way b{font-size:23px;display:block}
+body.simple .way small{font-size:16px;display:block}
+body.simple #camBtn{background:var(--primary);color:#fff;border-color:transparent;min-height:104px}
+body.simple #camBtn b{font-size:27px}
+body.simple #camBtn small{color:rgba(255,255,255,.9)}
+body.simple .btn{min-height:64px;font-size:21px}
+body.simple .btn.sm{min-height:54px;font-size:18px;padding:8px 16px}
+body.simple .mcard{min-height:84px}
+body.simple .mcard b{font-size:21px}
+body.simple .mcard small{font-size:16px}
+body.simple .sheet{font-size:23px}
+body.simple .status{font-size:18px}
+body.simple .linkbtn{font-size:18px}
+body.simple .morebtn{align-self:center;justify-content:center;font-weight:800;text-decoration:none;border:2px dashed var(--line-2);border-radius:14px;padding:12px 18px;color:var(--ink)}
+body.simple .editbar{justify-content:center}
+body.simple header.top h1{font-size:24px}
+body.simple .drop .ico{display:none}
+body.simple .hero p{display:none}
+body.simple .xcard b{font-size:22px}
+body.simple .xcard small{font-size:16px}

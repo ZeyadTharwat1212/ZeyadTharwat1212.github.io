@@ -15,14 +15,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Amiri:wght@400;700&display=swap">
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=53">
+<link rel="stylesheet" href="kateb/style.css?v=54">
 </head>
 <body>
 <main>
 <header class="top">
   <button class="backbtn" id="backBtn" type="button" hidden>⬅️ رجوع</button>
   <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m9 15 2 2 4-4"/></svg></div><div><h1>الكاتب</h1><p class="who">لأوراق المحامين</p></div></div>
-  <div class="hdr-actions"><button class="iconbtn" id="updateBtn" type="button" aria-label="تحديث التطبيق" title="تحديث التطبيق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></button><span class="badge" id="providerBadge" hidden></span><span class="ver" id="appVer"></span><button class="iconbtn" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي" title="الوضع الليلي / النهاري"><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4m11.4-11.4 1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button></div>
+  <div class="hdr-actions"><button class="adv iconbtn" id="updateBtn" type="button" aria-label="تحديث التطبيق" title="تحديث التطبيق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></button><span class="adv badge" id="providerBadge" hidden></span><span class="adv ver" id="appVer"></span><button class="adv iconbtn" id="themeBtn" type="button" aria-label="تبديل الوضع الليلي" title="الوضع الليلي / النهاري"><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4m11.4-11.4 1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button></div>
 </header>
 
 <section id="nokey" class="card gate" hidden>
@@ -50,7 +50,7 @@
 <section id="start" class="row" hidden>
   <p class="status warn" id="capWarn" hidden></p>
   <div class="hero"><h2>من <em>خط اليد</em> إلى Word و PDF بتنسيق المكتب</h2><p>صوّر الورقة، والذكاء الاصطناعي يقرأها قراءتين ويراجعها بصيغ المكتب، ثم تراجع الكلمات غير الواضحة بنفسك قبل الحفظ.</p></div>
-  <div class="card outmode" id="outBox">
+  <div class="adv card outmode" id="outBox">
     <b class="outq">ماذا تريد في ملف Word؟</b>
     <div class="kinds outs" id="outList">
       <button class="kind" type="button" data-out="pro" aria-pressed="true"><span class="ki">⚖️</span><span><b>ورقة محاماة</b><small>بتنسيق المكتب وصيغه والختم والعمود الجانبي</small></span></button>
@@ -59,15 +59,15 @@
   </div>
   <div class="drop" id="dropZone">
     <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
-    <h3>كيف تريد إدخال الورقة؟</h3>
-    <p class="hint">صور الصفحات بالترتيب، أو اسحبها هنا.</p>
+    <h3>عايز تعمل إيه؟</h3>
+    <p class="adv hint">صور الصفحات بالترتيب، أو اسحبها هنا.</p>
     <div class="ways">
-      <button class="way" id="camBtn" type="button"><span class="wi">📷</span><b>تصوير ورقة</b><small>بالكاميرا، تتقص وتتحسّن تلقائيًا</small></button>
+      <button class="way" id="camBtn" type="button"><span class="wi">📷</span><b>صوّر الورقة</b><small>بالكاميرا، وهتتعدل لوحدها</small></button>
       <button class="way" id="pickBtn" type="button"><span class="wi">🖼️</span><b>رفع صورة أو ملف</b><small>صور أو PDF من الجهاز</small></button>
-      <button class="way" id="voiceBtn" type="button"><span class="wi">🎙️</span><b>إملاء صوتي</b><small>اقرأ الورقة بصوتك وتتحول لنص</small></button>
-      <button class="way" id="audioBtn" type="button"><span class="wi">🎧</span><b>رفع تسجيل صوتي</b><small>تسجيل من واتساب أو الهاتف</small></button>
+      <button class="way" id="voiceBtn" type="button"><span class="wi">🎙️</span><b>إملاء صوتي</b><small>اقرا الورقة بصوتك وتتكتب لوحدها</small></button>
+      <button class="adv way" id="audioBtn" type="button"><span class="wi">🎧</span><b>رفع تسجيل صوتي</b><small>تسجيل من واتساب أو الهاتف</small></button>
     </div>
-    <label class="chk"><input type="checkbox" id="enhanceChk" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label>
+    <label class="adv chk"><input type="checkbox" id="enhanceChk" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label>
     <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
     <input type="file" id="file" multiple accept="image/*,application/pdf" hidden>
   </div>
@@ -83,18 +83,19 @@
     <label class="chk" id="batchRow"><input type="checkbox" id="batchChk"> كل صورة ورقة منفصلة (ملف لكل ورقة)</label>
   </div>
   <button class="btn resume" id="resumeBtn" type="button" hidden><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></span><span>استكمال آخر مستند<small id="resumeWhen"></small></span></button>
+  <button class="simpleonly linkbtn morebtn" type="button" data-more>⚙️ خيارات أكتر</button>
   <div class="menu">
     <button class="mcard" id="filesBtn" type="button"><span class="mi">📁</span><span><b>ملفاتي السابقة</b><small id="filesCount"></small></span></button>
-    <button class="mcard" id="learnBtn" type="button"><span class="mi">🧠</span><span><b>تحسين خط اليد</b><small id="learnState"></small></span></button>
+    <button class="adv mcard" id="learnBtn" type="button"><span class="mi">🧠</span><span><b>تحسين خط اليد</b><small id="learnState"></small></span></button>
     <button class="mcard" id="settingsBtn" type="button"><span class="mi">⚙️</span><span><b>الإعدادات</b><small>الخصوصية والتخزين</small></span></button>
   </div>
   
-  <div class="features">
+  <div class="adv features">
     <div class="feat"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9.5l-4.2 1.9L12 16l-1.8-4.6L6 9.5l4.2-1.9z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg> قراءة مزدوجة</b>قراءتان مستقلتان لكل صفحة، وما يختلفان عليه يُظلَّل بالأصفر.</div>
     <div class="feat"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg> مراجعة بالصورة</b>الأصل بجوار النص، كلمة كلمة، قبل أي حفظ.</div>
     <div class="feat"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m8.5 12 1.3 5 1.7-4 1.7 4 1.3-5"/></svg> بشكل المكتب</b>Word و PDF بنفس خطوط المكتب وختمه وهوامشه.</div>
   </div>
-  <p class="small center privacy">🔒 صور الورق تُرسل إلى خدمة القراءة (Claude من Anthropic أو Gemini من Google حسب المفتاح) للقراءة فقط، ولا تُحفظ على أي خادم خاص بنا. النص والمسودة تبقى على هذا الجهاز.</p>
+  <p class="adv small center privacy">🔒 صور الورق تُرسل إلى خدمة القراءة (Claude من Anthropic أو Gemini من Google حسب المفتاح) للقراءة فقط، ولا تُحفظ على أي خادم خاص بنا. النص والمسودة تبقى على هذا الجهاز.</p>
   <button class="btn" id="installBtn" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7m-3-3 3 3 3-3"/></svg><span>ثبّت التطبيق على الشاشة الرئيسية</span></button>
   <p class="small center" id="iosHint" hidden>لتثبيته على الآيفون: اضغط زر المشاركة <b>⬆︎</b> ثم «إضافة إلى الشاشة الرئيسية».</p>
 </section>
@@ -167,11 +168,11 @@
   <div class="row">
     <div class="docbar"><input id="docName" class="docname" aria-label="اسم الملف" placeholder="اسم الملف" autocomplete="off"><span class="savestat" id="saveStatus" role="status" aria-live="polite"></span><button class="btn sm" id="kindBtn" type="button" title="نوع الورقة"></button></div>
     <div class="actions">
-      <button class="xcard word" id="wordBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m8.5 12 1.3 5 1.7-4 1.7 4 1.3-5"/></svg></span><span><b>📘 تحميل Word</b><small>ملف ‎.docx قابل للتعديل</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
-      <button class="xcard pdf" id="pdfBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 17v-5h2a1.5 1.5 0 0 1 0 3H8"/><path d="M13 17v-5h1.5a2.5 2.5 0 0 1 0 5z"/></svg></span><span><b>📕 تحميل PDF</b><small>نص حقيقي قابل للتحديد، جاهز للطباعة</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
-      <button class="xcard share" id="shareBtn" type="button" hidden><span class="xi">📤</span><span><b>مشاركة الملف</b><small>إلى واتساب أو أي تطبيق (Word حيث يمكن، وإلا PDF)</small></span></button>
+      <button class="xcard word" id="wordBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m8.5 12 1.3 5 1.7-4 1.7 4 1.3-5"/></svg></span><span><b>📘 تحميل Word</b><small>ملف تقدر تعدّل فيه وتطبعه</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+      <button class="xcard pdf" id="pdfBtn" type="button"><span class="xi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 17v-5h2a1.5 1.5 0 0 1 0 3H8"/><path d="M13 17v-5h1.5a2.5 2.5 0 0 1 0 5z"/></svg></span><span><b>📕 تحميل PDF</b><small>نسخة جاهزة للطباعة</small></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+      <button class="xcard share" id="shareBtn" type="button" hidden><span class="xi">📤</span><span><b>مشاركة الملف</b><small>ابعته على واتساب</small></span></button>
     </div>
-    <div class="card tpl" id="tplBox" hidden>
+    <div class="adv card tpl" id="tplBox" hidden>
       <label class="tplrow">شكل الملف<select id="tplSel"></select></label>
       <div class="tplrow2">
         <label class="tplrow">اسم المحامي في الختم<input id="lawName" autocomplete="off" placeholder="مثال: ألون إبراهيم باشا"></label>
@@ -180,14 +181,14 @@
       <p class="small" id="tplHint"></p>
     </div>
     <p class="status" id="savedNote" hidden></p>
-    <p class="status info" id="readerInfo" hidden></p>
+    <p class="adv status info" id="readerInfo" hidden></p>
     <p class="status info" id="restoredNote" hidden>هذا آخر مستند كنت تعمل عليه، محفوظ على هذا الجهاز.</p>
-    <p class="status" id="doneNote" hidden>✅ تم تحويل المستند</p>
+    <p class="adv status" id="doneNote" hidden>✅ تم تحويل المستند</p>
     <div class="card vpanel" id="audioBox" hidden><b>🔊 التسجيل الأصلي</b><audio id="docAudio" controls preload="metadata"></audio></div>
     <p class="note" id="doubtNote" hidden></p>
     <button class="btn go" id="reviewBtn" type="button" hidden>مراجعة الكلمات</button>
     <div class="card fields" id="fieldsBox" hidden></div>
-    <div class="toolbar">
+    <div class="adv toolbar">
       <div class="seg" role="group" aria-label="طريقة العرض">
         <button type="button" data-view="both" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>جنبًا إلى جنب</button>
         <button type="button" data-view="text" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>النص</button>
@@ -197,17 +198,18 @@
     </div>
     <div class="editbar">
       <button class="btn sm" id="undoBtn" type="button" disabled title="Ctrl+Z">↩️ تراجع</button>
-      <button class="btn sm" id="redoBtn" type="button" disabled title="Ctrl+Y">↪️ إعادة</button>
-      <button class="btn sm" id="versionsBtn" type="button">🕘 نسخ سابقة</button>
-      <button class="btn sm" id="firstTextBtn" type="button">استرجاع النص الأول</button>
-      <button class="btn sm" id="reconvertBtn" type="button">🔄 إعادة التحويل</button>
-      <button class="btn sm" id="fixBtn" type="button">✍️ تصحيح اللغة والإملاء</button>
+      <button class="adv btn sm" id="redoBtn" type="button" disabled title="Ctrl+Y">↪️ إعادة</button>
+      <button class="adv btn sm" id="versionsBtn" type="button">🕘 نسخ سابقة</button>
+      <button class="adv btn sm" id="firstTextBtn" type="button">استرجاع النص الأول</button>
+      <button class="adv btn sm" id="reconvertBtn" type="button">🔄 إعادة التحويل</button>
+      <button class="adv btn sm" id="fixBtn" type="button">✍️ تصحيح اللغة والإملاء</button>
       <button class="btn sm" id="reportBtn" type="button">⚠️ في مشكلة؟</button>
+      <button class="simpleonly btn sm morebtn" type="button" data-more>⚙️ أدوات أكتر</button>
       <button class="btn sm" id="formBtn" type="button">⚖️ تحسين صيغة المحاماة</button>
     </div>
     <div class="card vpanel" id="fixPanel" hidden><div class="vhead"><b id="fixTitle">✍️ تصحيح اللغة والإملاء</b><button class="iconbtn sm" id="fixClose" type="button" aria-label="إغلاق">✕</button></div><p class="small" id="fixDesc">النص الأصلي كما هو يبقى هو المستند. هذه اقتراحات إملائية ونحوية فقط، تقبل أو ترفض كل واحدة بنفسك، وكل تغيير يظهر بلون مميز ويمكن التراجع عنه.</p><div id="fixList"></div></div>
     <div class="card vpanel" id="versionsPanel" hidden><b>🕘 نسخ سابقة</b><p class="small">تُحفظ نسخة من النص عند كل قراءة وقبل كل تصدير وكل عشر دقائق أثناء التعديل. الاستعادة لا تحذف شيئًا.</p><div id="versionsList"></div></div>
-    <p class="status info" id="learnHint" hidden>💡 لو فعّلت «🧠 تحسين خط اليد»، يتعلم التطبيق من تصحيحاتك هنا ويقرأ الورقة التالية بنفس الخط أفضل. <button class="linkbtn" id="learnHintOn" type="button">تفعيل</button> <button class="linkbtn" id="learnHintOff" type="button">لاحقًا</button></p>
+    <p class="adv status info" id="learnHint" hidden>💡 لو فعّلت «🧠 تحسين خط اليد»، يتعلم التطبيق من تصحيحاتك هنا ويقرأ الورقة التالية بنفس الخط أفضل. <button class="linkbtn" id="learnHintOn" type="button">تفعيل</button> <button class="linkbtn" id="learnHintOff" type="button">لاحقًا</button></p>
     <div id="pagesBox" data-view="both"></div>
     <button class="btn" id="againBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg><span>📄 ملف جديد</span></button>
   </div>
@@ -235,6 +237,7 @@
 
 <section id="settings" class="row" hidden>
   <h2 class="h2">⚙️ الإعدادات</h2>
+  <div class="card setrow"><label class="switch"><input type="checkbox" id="setSimple" checked><span>🧓 الشكل البسيط</span></label><p class="small">أزرار أقل وكلام أكبر وأوضح. الأدوات الإضافية تظهر من زر «⚙️ أدوات أكتر». اقفله لو عايز كل الأزرار ظاهرة دايمًا (على الجهاز ده بس).</p></div>
   <div class="card setrow"><b>🧠 تحسين التعرف على خط اليد</b><p class="small" id="setLearnState"></p><button class="btn" id="setLearnBtn" type="button">فتح إعدادات التعلم</button></div>
   <div class="card setrow"><label class="chk"><input type="checkbox" id="setEnhance" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label></div>
   <div class="card setrow"><label class="chk"><input type="checkbox" id="setOcr" checked> 📄 الورق المطبوع: قراءة واحدة سريعة</label><p class="small">لما تكون الورقة مطبوعة (مش بخط اليد) تُقرأ قراءة واحدة بدل أربع (حوالي ٥ سنت للصفحة)، والكلمات غير المؤكدة فقط تُراجَع. خط اليد لا يمر بهذا الطريق.</p></div>
@@ -301,25 +304,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>window.APP={mode:"legal"};</script>
-<script src="kateb/engine.js?v=53"></script>
-<script src="kateb/scan.js?v=53"></script>
-<script src="kateb/verify.js?v=53"></script>
-<script src="kateb/arabic.js?v=53"></script>
-<script src="kateb/bank.js?v=53"></script>
-<script src="kateb/store.js?v=53"></script>
-<script src="kateb/sync.js?v=53"></script>
-<script src="kateb/learn.js?v=53"></script>
-<script src="kateb/fields.js?v=53"></script>
-<script src="kateb/memory.js?v=53"></script>
-<script src="kateb/speech.js?v=53"></script>
-<script src="kateb/localasr.js?v=53"></script>
-<script src="kateb/geminilive.js?v=53"></script>
-<script src="kateb/raster.js?v=53"></script>
-<script src="kateb/dict.js?v=53"></script>
-<script src="kateb/ocr.js?v=53"></script>
-<script src="kateb/docx.js?v=53"></script>
-<script src="kateb/exam.js?v=53"></script>
-<script src="kateb/office.js?v=53"></script>
-<script src="kateb/app.js?v=53"></script>
+<script src="kateb/engine.js?v=54"></script>
+<script src="kateb/scan.js?v=54"></script>
+<script src="kateb/verify.js?v=54"></script>
+<script src="kateb/arabic.js?v=54"></script>
+<script src="kateb/bank.js?v=54"></script>
+<script src="kateb/store.js?v=54"></script>
+<script src="kateb/sync.js?v=54"></script>
+<script src="kateb/learn.js?v=54"></script>
+<script src="kateb/fields.js?v=54"></script>
+<script src="kateb/memory.js?v=54"></script>
+<script src="kateb/speech.js?v=54"></script>
+<script src="kateb/localasr.js?v=54"></script>
+<script src="kateb/geminilive.js?v=54"></script>
+<script src="kateb/raster.js?v=54"></script>
+<script src="kateb/dict.js?v=54"></script>
+<script src="kateb/ocr.js?v=54"></script>
+<script src="kateb/docx.js?v=54"></script>
+<script src="kateb/exam.js?v=54"></script>
+<script src="kateb/office.js?v=54"></script>
+<script src="kateb/app.js?v=54"></script>
 </body>
 </html>

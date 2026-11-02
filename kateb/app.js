@@ -80,6 +80,14 @@
     if (curScreen !== 'start') goBack();
   });
 
+  /* ---------- v54 the simple look (default): for the parents — fewer buttons, bigger text; «⚙️ أدوات أكتر» shows the rest ---------- */
+  function simpleOn() { return Engine.lsGet('kateb.simple') !== '0'; }
+  function applySimple() { document.body.classList.toggle('simple', simpleOn()); document.body.classList.remove('showadv'); paintMore(); }
+  function paintMore() { var open = document.body.classList.contains('showadv'); Array.prototype.forEach.call(document.querySelectorAll('[data-more]'), function (b) { b.textContent = open ? '⬆️ أخفِ الأدوات الإضافية' : (b.closest('.editbar') ? '⚙️ أدوات أكتر' : '⚙️ خيارات أكتر'); b.setAttribute('aria-expanded', open ? 'true' : 'false'); }); }
+  document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-more]'); if (!b) return; document.body.classList.toggle('showadv'); paintMore(); });
+  applySimple();
+  if ($('setSimple')) { $('setSimple').checked = simpleOn(); $('setSimple').addEventListener('change', function () { Engine.lsSet('kateb.simple', this.checked ? '1' : '0'); applySimple(); }); }
+
   /* ---------- unlock ---------- */
   (function boot() {
     if (!window.crypto || !crypto.subtle) { $('nokeyMsg').textContent = 'افتح الرابط من متصفح كروم أو سفاري الحديث.'; $('linkForm').hidden = true; show('nokey'); return; }
@@ -124,6 +132,7 @@
     finally { $('pwBtn').disabled = false; $('pwBtn').textContent = 'دخول'; }
   });
   function toStart() {
+    try { document.body.classList.remove('showadv'); paintMore(); } catch (e) {}
     CLAUDE = Engine.provider(KEY) === 'claude'; SHORT = CLAUDE && !EXAM;
     var name = Engine.provider(KEY) === 'claude' ? 'Claude' : 'Gemini';
     var b = $('providerBadge'); if (b) { b.textContent = name; b.hidden = false; }
@@ -429,6 +438,8 @@
   }
   /* v41 Ms. Hanan's math references (bank/exam_math.json: the ministry curriculum, English edition, Primary 3 – Prep 1):
      her grade's vocabulary and the standard exam instructions help recognise and spell what she wrote — never add */
+  var GRADE_AR = { P3: 'تالتة ابتدائي', P4: 'رابعة ابتدائي', P5: 'خامسة ابتدائي', P6: 'سادسة ابتدائي', Prep1: 'أولى إعدادي', PREP1: 'أولى إعدادي' };
+  function gradeAr(g) { var k = gradeKey(g) || g; return GRADE_AR[k] || g; }       // v54: the chips speak Arabic; the paper keeps «Primary 4»
   var mathBank;
   function gradeKey(g) {
     g = String(g || '').toLowerCase();
@@ -748,7 +759,7 @@
         '<div class="pgrid' + (r.img ? '' : ' noimg') + '">' +
         (r.img ? '<button class="orig" type="button" aria-label="تكبير صورة الأصل"><img alt="الأصل" src="' + r.img + '"></button>' : '') +
         '<div class="sheet' + (EXAM ? ' exam' : '') + '" dir="' + (EXAM ? 'ltr' : 'rtl') + '" contenteditable="true" spellcheck="false">' + r.html + '</div></div>' +
-        '<div class="pgtools">' + (r.img ? '<button class="btn sm" type="button" data-pgrot="' + i + '">↻ تدوير الصورة</button><button class="btn sm" type="button" data-pgread="' + i + '">🔄 إعادة قراءة هذه الصفحة</button>' : '') +
+        '<div class="pgtools adv">' + (r.img ? '<button class="btn sm" type="button" data-pgrot="' + i + '">↻ تدوير الصورة</button><button class="btn sm" type="button" data-pgread="' + i + '">🔄 إعادة قراءة هذه الصفحة</button>' : '') +
         (n > 1 ? '<button class="btn sm" type="button" data-pgdel="' + i + '">🗑️ حذف الصفحة</button>' : '') + '<span class="pgbusy" hidden></span></div></section>';
     }).join('');
     $('savedNote').hidden = true; cur = -1;
@@ -1186,7 +1197,7 @@
   if ($('askDlg')) {
     var askGrade = '';
     var GRADE_KEYS = [['P3', 'Primary 3'], ['P4', 'Primary 4'], ['P5', 'Primary 5'], ['P6', 'Primary 6'], ['Prep1', 'Prep 1']];
-    var paintAsk = function () { $('askGrades').innerHTML = GRADE_KEYS.map(function (g) { return '<button class="chip" type="button" data-ag="' + g[0] + '" aria-pressed="' + (g[0] === askGrade) + '">' + g[1] + '</button>'; }).join(''); };
+    var paintAsk = function () { $('askGrades').innerHTML = GRADE_KEYS.map(function (g) { return '<button class="chip" type="button" data-ag="' + g[0] + '" aria-pressed="' + (g[0] === askGrade) + '">' + (GRADE_AR[g[0]] || g[1]) + '</button>'; }).join(''); };
     $('askBtn').addEventListener('click', function () {
       askGrade = askGrade || gradeKey(($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade')) || 'P4';
       paintAsk(); $('askErr').hidden = true; $('askText').value = Engine.lsGet('exam.askDraft') || ''; $('askDlg').hidden = false; setTimeout(function () { $('askText').focus(); }, 50);
@@ -1344,12 +1355,12 @@
   }
   function paintBank() {
     var grades = {}; bankAll.forEach(function (x) { if (x.grade) grades[x.grade] = 1; });
-    $('bankGrades').innerHTML = ['<button class="chip" type="button" data-bg="" aria-pressed="' + !bankGrade + '">كل الصفوف</button>'].concat(Object.keys(grades).sort().map(function (g) { return '<button class="chip" type="button" data-bg="' + escH(g) + '" aria-pressed="' + (g === bankGrade) + '">' + escH(g) + '</button>'; })).join('');
+    $('bankGrades').innerHTML = ['<button class="chip" type="button" data-bg="" aria-pressed="' + !bankGrade + '">كل الصفوف</button>'].concat(Object.keys(grades).sort().map(function (g) { return '<button class="chip" type="button" data-bg="' + escH(g) + '" aria-pressed="' + (g === bankGrade) + '">' + escH(gradeAr(g)) + '</button>'; })).join('');
     $('bankKinds').innerHTML = ['<button class="chip" type="button" data-bk="" aria-pressed="' + !bankKind + '">كل الأنواع</button>'].concat(BANK_TYPES.filter(function (t) { return bankAll.some(function (x) { return x.type === t[0]; }); }).map(function (t) { return '<button class="chip" type="button" data-bk="' + t[0] + '" aria-pressed="' + (t[0] === bankKind) + '">' + t[1] + '</button>'; })).join('');
     var list = bankFiltered();
     $('bankList').innerHTML = list.slice(0, 400).map(function (x) {
       var item = x.blocks[0], opt = x.blocks.filter(function (b) { return b.k === 'opt'; })[0];
-      return '<label class="bq" dir="ltr"><input type="checkbox" data-bq="' + x.id + '"' + (bankSel[x.id] ? ' checked' : '') + '><span><span class="bqt" dir="ltr">' + runsHtml(item.runs || []) + '</span>' + (opt ? '<small class="bqo" dir="ltr">' + opt.cells.map(function (c) { return runsHtml(c); }).join(' &nbsp; ') + '</small>' : '') + '<small class="bqs" dir="auto">' + escH(x.doc || '') + (x.grade ? ' · ' + escH(x.grade) : '') + '</small></span></label>';
+      return '<label class="bq" dir="ltr"><input type="checkbox" data-bq="' + x.id + '"' + (bankSel[x.id] ? ' checked' : '') + '><span><span class="bqt" dir="ltr">' + runsHtml(item.runs || []) + '</span>' + (opt ? '<small class="bqo" dir="ltr">' + opt.cells.map(function (c) { return runsHtml(c); }).join(' &nbsp; ') + '</small>' : '') + '<small class="bqs" dir="auto">' + escH(x.doc || '') + (x.grade ? ' · ' + escH(gradeAr(x.grade)) : '') + '</small></span></label>';
     }).join('') || '<p class="small center">' + (bankAll.length ? 'لا توجد أسئلة بهذا البحث.' : 'البنك فاضي لسه: كل امتحان أو ورقة عمل تعمليها في التطبيق تتضاف أسئلتها هنا تلقائيًا.') + '</p>';
     var n = Object.keys(bankSel).length;
     $('bankCount').textContent = bankAll.length + ' سؤال في البنك — المختار ' + n;
@@ -1394,7 +1405,7 @@
   if ($('pracDlg') && typeof Practice !== 'undefined') {
     var pracGrade = Practice.gradeOf(($('hGrade') && $('hGrade').value) || Engine.lsGet('exam.hGrade')), pracTopics = null;
     var paintPrac = function () {
-      $('pracGrades').innerHTML = Object.keys(Practice.GRADES).map(function (k) { return '<button class="chip" type="button" data-pg="' + k + '" aria-pressed="' + (k === pracGrade) + '">' + Practice.GRADES[k].label + '</button>'; }).join('');
+      $('pracGrades').innerHTML = Object.keys(Practice.GRADES).map(function (k) { return '<button class="chip" type="button" data-pg="' + k + '" aria-pressed="' + (k === pracGrade) + '">' + (GRADE_AR[k] || Practice.GRADES[k].label) + '</button>'; }).join('');
       var g = Practice.GRADES[pracGrade]; if (!pracTopics) pracTopics = g.topics.map(function (t) { return t[0]; });
       $('pracTopics').innerHTML = g.topics.map(function (t) { return '<label class="chk"><input type="checkbox" data-pt="' + t[0] + '"' + (pracTopics.indexOf(t[0]) >= 0 ? ' checked' : '') + '> ' + t[1] + '</label>'; }).join('');
     };
@@ -1411,7 +1422,7 @@
       plainRun = false; usedModels = {}; docCost = 0; curAdded = {}; reconvertDoc = null; pendingAudio = null;
       var res = await toResult(text); res.text = text; res.type = null; res.secs = 0; res.agree = null;
       results = [res]; finish();
-      if (curDoc) { curDoc.kind = 'revision'; curDoc.head = headPref('revision'); curDoc.kindTitle = 'Practice Sheet'; curDoc.kindOk = true; curDoc.name = 'ورقة تدريب ' + Practice.GRADES[pracGrade].label + ' ' + stamp(); curDoc.nameAuto = curDoc.name; if ($('docName')) $('docName').value = curDoc.name; kindLabel(); saveDraft(); }
+      if (curDoc) { curDoc.kind = 'revision'; curDoc.head = headPref('revision'); curDoc.kindTitle = 'Practice Sheet'; curDoc.kindOk = true; curDoc.name = 'ورقة تدريب ' + (GRADE_AR[pracGrade] || Practice.GRADES[pracGrade].label) + ' ' + stamp(); curDoc.nameAuto = curDoc.name; if ($('docName')) $('docName').value = curDoc.name; kindLabel(); saveDraft(); }
     });
   }
 
@@ -2636,7 +2647,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '53';
+  var APP_VER = '54';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */

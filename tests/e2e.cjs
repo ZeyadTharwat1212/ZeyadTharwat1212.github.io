@@ -47,6 +47,8 @@ function decideAnswer(prompt, J, two) {
   return out.join('\n');
 }
 async function fakeWorld(context, answers, calls) {
+  /* v54: the older tests drive every button: the full look; the simple look has its own test */
+  await context.addInitScript(() => { try { if (localStorage.getItem('kateb.simple') === null) localStorage.setItem('kateb.simple', '0'); } catch (e) {} });
   await context.route(/cdnjs\.cloudflare\.com\/.*jszip/, r => r.fulfill({ contentType: 'text/javascript', body: JSZIP_SRC }));
   await context.route(/cdnjs\.cloudflare\.com\/.*pdf/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.pdfjsLib={};' }));
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
@@ -1468,6 +1470,25 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.waitForSelector('#tray:not([hidden])'); await page.click('#goBtn');
     await page.waitForSelector('#fail:not([hidden])', { timeout: 20000 });
     assert.match(await page.textContent('#failMsg'), /الشهري.*\(cap\)/);
+  }));
+
+  await step('v54 the simple look (default for the parents): a few big buttons on the start screen and the review screen, technical text hidden, «⚙️ أدوات أكتر» shows the rest; Arabic grade names; the switch in settings brings everything back', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page) => {
+    await page.evaluate(() => { localStorage.setItem('kateb.simple', '1'); }); await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    assert.ok(await page.evaluate(() => document.body.classList.contains('simple')));
+    for (const id of ['#camBtn', '#pickBtn', '#askBtn', '#bankBtn', '#filesBtn', '#settingsBtn']) assert.ok(await page.locator(id).isVisible(), id + ' visible');
+    for (const id of ['#outBox', '#audioBtn', '#learnBtn', '#providerBadge', '#appVer']) assert.ok(!(await page.locator(id).isVisible()), id + ' hidden');
+    assert.ok(!(await page.locator('.features').isVisible()));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'simple-start.png'), fullPage: true });
+    await page.click('#askBtn'); assert.match(await page.textContent('#askGrades'), /رابعة ابتدائي/); await page.click('#askCancel');
+    await convert(page);
+    for (const id of ['#wordBtn', '#pdfBtn', '#undoBtn', '#reportBtn', '#toolsBtn']) assert.ok(await page.locator(id).isVisible(), id + ' visible');
+    for (const id of ['#readerInfo', '#versionsBtn', '#reconvertBtn', '#fixBtn', '#redoBtn']) assert.ok(!(await page.locator(id).isVisible()), id + ' hidden');
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'simple-review.png'), fullPage: true });
+    await page.click('.editbar [data-more]');
+    assert.ok(await page.locator('#versionsBtn').isVisible() && await page.locator('#reconvertBtn').isVisible(), 'more tools shown');
+    await page.click('.editbar [data-more]'); assert.ok(!(await page.locator('#versionsBtn').isVisible()));
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])'); await page.click('#settingsBtn');
+    await page.uncheck('#setSimple'); assert.ok(!(await page.evaluate(() => document.body.classList.contains('simple'))));
   }));
 
   await browser.close(); server.close();
