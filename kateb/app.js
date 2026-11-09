@@ -578,7 +578,7 @@
         /* a printed page read once: only its own doubts are looked at again, by the same model with the cached images */
         var mp = printedRead && a.indexOf('⟦') >= 0 ? Verify.marks(a, null) : null;
         if (mp && mp.doubts) {
-          var rq = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mp.prompt, false), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: CLAUDE && !econ() ? 'high' : 'medium', best: true, cacheImages: true, maxTokens: Math.min(20000, 4096 + 60 * (mp.doubts || 0)) });
+          var rq = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mp.prompt, false), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: 'low', best: true, cacheImages: true, maxTokens: Math.min(20000, 4096 + 60 * (mp.doubts || 0)) });
           if (rq.model) usedModels[rq.model] = 1;
           if (!rq.truncated) final = Verify.decide(mp, Engine.clean(rq.text)).text;
         }
