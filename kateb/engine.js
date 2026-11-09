@@ -75,12 +75,19 @@ var Engine = (function () {
      opt.system goes in a cached system block (the formula bank), opt.effort low|medium|high, opt.fast → Haiku. */
   var spendGuard = null;                                            // v53: the family's monthly limit (set by the app)
   function setGuard(fn) { spendGuard = fn; }
+  /* v55: a page's images are base64-encoded once, not once per call (5-7 calls × 5 images on a phone) */
+  var b64Memo = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  async function b64Of(blob) {
+    if (b64Memo && b64Memo.has(blob)) return b64Memo.get(blob);
+    var v = await blobToB64(blob); if (b64Memo) b64Memo.set(blob, v); return v;
+  }
   async function generateClaude(key, prompt, blobs, opt) {
     if (spendGuard) spendGuard();
     var content = [];
-    for (var i = 0; i < (blobs || []).length; i++) content.push({ type: 'image', source: { type: 'base64', media_type: blobs[i].type || 'image/jpeg', data: await blobToB64(blobs[i]) } });
-    /* the page images are the big input: cached on the first Opus call so the judge reads them at 5% of the price */
-    if (opt.cacheImages && content.length) content[content.length - 1].cache_control = { type: 'ephemeral' };
+    for (var i = 0; i < (blobs || []).length; i++) content.push({ type: 'image', source: { type: 'base64', media_type: blobs[i].type || 'image/jpeg', data: await b64Of(blobs[i]) } });
+    /* v55: the page images are ALWAYS a cache breakpoint — every later call on the same page (second read, numbers,
+       decide, judge, check) then reads them at 5% of the price instead of paying for them again (same system + effort) */
+    if (content.length && opt.cacheImages !== false) content[content.length - 1].cache_control = { type: 'ephemeral' };
     content.push({ type: 'text', text: prompt });
     var body = { model: opt.model || (opt.fast ? CLAUDE_FAST : opt.best ? CLAUDE_BEST : CLAUDE_MODEL), max_tokens: opt.maxTokens || 8192, messages: [{ role: 'user', content: content }],
       output_config: { effort: opt.effort || 'medium' } };
@@ -168,8 +175,16 @@ var Engine = (function () {
 
   /* ---------- images ---------- */
   function canvasOf(src) { var c = document.createElement('canvas'); c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0); return c; }
+  /* v55: pdf.js (≈1.3 MB) is fetched only when a PDF is actually picked — it used to load on every start */
+  var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', pdfP = null;
+  function ensurePdf() {
+    if (typeof pdfjsLib !== 'undefined' && pdfjsLib.getDocument) return Promise.resolve();
+    if (!pdfP) pdfP = new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = PDFJS; sc.onload = function () { try { pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS.replace('pdf.min.js', 'pdf.worker.min.js'); } catch (e) {} res(); }; sc.onerror = function () { pdfP = null; rej({ code: 'network' }); }; document.head.appendChild(sc); });
+    return pdfP;
+  }
   async function fileToCanvases(f) {
     if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+      await ensurePdf();
       var pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise, out = [];
       for (var n = 1; n <= pdf.numPages; n++) {
         var pg = await pdf.getPage(n), v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(4, 2400 / Math.max(v1.width, v1.height)) });   // v53: 2400 px is all the reader uses; 3000 px pages filled a phone's memory on long PDFs

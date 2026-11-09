@@ -273,10 +273,12 @@
   $('retryBtn').addEventListener('click', function () { var f = retryFn; retryFn = null; if (f) f(); else toStart(); });
   $('homeBtn').addEventListener('click', toStart);
   $('resumeBtn').addEventListener('click', function () {
-    Store.getDoc(Engine.lsGet(LAST) || '').then(function (doc) {
-      if (doc && !doc.deletedAt) { openDoc(doc); return; }
-      var d = loadDraft(); if (!d) { toStart(); return; } curDoc = null; results = d.pages; finish(true);
-    }).catch(function () { var d = loadDraft(); if (!d) { toStart(); return; } curDoc = null; results = d.pages; finish(true); });
+    var d = loadDraft();
+    Store.getDoc(Engine.lsGet(LAST) || (d && d.id) || '').then(function (doc) {
+      /* v55: the quick draft (text only) may be newer than the stored copy — its text wins, the store's photos stay */
+      if (doc && !doc.deletedAt) { if (d && d.id === doc.id && d.t > (doc.updated || 0)) d.pages.forEach(function (p, i) { if (doc.pages[i]) doc.pages[i].html = p.html; }); openDoc(doc); return; }
+      if (!d) { toStart(); return; } curDoc = null; results = d.pages; finish(true);
+    }).catch(function () { if (!d) { toStart(); return; } curDoc = null; results = d.pages; finish(true); });
   });
   /* v52: the open document was changed on another device — merge it into what is on screen instead of letting the
      next keystroke overwrite the other person's edits (newer text wins, the other becomes an «other-device» version) */
@@ -383,7 +385,7 @@
     /* v31: in economy the second read is gone for legal pages — on real handwriting Sonnet gave up («.....» gaps), every gap
        became a yellow «disagreement» (39 on one page) and forced a full rewrite. One careful Opus read; its own doubts
        get the short check. «🎯 أقصى دقة» keeps two Opus reads and the judge. */
-    var pb = short ? Promise.resolve(null) : Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: econ() ? 'low' : eff, best: !short, system: system, context: ctx })
+    var pb = short ? Promise.resolve(null) : Engine.generate(KEY, PROMPTS.read2(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), temperature: 0.5, effort: eff, best: !short, system: system, context: ctx })   // v55: same effort as read 1 → the images come from the cache
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return r.truncated ? null : Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit' || e.code === 'cancelled')) throw e; return null; });
     var ra = await pa, b = await pb;
     if (ra.model) usedModels[ra.model] = 1;
@@ -576,7 +578,7 @@
         /* a printed page read once: only its own doubts are looked at again, by the same model with the cached images */
         var mp = printedRead && a.indexOf('⟦') >= 0 ? Verify.marks(a, null) : null;
         if (mp && mp.doubts) {
-          var rq = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mp.prompt, false), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: 'low', best: true, cacheImages: true, maxTokens: Math.min(20000, 4096 + 60 * (mp.doubts || 0)) });
+          var rq = await Engine.generate(KEY, PROMPTS.decide(imgs.bands, mp.prompt, false), imgs.blobs, { onWait: onWait, signal: sig(), system: system, context: ctx, effort: CLAUDE && !econ() ? 'high' : 'medium', best: true, cacheImages: true, maxTokens: Math.min(20000, 4096 + 60 * (mp.doubts || 0)) });
           if (rq.model) usedModels[rq.model] = 1;
           if (!rq.truncated) final = Verify.decide(mp, Engine.clean(rq.text)).text;
         }
@@ -1639,8 +1641,8 @@
     var ps = pagesNow(); if (!ps.length) return Promise.resolve();
     setSave('saving');
     ps.forEach(function (p, i) { if (results[i]) results[i].html = p.html; });
-    try { localStorage.setItem(DRAFT, JSON.stringify({ t: Date.now(), pages: ps })); }
-    catch (e) { try { localStorage.setItem(DRAFT, JSON.stringify({ t: Date.now(), pages: ps.map(function (p) { return { html: p.html }; }) })); } catch (e2) {} }
+    /* v55: the quick draft holds the text only (the photos are in the store): a multi-MB base64 write every 800 ms froze phones */
+    try { localStorage.setItem(DRAFT, JSON.stringify({ t: Date.now(), id: curDoc && curDoc.id, pages: ps.map(function (p) { return { html: p.html, hasImg: !!p.img }; }) })); } catch (e) {}
     if (!curDoc) curDoc = Store.newDoc(MODE, autoName(), ps, { type: results[0] && results[0].type || null });
     curDoc.pages = ps; curDoc.tpl = tplKey();
     if ($('docName') && $('docName').value.trim()) curDoc.name = $('docName').value.trim();
@@ -2647,7 +2649,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '54';
+  var APP_VER = '55';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
