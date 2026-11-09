@@ -714,7 +714,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.strictEqual(u.today.tokens, calls.length * 1700);
     /* 1000 in + 200 out + 500 cache write: opus 0.004+0.004+0.0025, haiku (kind) 0.0001+0.0001+0.0000625 */
     assert.ok(calls.claude.every(c => !c.fast), 'economy mode: standard lane');
-    assert.ok(calls.claude.some(c => c.kind === 'numbers' && c.model === 'claude-sonnet-5-5'), 'economy: the numbers pass runs on Sonnet');
+    assert.ok(calls.claude.some(c => c.kind === 'numbers' && c.model === 'claude-opus-5-5' && c.cache), 'v55 economy: the numbers pass runs on Opus with the cached images');
     /* 1000 in + 200 out + 500 cache write per call: opus 0.004+0.004+0.0025, sonnet 0.002+0.002+0.00125, haiku 0.0001+0.0001+0.0000625 */
     const price = { 'claude-opus-5-5': 0.0105, 'claude-sonnet-5-5': 0.00525, 'claude-haiku-5-5': 0.0002625 };
     const expect = calls.claude.reduce((t, c) => t + price[c.model], 0);
