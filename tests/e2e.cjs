@@ -260,7 +260,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     assert.ok(/STANDARD FORMULAS/.test(r1.system) && /STANDARD WORDING OF «صحة توقيع» CASES/.test(r1.system) && /ONLY HELP YOU RECOGNISE WORDS THAT ARE WRITTEN/.test(r1.system) && r1.system.includes('PLACES AND INSTITUTIONS'), 'v39: the formulas help recognise written words only');
     assert.ok(/NOTHING IS ADDED/.test(r1.p) && /EVERY WRITTEN WORD GETS A READING/.test(r1.p) && !/⟦\.\.\.\.⟧/.test(r1.p), 'v39: every written word gets a reading (no dots), nothing added');
     assert.ok(/LEFT MARGIN COLUMN/.test(r1.p), 'the side column and the stamp box are not transcribed');
-    assert.ok(nums.model === 'claude-sonnet-5-5' && nums.effort === 'low' && !nums.system, 'economy: numbers pass on Sonnet, low effort, no bank');
+    assert.ok(nums.model === 'claude-opus-5-5' && nums.effort === r1.effort && nums.system === r1.system, 'v55 economy: the numbers pass reuses read 1\'s model, effort and system → images and formulas from the cache');
     assert.match(await page.textContent('#readerInfo'), /claude-opus-5-5/, 'review screen shows the real model used');
     assert.ok((await page.textContent('#pagesBox .sheet')).includes('باع المعلز إليه'), 'the reading is not changed by the formulas');
     assert.ok(await page.locator('#pagesBox mark').count() >= 1, 'the unsure word stays yellow');
@@ -268,7 +268,7 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('#formBtn'); await page.waitForSelector('#fixPanel:not([hidden]) .fixrow');
     assert.match(await page.textContent('#fixTitle'), /صيغة المحاماة/);
     const fc = calls.claude.find(x => x.kind === 'form');
-    assert.ok(fc && /STANDARD FORMULAS/.test(fc.p) && /NEVER suggest adding/.test(fc.p) && /⟦المعلز⟧/.test(fc.p), 'the formulas go to this call only, with the yellow words marked');
+    assert.ok(fc && /STANDARD FORMULAS/.test(fc.system) && /NEVER suggest adding/.test(fc.p) && /⟦المعلز⟧/.test(fc.p), 'the formulas go to this call only (cached system slot), with the yellow words marked');
     assert.ok((await page.textContent('#pagesBox .sheet')).includes('باع المعلز إليه'), 'nothing changes before accepting');
     await page.click('#fixList [data-fix="0"]');
     const txt = await page.textContent('#pagesBox .sheet');

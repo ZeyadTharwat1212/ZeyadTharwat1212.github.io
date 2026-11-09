@@ -570,7 +570,7 @@
     }
     var final = a, d = b ? Verify.disagreements(a, b) : null;
     /* the numbers pass runs beside the judge: every number, date and amount read once more on its own */
-    var numbersP = ocrUsed ? Promise.resolve(null) : Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, econ() ? { onWait: onWait, signal: sig(), effort: 'low', maxTokens: 2048 } : { onWait: onWait, signal: sig(), effort: 'high', best: true, maxTokens: 2048, system: system, context: ctx })
+    var numbersP = ocrUsed ? Promise.resolve(null) : Engine.generate(KEY, PROMPTS.numbers(imgs.bands), imgs.blobs, { onWait: onWait, signal: sig(), effort: CLAUDE && !econ() ? 'high' : 'medium', best: true, maxTokens: 2048, system: system, context: ctx })   // v55: same model/effort/system as read 1 → images and formulas from the cache (cheaper than Sonnet at full price)
       .then(function (r) { if (r.model) usedModels[r.model] = 1; return Engine.clean(r.text); }, function (e) { if (e && (e.code === 'bad_key' || e.code === 'credit' || e.code === 'cancelled')) throw e; return null; });
     try {
       var mk = SHORT && !ocrUsed ? Verify.marks(a, b || null) : null;
@@ -905,7 +905,9 @@
       if (glossaryBank === undefined) { try { glossaryBank = await Bank.load('glossary'); } catch (e) { glossaryBank = null; } }
       var refs = (bank ? Bank.promptText(bank, 400) + '\n' : '') + (cb ? Bank.promptText(cb, 300) + '\n' : '') + (glossaryBank ? Bank.promptText(glossaryBank, 300) : '');
       var label = (cb && cb.label) || TYPE_LABEL[type] || 'ورقة محكمة';
-      var r = await Engine.generate(KEY, PROMPTS.form(label, refs, numbered.join('\n')), [], { best: true, effort: 'medium', maxTokens: 4096, onWait: onWait });
+      /* v55: the formulas (11-17k tokens) go in the cached system slot, same caps as the reading, so a second click or
+         a paper of the same type pays 5 % for them instead of full price */
+      var r = await Engine.generate(KEY, PROMPTS.form(label, '', numbered.join('\n')), [], { best: true, effort: 'medium', maxTokens: 4096, onWait: onWait, system: 'STANDARD FORMULAS OF EGYPTIAN COURT PAPERS (names {{NAME}}, places {{PLACE}}, numbers #):\n' + refs });
       if (r.model) usedModels[r.model] = 1;
       fixes = parseFixes(Engine.clean(r.text));
     } catch (e) { fixes = []; $('fixList').innerHTML = '<p class="err">' + escH(Engine.errText(e)) + '</p>'; }
@@ -2819,7 +2821,7 @@
         "Suggest a change ONLY where:\n(a) words of the transcription are clearly a misreading or misspelling of the same words of a formula below (the same sentence, a word or two read wrong), or\n(b) a ⟦ ⟧ or ⟦....⟧ mark sits inside a formula sentence and the formula shows exactly which word it is.\n" +
         "NEVER suggest adding a sentence, line or phrase that is not in the transcription. Never remove or reword the lawyer's own wording: when it differs from a formula but is correct Arabic it is NOT an error. Never change names of people or places, numbers, dates, amounts or case numbers.\n" +
         "Reply with one suggestion per line, nothing else:\n<paragraph number> | <the text exactly as in the transcription, 1-6 words, marks included like ⟦....⟧> | <the corrected text> | <reason in a few Arabic words>\nIf there is nothing to suggest reply exactly: لا شيء\n\n" +
-        "TRANSCRIPTION:\n" + t + "\n\nSTANDARD FORMULAS (names {{NAME}}, places {{PLACE}}, numbers #):\n" + refs;
+        (refs ? "TRANSCRIPTION:\n" + t + "\n\nSTANDARD FORMULAS (names {{NAME}}, places {{PLACE}}, numbers #):\n" + refs : "The STANDARD FORMULAS are in your instructions above (names {{NAME}}, places {{PLACE}}, numbers #).\n\nTRANSCRIPTION:\n" + t);
     },
     numbers: function (b) { return stripsNote(b) + NUMBERS_PROMPT; },
     kind: function () { return KIND_PROMPT; },

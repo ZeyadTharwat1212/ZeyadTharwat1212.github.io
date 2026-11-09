@@ -91,6 +91,7 @@ var Engine = (function () {
     content.push({ type: 'text', text: prompt });
     var body = { model: opt.model || (opt.fast ? CLAUDE_FAST : opt.best ? CLAUDE_BEST : CLAUDE_MODEL), max_tokens: opt.maxTokens || 8192, messages: [{ role: 'user', content: content }],
       output_config: { effort: opt.effort || 'medium' } };
+    if (typeof opt.temperature === 'number') body.temperature = opt.temperature;          // v55: was silently dropped (read 2's diversity relied on it)
     /* the stable part (formulas, glossary) is cached across the calls of a page and across pages; the part that
        changes per page (earlier pages, learned words) comes after it so the cache still hits */
     if (opt.system || opt.context) {
@@ -217,16 +218,21 @@ var Engine = (function () {
     var x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(deg * Math.PI / 180); x.drawImage(base, -base.width / 2, -base.height / 2); return c;
   }
   function jpeg(c, q) { return new Promise(function (res) { c.toBlob(res, 'image/jpeg', q || 0.9); }); }
+  /* v55: Claude keeps at most ~1.15 megapixels per image (and bills by what it keeps) — anything bigger is scaled down
+     on the server anyway, so the phone sends exactly that size and 40-50 % fewer bytes per call */
+  var MAX_PX = 1150000;
+  function fitPx(c) { var a = c.width * c.height; if (a <= MAX_PX) return c; var k = Math.sqrt(MAX_PX / a), n = document.createElement('canvas'); n.width = Math.round(c.width * k); n.height = Math.round(c.height * k); var g = n.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, n.width, n.height); return n; }
   /* whole page + overlapping strips so small handwriting stays sharp */
   async function pageImages(c, maxBands, maxSide) {
     maxSide = maxSide || 3072;
-    var list = [await jpeg(scaled(c, maxSide), 0.9)], bands = c.height < c.width * 0.9 ? 2 : (maxBands || 3);
+    var claude = maxSide <= 1568, q = claude ? 0.82 : 0.9, fit = claude ? fitPx : function (x) { return x; };
+    var list = [await jpeg(fit(scaled(c, maxSide)), q)], bands = c.height < c.width * 0.9 ? 2 : (maxBands || 3);
     var ov = 0.07, h = c.height / bands;
     for (var i = 0; i < bands; i++) {
       var y0 = Math.max(0, Math.round(i * h - ov * c.height)), y1 = Math.min(c.height, Math.round((i + 1) * h + ov * c.height));
       var b = document.createElement('canvas'); b.width = c.width; b.height = y1 - y0;
       b.getContext('2d').drawImage(c, 0, y0, c.width, y1 - y0, 0, 0, c.width, y1 - y0);
-      list.push(await jpeg(scaled(b, maxSide), 0.9));
+      list.push(await jpeg(fit(scaled(b, maxSide)), q));
     }
     return { blobs: list, bands: bands };
   }
