@@ -1,15 +1,14 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v55';
+var CACHE = 'kateb-v56';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=55', 'kateb/engine.js?v=55', 'kateb/verify.js?v=55', 'kateb/docx.js?v=55', 'kateb/exam.js?v=55', 'kateb/app.js?v=55',
-  'kateb/office.js?v=55', 'kateb/bank.js?v=55', 'kateb/arabic.js?v=55', 'kateb/scan.js?v=55', 'kateb/store.js?v=55', 'kateb/sync.js?v=55', 'kateb/learn.js?v=55', 'kateb/fields.js?v=55', 'kateb/memory.js?v=55', 'kateb/bank/memory.json?v=55', 'kateb/speech.js?v=55', 'kateb/localasr.js?v=55', 'kateb/geminilive.js?v=55', 'kateb/practice.js?v=55', 'kateb/vendor/temml.min.js?v=55', 'kateb/vendor/mathml2omml.js?v=55', 'kateb/vendor/temml.css?v=55', 'kateb/raster.js?v=55', 'kateb/dict.js?v=55', 'kateb/ocr.js?v=55', 'kateb/bank/glossary.json?v=55', 'kateb/templates/templates.json?v=55',
-  'kateb/templates/announce.docx?v=55', 'kateb/templates/gift.docx?v=55', 'kateb/templates/inherit_announce.docx?v=55', 'kateb/templates/inherit_request.docx?v=55', 'kateb/templates/iqrar.docx?v=55', 'kateb/templates/memo.docx?v=55', 'kateb/templates/price.docx?v=55', 'kateb/templates/reannounce.docx?v=55', 'kateb/templates/sahifa.docx?v=55', 'kateb/templates/sale.docx?v=55', 'kateb/templates/sihha.docx?v=55', 'kateb/templates/warning.docx?v=55',
+  'kateb/style.css?v=56', 'kateb/engine.js?v=56', 'kateb/verify.js?v=56', 'kateb/docx.js?v=56', 'kateb/exam.js?v=56', 'kateb/app.js?v=56',
+  'kateb/office.js?v=56', 'kateb/bank.js?v=56', 'kateb/arabic.js?v=56', 'kateb/scan.js?v=56', 'kateb/store.js?v=56', 'kateb/sync.js?v=56', 'kateb/learn.js?v=56', 'kateb/fields.js?v=56', 'kateb/memory.js?v=56', 'kateb/bank/memory.json?v=56', 'kateb/speech.js?v=56', 'kateb/localasr.js?v=56', 'kateb/geminilive.js?v=56', 'kateb/practice.js?v=56', 'kateb/vendor/temml.min.js?v=56', 'kateb/vendor/mathml2omml.js?v=56', 'kateb/vendor/temml.css?v=56', 'kateb/raster.js?v=56', 'kateb/dict.js?v=56', 'kateb/ocr.js?v=56', 'kateb/bank/glossary.json?v=56', 'kateb/templates/templates.json?v=56',
+  'kateb/templates/announce.docx?v=56', 'kateb/templates/gift.docx?v=56', 'kateb/templates/inherit_announce.docx?v=56', 'kateb/templates/inherit_request.docx?v=56', 'kateb/templates/iqrar.docx?v=56', 'kateb/templates/memo.docx?v=56', 'kateb/templates/price.docx?v=56', 'kateb/templates/reannounce.docx?v=56', 'kateb/templates/sahifa.docx?v=56', 'kateb/templates/sale.docx?v=56', 'kateb/templates/sihha.docx?v=56', 'kateb/templates/warning.docx?v=56',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'];
+  ];   // v56: pdf.js (1.4 MB) is no longer precached — it is cached on first use
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) {
@@ -37,8 +36,17 @@ self.addEventListener('fetch', function (e) {
       }));
       return;
     }
-    /* pages always revalidate with the server (GitHub Pages caches HTML for 10 min in the browser) */
-    e.respondWith(fetch(req.mode === 'navigate' ? new Request(req, { cache: 'no-cache' }) : req).then(function (r) {
+    /* v56: the page itself opens from the cache at once and is refreshed behind it (the app's own version check
+       reloads when a new version has landed); first visit or no copy → network as before */
+    if (req.mode === 'navigate') {
+      e.respondWith(caches.match(req, { ignoreSearch: true }).then(function (hit) {
+        var net = fetch(new Request(req, { cache: 'no-cache' })).then(function (r) { if (r.ok) { var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); } return r; });
+        if (hit) { net.catch(function () {}); return hit; }
+        return net.catch(function () { return caches.match(url.pathname.replace(/^\//, '') || 'kateb.html', { ignoreSearch: true }); });
+      }));
+      return;
+    }
+    e.respondWith(fetch(req).then(function (r) {
       if (r.ok) { var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
       return r;
     }).catch(function () {

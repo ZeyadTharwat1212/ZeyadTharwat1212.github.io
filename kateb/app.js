@@ -1681,8 +1681,10 @@
   /* words the reviewer replaced since the first reading: this hand's spelling of them */
   function learnFromEdits(doc) {
     if (!learnOn() || !doc || !doc.versions || !doc.versions[0]) return Promise.resolve();
-    var first = doc.versions[0].pages.map(function (p) { return htmlText(p.html); }).join('\n'), now = doc.pages.map(function (p) { return p.text || htmlText(p.html); }).join('\n');
-    var pairs = Learn.wordDiff(first, now).filter(function (p) { var k = p.from + '→' + p.to; if (doc.learned.indexOf(k) >= 0) return false; doc.learned.push(k); return true; });
+    /* v56: page by page — one diff over a whole 10-page paper took 0.5 s and ~50 MB on every save */
+    var pairs = [];
+    doc.pages.forEach(function (p, i) { var f = doc.versions[0].pages[i]; if (!f) return; var a = htmlText(f.html), b = p.text || htmlText(p.html); if (a !== b) pairs = pairs.concat(Learn.wordDiff(a, b)); });
+    pairs = pairs.filter(function (p) { var k = p.from + '→' + p.to; if (doc.learned.indexOf(k) >= 0) return false; doc.learned.push(k); return true; });
     if (!pairs.length) return Promise.resolve();
     return queueLearn(function (items) { pairs.forEach(function (p) { Learn.record(items, profile(), 'fix', p.from, p.to); }); return true; });
   }
@@ -2651,7 +2653,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '55';
+  var APP_VER = '56';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
