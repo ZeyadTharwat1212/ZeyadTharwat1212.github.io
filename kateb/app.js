@@ -11,8 +11,8 @@
 
   /* KATEB15: screens form a stack so «رجوع» (and the phone's back button) returns to the previous screen with its
      state untouched; «start» is the root. */
-  var SCREENS = ['lock', 'nokey', 'start', 'work', 'done', 'fail', 'files', 'trash', 'settings', 'learn', 'voice', 'audioUp'];
-  var STACKED = ['start', 'done', 'files', 'trash', 'settings', 'learn', 'voice', 'audioUp'];
+  var SCREENS = ['lock', 'nokey', 'start', 'work', 'done', 'fail', 'files', 'trash', 'settings', 'learn', 'voice', 'audioUp', 'grading', 'marks'];
+  var STACKED = ['start', 'done', 'files', 'trash', 'settings', 'learn', 'voice', 'audioUp', 'grading', 'marks'];
   var nav = [], curScreen = null, backing = false;
   function show(id, noPush) {
     if (id === 'start') nav = [];
@@ -1209,21 +1209,46 @@
     $('askGrades').addEventListener('click', function (e) { var b = e.target.closest('[data-ag]'); if (!b) return; askGrade = b.dataset.ag; paintAsk(); });
     $('askEx').addEventListener('click', function (e) { var b = e.target.closest('[data-ex]'); if (!b) return; $('askText').value = b.textContent; $('askText').focus(); });
     $('askText').addEventListener('input', function () { Engine.lsSet('exam.askDraft', $('askText').value); });
+    /* v57: say the request instead of typing it */
+    var askRec = null;
+    function askMicStop() { if (askRec) { try { askRec.stop(); } catch (e) {} askRec = null; } $('askMic').textContent = '🎤 اتكلمي بدل الكتابة'; $('askMic').classList.remove('rec'); }
+    if ($('askMic')) {
+      if (!Speech.liveSupported()) $('askMic').hidden = true;
+      $('askMic').addEventListener('click', function () {
+        if (askRec) { askMicStop(); return; }
+        var base = $('askText').value;
+        askRec = Speech.live({ lang: 'ar-EG',
+          onInterim: function (t) { $('askText').value = (base ? base + ' ' : '') + t; },
+          onFinal: function (t) { base = (base ? base + ' ' : '') + t; $('askText').value = base; Engine.lsSet('exam.askDraft', base); },
+          onFatal: function () { askMicStop(); $('askErr').hidden = false; $('askErr').textContent = 'الميكروفون مش شغال هنا — استخدمي زرار الميكروفون في الكيبورد.'; } });
+        if (!askRec) return;
+        $('askMic').textContent = '⏹️ خلصت الكلام'; $('askMic').classList.add('rec');
+      });
+      $('askCancel').addEventListener('click', askMicStop); $('askOk').addEventListener('click', askMicStop);
+    }
     $('askCancel').addEventListener('click', function () { $('askDlg').hidden = true; });
     $('askDlg').addEventListener('click', function (e) { if (e.target === $('askDlg')) $('askDlg').hidden = true; });
-    $('askOk').addEventListener('click', async function () {
+    $('askOk').addEventListener('click', function () {
       var req = ($('askText').value || '').trim();
       if (req.length < 6) { $('askErr').textContent = 'اكتبي طلبك أولاً: نوع الورقة، الدروس، ومكوناتها.'; $('askErr').hidden = false; return; }
       if (!KEY) { $('askErr').textContent = 'هذه الخاصية تحتاج مفتاح القراءة. افتحي رابط التطبيق من زياد مرة واحدة.'; $('askErr').hidden = false; return; }
       if (running) return;
       $('askDlg').hidden = true;
+      runAsk(req, askGrade, $('askKey').checked);
+    });
+  }
+  /* v57: the request → document flow, also used by «تحضير درس» and the remedial sheet after grading */
+  async function runAsk(req, gk, withKey, o) {
+      o = o || {};
+      if (!KEY || running) return;
+      var askGrade = gk || 'P4', GRADE_KEYS = [['P3', 'Primary 3'], ['P4', 'Primary 4'], ['P5', 'Primary 5'], ['P6', 'Primary 6'], ['Prep1', 'Prep 1']];
       running = true; plainRun = false; results = []; usedModels = {}; docCost = 0; curAdded = {}; reconvertDoc = null; pendingAudio = null;
       runAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
       show('work'); stageNames(['فهم الطلب', 'كتابة الورقة', 'التنسيق']); setStage(1); setProgress(1, 3, 'جارٍ كتابة الورقة من منهج الوزارة… (قد يستغرق دقيقة أو اثنتين)'); $('waitText').hidden = true; $('thumbs').innerHTML = '';
       if ($('cancelBtn')) $('cancelBtn').hidden = false;
       var t0 = Date.now(), label = (GRADE_KEYS.filter(function (g) { return g[0] === askGrade; })[0] || [0, ''])[1];
       try {
-        var r = await Engine.generate(KEY, askPrompt(req, label, $('askKey').checked), [], { best: true, effort: 'high', temperature: 0.4, maxTokens: 16000, system: await askSystem(askGrade), signal: sig(), onWait: onWait });
+        var r = await Engine.generate(KEY, askPrompt(req, label, withKey), [], { best: true, effort: 'high', temperature: 0.4, maxTokens: 16000, system: await askSystem(askGrade), signal: sig(), onWait: onWait });
         if (r.model) usedModels[r.model] = 1;
         var text = Engine.clean(r.text), kind = 'notes', title = '';
         text = text.replace(/^\s*KIND:\s*(\w+)\s*$/im, function (a, k) { k = k.toLowerCase(); if (/^(notes|exam|monthly|revision)$/.test(k)) kind = k; return ''; })
@@ -1237,16 +1262,16 @@
           curDoc.kind = kind; curDoc.head = headPref(kind); curDoc.kindOk = true; curDoc.request = req;
           var kk = EXAM_KINDS.filter(function (x) { return x.key === kind; })[0];
           curDoc.kindTitle = title || (kk ? kk.title() : '');
-          curDoc.name = (title || req).slice(0, 60); curDoc.nameAuto = curDoc.name; if ($('docName')) $('docName').value = curDoc.name;
+          curDoc.name = (o.name || title || req).slice(0, 60); curDoc.nameAuto = curDoc.name; if ($('docName')) $('docName').value = curDoc.name;
+          if (o.lesson) curDoc.lesson = o.lesson;
           kindLabel(); saveDraft();
         }
-        try { localStorage.removeItem('exam.askDraft'); } catch (e) {}
+        if (!o.keepDraft) try { localStorage.removeItem('exam.askDraft'); } catch (e) {}
       } catch (e) {
         if ((e && e.code === 'cancelled') || (runAbort && runAbort.signal.aborted)) { running = false; stageNames(STAGE_IMG); toStart(); return; }
-        fail(e, function () { $('askText').value = req; $('askOk').click(); });
+        fail(e, function () { runAsk(req, gk, withKey, o); });
       }
       running = false; stageNames(STAGE_IMG);
-    });
   }
 
   /* ---------- v53 Hanan's exam tools: answer key with marks, form B, a simpler copy for slow learners, two copies per A4,
@@ -1312,6 +1337,17 @@
         t = t.replace(/^\s*KIND:\s*(\w+)\s*$/im, '').replace(/^\s*TITLE:\s*(.+)$/im, function (a, x) { title = x.trim(); return ''; }).replace(/^\s*\n/, '');
         await newExamDoc(((src && src.name) || 'امتحان') + ' — مبسّط', ExamBuilder.parseExam(t).blocks, { kind: kind, title: src && src.kindTitle, cost: docCost });
         toolNote('🐢 النسخة المبسّطة جاهزة كملف جديد — راجعيها قبل الطباعة.');
+      });
+    });
+    $('tlSpec').addEventListener('click', function () {
+      $('toolsDlg').hidden = true;
+      var p = "Make the SPECIFICATION TABLE (جدول المواصفات) of this exam, as Egyptian schools ask for it with every exam: one row for each lesson of the ministry book that the exam covers; columns: the number of marks at each level (Knowledge, Understanding, Application, Problem solving), then the lesson's total marks and its share in %. Add a last row with the totals of each column, and one line under the table with the share of each level in %. Count the marks from the answer key when there is one, otherwise from the questions (one choose/complete item = 1 mark).\n" +
+        "FORMAT (plain text lines, no commentary):\n[Q] Specification table\n[TABLE] Lesson | Knowledge | Understanding | Application | Problem solving | Total marks | % || … || Total | … \nthen one normal line with the level shares.\n\nEXAM:\n" + examForAi();
+      aiTool('جارٍ عمل جدول المواصفات', p, async function (t) {
+        var html = (await toResult(t)).html, last = sheets().pop(); if (!last) return;
+        last.insertAdjacentHTML('beforeend', html); histCommit(); queueSave();
+        toolNote('📋 أُضيف جدول المواصفات في آخر الورقة.');
+        try { last.lastElementChild.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
       });
     });
     $('tlTwo').addEventListener('click', function () { $('toolsDlg').hidden = true; if (nothingToExport()) return; withKind(printTwoUp); });
@@ -2653,7 +2689,7 @@
   /* ---------- installable app: home-screen icon, opens full screen ---------- */
   var installEvt = null;
   function standalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
-  var APP_VER = '56';
+  var APP_VER = '57';
   (function () { var v = $('appVer'); if (v) v.textContent = 'v' + APP_VER; })();
   /* self-update: the site's version file is fetched past every cache; a newer site clears the app's caches
      and reloads once (never while a page is being read or reviewed). «تحديث» in the header does the same by hand. */
@@ -2803,6 +2839,16 @@
     return "You know the standard wording of Egyptian «" + label + "» papers exactly as this law office writes them. STANDARD FORMULAS of this paper type (names, numbers and places are replaced by {{NAME}}, # and {{PLACE}}):\n" + lines +
       "\n\nThese papers are written from the same formulas every time: most lines on the page ARE one of these formulas with the names, numbers and places filled in. Read every line against them: when a word is hard to read but its line clearly follows a formula, read it as the formula says (same spelling as the office) and do not mark it. Never do that for names, numbers, dates, case numbers, amounts, addresses or anything that varies from paper to paper: those come from the ink only, digit by digit and letter by letter, and stay in ⟦ ⟧ when unsure.";
   }
+  /* ---------- v57 Ms. Hanan's class work (kateb/teacher.js): grading, marks book, lesson preparation ---------- */
+  var toastT = null;
+  function toast(t) { var el = $('toast'); if (!el) { window.alert(t); return; } el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { el.hidden = true; }, 5000); }
+  if (EXAM && typeof Teacher !== 'undefined') Teacher.init({
+    Engine: Engine, Store: Store, MODE: MODE, ExamBuilder: ExamBuilder, show: show, domBlocks: domBlocks, money: money, toast: toast, runAsk: runAsk,
+    askSystem: askSystem, gradeKey: gradeKey, gradeAr: gradeAr, GRADE_AR: GRADE_AR,
+    curDoc: function () { return curDoc; }, key: function () { return KEY; },
+    mathBank: async function () { if (mathBank === undefined) { try { mathBank = await Bank.load('exam_math'); } catch (e) { mathBank = null; } } return mathBank; }
+  });
+
   var PROMPTS = EXAM ? {
     bankSystem: bankSystem, glossary: glossarySystem, transcribe: transcribePrompt,
     format: function (t) { if (plainRun) return plainFormat(t); return "Below is a word-for-word transcript of a teacher dictating a mathematics exam. Lay it out as the exam paper using the OUTPUT FORMAT, keeping every spoken word and number (nothing added, removed, corrected or reordered; ⟦ ⟧ marks kept). Spoken numbers become digits.\n\n" + FMT() + "\n\nTRANSCRIPT:\n" + t + "\n\nReply with the formatted exam only."; },

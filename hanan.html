@@ -17,8 +17,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700&display=swap"></noscript>
 <script>(function(){try{var t=localStorage.getItem("kateb.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
-<link rel="stylesheet" href="kateb/style.css?v=56">
-<link rel="stylesheet" href="kateb/vendor/temml.css?v=56">
+<link rel="stylesheet" href="kateb/style.css?v=57">
+<link rel="stylesheet" href="kateb/vendor/temml.css?v=57">
 </head>
 <body>
 <main>
@@ -52,6 +52,14 @@
 
 <section id="start" class="row" hidden>
   <p class="status warn" id="capWarn" hidden></p>
+  <div class="card newbox" id="newBox" hidden>
+    <b>✨ حاجات جديدة في البرنامج</b>
+    <p>✅ <b>تصحيح ورق الطلاب</b>: صوّري ورقة كل طالب، والبرنامج يصححها ويطلع الدرجة.</p>
+    <p>📒 <b>كشف الدرجات</b>: درجات كل فصل في مكان واحد، وتنزل Excel.</p>
+    <p>📘 <b>تحضير درس</b>: اختاري الدرس، والبرنامج يعمل ورقة عمل أو واجب أو اختبار قصير.</p>
+    <p class="small">الزراير دي تحت تحت عنوان «شغل الفصل».</p>
+    <button class="btn go" id="newOk" type="button">تمام، فهمت 👍</button>
+  </div>
   <div class="hero"><h2>من <em>مسودة الامتحان</em> إلى ملف Word جاهز للطباعة</h2><p>صوّري صفحات الامتحان، والذكاء الاصطناعي يقرأها ويرتّبها بالتنسيق المدرسي، وتراجعينها قبل الحفظ.</p></div>
   <div class="adv card outmode" id="outBox">
     <b class="outq">ماذا تريدين في ملف Word؟</b>
@@ -80,6 +88,12 @@
       <button class="way" id="bankBtn" type="button"><span class="wi">📚</span><b>بنك أسئلتي</b><small>امتحان جديد من أسئلتك القديمة، مجانًا وفي ثوانٍ</small></button>
       <button class="way" id="pracBtn" type="button"><span class="wi">🧮</span><b>ورقة تدريب جاهزة</b><small>تمارين بالصف والدرس بدون تصوير، مجانًا</small></button>
     </div>
+    <h3 class="grouph">📚 شغل الفصل</h3>
+    <div class="ways">
+      <button class="way" id="tGradeBtn" type="button"><span class="wi">✅</span><b>تصحيح ورق الطلاب</b><small>صوّري ورقة كل طالب وهتتصحح لوحدها</small></button>
+      <button class="way" id="tMarksBtn" type="button"><span class="wi">📒</span><b>كشف الدرجات</b><small>درجات كل فصل، وتنزل Excel</small></button>
+      <button class="way" id="tPlanBtn" type="button"><span class="wi">📘</span><b>تحضير درس</b><small>ورقة عمل أو واجب أو اختبار قصير لأي درس</small></button>
+    </div>
     <label class="adv chk"><input type="checkbox" id="enhanceChk" checked> تحسين الصور تلقائياً (خلفية بيضاء وحبر واضح)</label>
     <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
     <input type="file" id="file" multiple accept="image/*,application/pdf" hidden>
@@ -102,18 +116,20 @@
     <button class="adv mcard" id="learnBtn" type="button"><span class="mi">🧠</span><span><b>تحسين خط اليد</b><small id="learnState"></small></span></button>
     <button class="mcard" id="settingsBtn" type="button"><span class="mi">⚙️</span><span><b>الإعدادات</b><small>الخصوصية والتخزين</small></span></button>
   </div>
-  <details class="adv more card">
-    <summary>بيانات رأس الامتحان (تتغير مرة واحدة فقط)</summary>
+  <details class="more card">
+    <summary>🏫 رأس الورقة: اسم المدرسة والمادة والصف (تتظبط مرة واحدة بس)</summary>
     <div class="actions2" style="margin-top:8px"><button class="btn sm" type="button" data-hpreset="gov">رأس المديرية (Assiut Governorate)</button><button class="btn sm" type="button" data-hpreset="badr">رأس مدرسة بدر (Inclusive students)</button></div>
+    <p class="small">الكلام ده بيتكتب بالإنجليزي في أعلى الورقة.</p>
     <div dir="ltr" style="padding:6px 0 0">
-      <label class="field">Line 1<input id="hLine1" value="Assiut Governorate"></label>
-      <label class="field">Line 2<input id="hLine2" value="Directorate of Education"></label>
-      <label class="field">Line 3<input id="hLine3" value="Administration of Distinguished &amp; Governmental Language Schools"></label>
-      <label class="field">Subject<input id="hSubject" value="Mathematics"></label>
-      <label class="field">Grade<input id="hGrade" value="Primary 4"></label>
-      <label class="field">Time<input id="hTime" value="One hour and half"></label>
-      <label class="field">Exam title<input id="hTitle" value="First term exam 2025/2026"></label>
+      <label class="field">السطر الأول (أعلى الشمال)<input id="hLine1" value="Assiut Governorate"></label>
+      <label class="field">السطر التاني<input id="hLine2" value="Directorate of Education"></label>
+      <label class="field">السطر التالت (اسم المدرسة)<input id="hLine3" value="Administration of Distinguished &amp; Governmental Language Schools"></label>
+      <label class="field">المادة<input id="hSubject" value="Mathematics"></label>
+      <label class="field">الصف<input id="hGrade" value="Primary 4"></label>
+      <label class="field">الزمن<input id="hTime" value="One hour and half"></label>
+      <label class="field">عنوان الامتحان<input id="hTitle" value="First term exam 2025/2026"></label>
     </div>
+    <label class="field" dir="rtl">اسمك في رسائل أولياء الأمور<input id="hTeacher" placeholder="مس حنان"></label>
   </details>
   
   <div class="adv features">
@@ -234,6 +250,40 @@
   </div>
 </section>
 
+<section id="grading" class="row" hidden>
+  <h2 class="h2">✅ تصحيح ورق الطلاب</h2>
+  <div class="card step"><b class="stepn">١</b><div><h3>اختاري الامتحان</h3><div class="picks" id="gExams"></div>
+    <label class="tplrow">الدرجة النهائية للامتحان<input id="gMax" inputmode="numeric" dir="ltr" value="30"></label>
+    <p class="small" id="gHasKey" hidden>✅ الامتحان ده فيه نموذج إجابة — هيتصحح عليه.</p></div></div>
+  <div class="card step"><b class="stepn">٢</b><div><h3>الفصل <small>(اختياري)</small></h3><div class="chips" id="gClass"></div></div></div>
+  <div class="card step"><b class="stepn">٣</b><div><h3>صوّري ورقة كل طالب</h3>
+    <div class="actions2"><button class="btn go" id="gCam" type="button">📷 صوّري ورقة</button><button class="btn" id="gPick" type="button">🖼️ صور من الموبايل</button></div>
+    <input type="file" id="gCamIn" accept="image/*" capture="environment" hidden><input type="file" id="gFileIn" accept="image/*,application/pdf" multiple hidden>
+    <p class="small" id="gCount"></p><div class="gthumbs" id="gThumbs"></div>
+    <label class="chk"><input type="checkbox" id="gPairs"> كل طالب ورقته صفحتين (صوّري الصفحتين ورا بعض)</label></div></div>
+  <button class="btn go big" id="gGo" type="button" disabled>✅ صحّحي الورق</button>
+  <p class="small center" id="gCost"></p>
+  <p class="status info" id="gProgress" hidden></p>
+  <div class="card" id="gResults" hidden>
+    <h3>النتيجة</h3>
+    <p class="big" id="gSummary"></p>
+    <p class="small">اضغطي على أي طالب تشوفي إجاباته. تقدري تعدّلي الاسم أو الدرجة.</p>
+    <div class="glist" id="gList"></div>
+    <div class="actions2"><button class="btn go" id="gSave" type="button" disabled>💾 احفظي في كشف الدرجات</button><button class="btn" id="gWeak" type="button" disabled>📊 نقاط الضعف</button><button class="btn" id="gMsgs" type="button" disabled>📤 رسائل لأولياء الأمور</button></div>
+    <button class="linkbtn" id="gStop" type="button">إيقاف التصحيح</button>
+  </div>
+</section>
+<section id="marks" class="row" hidden>
+  <h2 class="h2">📒 كشف الدرجات</h2>
+  <div class="chips" id="mClasses"></div>
+  <div class="card center" id="mEmpty"><p>مفيش فصول لسه. اعملي فصل وحطي أسماء الطلاب، أو صححي ورق وهيتحفظ هنا لوحده.</p><button class="btn go" id="mNewFirst" type="button">➕ فصل جديد</button></div>
+  <div id="mBox" hidden>
+    <p class="small" id="mTitle"></p>
+    <div class="mwrap"><table class="mtable" id="mTable"></table></div>
+    <div class="actions2"><button class="btn sm" id="mAddStudent" type="button">➕ طالب</button><button class="btn sm" id="mAddTest" type="button">➕ اختبار</button><button class="btn sm go" id="mExcel" type="button">⬇️ Excel</button><button class="btn sm" id="mPrint" type="button">🖨️ طباعة</button><button class="btn sm" id="mMsgs" type="button">📤 رسائل لأولياء الأمور</button></div>
+    <div class="actions2"><button class="linkbtn" id="mRename" type="button">✏️ تغيير اسم الفصل</button><button class="linkbtn" id="mDelete" type="button">🗑️ حذف الفصل</button></div>
+  </div>
+</section>
 <section id="files" class="row" hidden>
   <h2 class="h2">📁 ملفاتي السابقة</h2>
   <p class="status ok" id="filesNote" hidden></p>
@@ -330,6 +380,7 @@
     <div class="tl"><button class="btn go" id="tlKey" type="button">🔑 الإجابات وتوزيع الدرجات</button><label class="tplrow">مجموع الدرجات<input id="tlMarks" inputmode="numeric" dir="ltr" placeholder="30"></label><small>يحل كل الأسئلة ويضيف نموذج الإجابة بالدرجات في آخر الورقة.</small></div>
     <div class="tl"><button class="btn" id="tlB" type="button">🔀 نموذج B</button><small>نفس الأسئلة بترتيب مختلف والاختيارات متبدّلة — ملف جديد، مجانًا.</small></div>
     <div class="tl"><button class="btn" id="tlEasy" type="button">🐢 نسخة مبسّطة لضعاف التحصيل</button><small>نفس الدروس، أسئلة أقل وأرقام أسهل — ملف جديد.</small></div>
+    <div class="tl"><button class="btn" id="tlSpec" type="button">📋 جدول المواصفات</button><small>جدول الدروس والمستويات والدرجات اللي المدرسة بتطلبه مع كل امتحان.</small></div>
     <div class="tl"><button class="btn" id="tlTwo" type="button">🖨️ طباعة نسختين في الورقة</button><small>نسختان جنب بعض على ورقة A4 بالعرض — للاختبار القصير (صفحة واحدة).</small></div>
   </div>
   <div class="actions2"><button class="btn" id="toolsCancel" type="button">إغلاق</button></div>
@@ -354,6 +405,7 @@
     <button class="chip" type="button" data-ex>ورقة عمل ضرب عدد من رقمين في رقمين: 15 تمرين ومسألتين كلاميتين</button>
   </div>
   <b>الصف</b><div class="chips" id="askGrades"></div>
+  <button class="btn sm" id="askMic" type="button">🎤 اتكلمي بدل الكتابة</button>
   <label class="chk"><input type="checkbox" id="askKey"> إضافة الإجابات في آخر الورقة</label>
   <p class="err" id="askErr" hidden></p>
   <div class="actions2"><button class="btn go" id="askOk" type="button">✨ اعملي الورقة</button><button class="btn" id="askCancel" type="button">إلغاء</button></div>
@@ -367,28 +419,59 @@
   <label class="chk"><input type="checkbox" id="pracKey"> إضافة الإجابات في آخر الورقة</label>
   <div class="actions2"><button class="btn go" id="pracOk" type="button">✨ اعملي الورقة</button><button class="btn" id="pracCancel" type="button">إلغاء</button></div>
 </div></div>
+<div class="modal top" id="ncDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="ncQ">
+  <h3 id="ncQ">➕ فصل جديد</h3>
+  <label class="field">اسم الفصل<input id="ncName" placeholder="مثلاً: رابعة ١"></label>
+  <b>الصف</b><div class="chips" id="ncGrades"></div>
+  <label class="field">أسماء الطلاب (كل اسم في سطر) — اختياري<textarea id="ncNames" rows="6" dir="auto" placeholder="أحمد محمد&#10;مريم علي"></textarea></label>
+  <div class="actions2"><button class="btn go" id="ncOk" type="button">✅ اعملي الفصل</button><button class="btn" id="ncCancel" type="button">إلغاء</button></div>
+</div></div>
+<div class="modal top" id="msgDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="msgTitle">
+  <h3 id="msgTitle">📤 رسائل لأولياء الأمور</h3>
+  <p class="small">اضغطي «واتساب» جنب كل طالب، واختاري ولي الأمر من الأسماء. الرسالة مكتوبة جاهزة.</p>
+  <div class="msglist" id="msgList"></div>
+  <div class="actions2"><button class="btn" id="msgCopy" type="button">📋 نسخ كل الرسائل</button><button class="btn" id="msgClose" type="button">إغلاق</button></div>
+</div></div>
+<div class="modal top" id="weakDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="weakTitle">
+  <h3 id="weakTitle">📊 نقاط الضعف</h3>
+  <p class="small">الدروس اللي الفصل غلط فيها أكتر فوق. «ورقة علاج» بتعمل ورقة على الدرس ده بالظبط.</p>
+  <div class="weaklist" id="weakList"></div>
+  <div class="actions2"><button class="btn" id="weakClose" type="button">إغلاق</button></div>
+</div></div>
+<div class="modal top" id="planDlg" hidden><div class="mdlg" role="dialog" aria-modal="true" aria-labelledby="planQ">
+  <h3 id="planQ">📘 تحضير درس</h3>
+  <b>الصف</b><div class="chips" id="plGrades"></div>
+  <div class="chips" id="plTerms"></div>
+  <b>الدرس (من كتاب الوزارة)</b><div class="pllessons" id="plLessons"></div>
+  <b>عايزة إيه؟</b><div class="chips" id="plKinds"></div>
+  <label class="chk"><input type="checkbox" id="plKey"> إضافة الإجابات في آخر الورقة</label>
+  <p class="small center" id="plHint"></p>
+  <div class="actions2"><button class="btn go" id="plGo" type="button" disabled>✨ اعملي الورقة</button><button class="btn" id="plCancel" type="button">إلغاء</button></div>
+</div></div>
+<div class="toast" id="toast" role="status" hidden></div>
 <div id="printRoot"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>window.APP={mode:"exam"};</script>
-<script src="kateb/engine.js?v=56"></script>
-<script src="kateb/scan.js?v=56"></script>
-<script src="kateb/verify.js?v=56"></script>
-<script src="kateb/arabic.js?v=56"></script>
-<script src="kateb/bank.js?v=56"></script>
-<script src="kateb/store.js?v=56"></script>
-<script src="kateb/sync.js?v=56"></script>
-<script src="kateb/learn.js?v=56"></script>
-<script src="kateb/fields.js?v=56"></script>
-<script src="kateb/speech.js?v=56"></script>
-<script src="kateb/localasr.js?v=56"></script>
-<script src="kateb/geminilive.js?v=56"></script>
-<script src="kateb/raster.js?v=56"></script>
-<script src="kateb/docx.js?v=56"></script>
-<script src="kateb/vendor/temml.min.js?v=56"></script>
-<script src="kateb/vendor/mathml2omml.js?v=56"></script>
-<script src="kateb/exam.js?v=56"></script>
-<script src="kateb/practice.js?v=56"></script>
+<script src="kateb/engine.js?v=57"></script>
+<script src="kateb/scan.js?v=57"></script>
+<script src="kateb/verify.js?v=57"></script>
+<script src="kateb/arabic.js?v=57"></script>
+<script src="kateb/bank.js?v=57"></script>
+<script src="kateb/store.js?v=57"></script>
+<script src="kateb/sync.js?v=57"></script>
+<script src="kateb/learn.js?v=57"></script>
+<script src="kateb/fields.js?v=57"></script>
+<script src="kateb/speech.js?v=57"></script>
+<script src="kateb/localasr.js?v=57"></script>
+<script src="kateb/geminilive.js?v=57"></script>
+<script src="kateb/raster.js?v=57"></script>
+<script src="kateb/docx.js?v=57"></script>
+<script src="kateb/vendor/temml.min.js?v=57"></script>
+<script src="kateb/vendor/mathml2omml.js?v=57"></script>
+<script src="kateb/exam.js?v=57"></script>
+<script src="kateb/practice.js?v=57"></script>
 
-<script src="kateb/app.js?v=56"></script>
+<script src="kateb/teacher.js?v=57"></script>
+<script src="kateb/app.js?v=57"></script>
 </body>
 </html>

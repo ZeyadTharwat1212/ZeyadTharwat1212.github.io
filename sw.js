@@ -1,11 +1,11 @@
 /* Offline shell for kateb.html / hanan.html (installable app). Reading still needs the internet.
    Same-origin files: network first (updates arrive at once), cache as fallback.
    CDN libraries (versioned URLs): cache first. Gemini calls are never touched. */
-var CACHE = 'kateb-v56';
+var CACHE = 'kateb-v57';
 var SHELL = ['kateb.html', 'hanan.html', 'kateb.webmanifest', 'hanan.webmanifest',
-  'kateb/style.css?v=56', 'kateb/engine.js?v=56', 'kateb/verify.js?v=56', 'kateb/docx.js?v=56', 'kateb/exam.js?v=56', 'kateb/app.js?v=56',
-  'kateb/office.js?v=56', 'kateb/bank.js?v=56', 'kateb/arabic.js?v=56', 'kateb/scan.js?v=56', 'kateb/store.js?v=56', 'kateb/sync.js?v=56', 'kateb/learn.js?v=56', 'kateb/fields.js?v=56', 'kateb/memory.js?v=56', 'kateb/bank/memory.json?v=56', 'kateb/speech.js?v=56', 'kateb/localasr.js?v=56', 'kateb/geminilive.js?v=56', 'kateb/practice.js?v=56', 'kateb/vendor/temml.min.js?v=56', 'kateb/vendor/mathml2omml.js?v=56', 'kateb/vendor/temml.css?v=56', 'kateb/raster.js?v=56', 'kateb/dict.js?v=56', 'kateb/ocr.js?v=56', 'kateb/bank/glossary.json?v=56', 'kateb/templates/templates.json?v=56',
-  'kateb/templates/announce.docx?v=56', 'kateb/templates/gift.docx?v=56', 'kateb/templates/inherit_announce.docx?v=56', 'kateb/templates/inherit_request.docx?v=56', 'kateb/templates/iqrar.docx?v=56', 'kateb/templates/memo.docx?v=56', 'kateb/templates/price.docx?v=56', 'kateb/templates/reannounce.docx?v=56', 'kateb/templates/sahifa.docx?v=56', 'kateb/templates/sale.docx?v=56', 'kateb/templates/sihha.docx?v=56', 'kateb/templates/warning.docx?v=56',
+  'kateb/style.css?v=57', 'kateb/engine.js?v=57', 'kateb/verify.js?v=57', 'kateb/docx.js?v=57', 'kateb/exam.js?v=57', 'kateb/app.js?v=57',
+  'kateb/office.js?v=57', 'kateb/bank.js?v=57', 'kateb/arabic.js?v=57', 'kateb/scan.js?v=57', 'kateb/store.js?v=57', 'kateb/sync.js?v=57', 'kateb/learn.js?v=57', 'kateb/fields.js?v=57', 'kateb/memory.js?v=57', 'kateb/bank/memory.json?v=57', 'kateb/speech.js?v=57', 'kateb/localasr.js?v=57', 'kateb/geminilive.js?v=57', 'kateb/practice.js?v=57', 'kateb/teacher.js?v=57', 'kateb/vendor/temml.min.js?v=57', 'kateb/vendor/mathml2omml.js?v=57', 'kateb/vendor/temml.css?v=57', 'kateb/raster.js?v=57', 'kateb/dict.js?v=57', 'kateb/ocr.js?v=57', 'kateb/bank/glossary.json?v=57', 'kateb/templates/templates.json?v=57',
+  'kateb/templates/announce.docx?v=57', 'kateb/templates/gift.docx?v=57', 'kateb/templates/inherit_announce.docx?v=57', 'kateb/templates/inherit_request.docx?v=57', 'kateb/templates/iqrar.docx?v=57', 'kateb/templates/memo.docx?v=57', 'kateb/templates/price.docx?v=57', 'kateb/templates/reannounce.docx?v=57', 'kateb/templates/sahifa.docx?v=57', 'kateb/templates/sale.docx?v=57', 'kateb/templates/sihha.docx?v=57', 'kateb/templates/warning.docx?v=57',
   'kateb/icons/kateb-192.png', 'kateb/icons/hanan-192.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   ];   // v56: pdf.js (1.4 MB) is no longer precached — it is cached on first use

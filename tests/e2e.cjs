@@ -54,13 +54,13 @@ async function fakeWorld(context, answers, calls) {
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
   await context.route(/api\.anthropic\.com\/v1\/messages/, async r => {
     const body = JSON.parse(r.request().postData()), prompt = body.messages[0].content.filter(c => c.type === 'text').map(c => c.text).join('');
-    const kind = /Ms\. Hanan's request/.test(prompt) ? 'ask' : /Solve EVERY question/.test(prompt) ? 'key' : /EASIER version of it for SLOW LEARNERS/.test(prompt) ? 'easy' : /OCR OUTPUT:/.test(prompt) ? 'printed' : /writing UPRIGHT/.test(prompt) ? 'orient' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /against the standard wording of Egyptian court formulas/.test(prompt) ? 'form' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
+    const kind = /Ms\. Hanan's request/.test(prompt) ? 'ask' : /pupil's answered paper|TWO pages of one pupil/.test(prompt) ? 'grade' : /SPECIFICATION TABLE/.test(prompt) ? 'spec' : /Solve EVERY question/.test(prompt) ? 'key' : /EASIER version of it for SLOW LEARNERS/.test(prompt) ? 'easy' : /OCR OUTPUT:/.test(prompt) ? 'printed' : /writing UPRIGHT/.test(prompt) ? 'orient' : /ONLY its title line/.test(prompt) ? 'kind' : /List EVERY number/.test(prompt) ? 'numbers' : /Two transcribers/.test(prompt) ? 'judge' : /expert proofreader/.test(prompt) ? 'fix' : /against the standard wording of Egyptian court formulas/.test(prompt) ? 'form' : /word-for-word transcript/.test(prompt) ? 'format' : /Proofread|proofreading/.test(prompt) ? 'check' : /Work strip by strip/.test(prompt) ? 'read2' : 'read';
     const fast = body.speed === 'fast', beta = r.request().headers()['anthropic-beta'] || '';
     calls.push(kind); calls.claude = calls.claude || []; calls.claude.push({ kind, p: prompt.slice(0, 6000), model: body.model, system: (body.system || []).map(s => s.text).join(''), images: body.messages[0].content.filter(c => c.type === 'image').length, effort: body.output_config && body.output_config.effort, fast, beta, ocr: kind === 'printed' ? prompt.split('OCR OUTPUT:\n')[1] : undefined });
     if (fast && answers.FAST429 && !calls.fastRejected) { calls.fastRejected = true; return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '30' }, body: '{"error":{"type":"rate_limit_error"}}' }); }
     const short = /MARKED PLACES/.test(prompt);
     if (kind === 'orient') calls.rotDone = true;
-    const text = kind === 'orient' ? (answers.UP || '1') : short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', form: answers.FORM || 'لا شيء', format: answers.FMT || answers.A, ask: answers.ASK || answers.A, key: answers.KEY || '[Q] Answer key and marks (total 30 marks)\n**Question (1) — 30 marks**\n1) 5   (1 mark)', easy: answers.EASY || 'KIND: exam\nTITLE: Easy test\n[Q] Question (1) Complete\n[I] **1)** 2 + 2 = ____', kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
+    const text = kind === 'orient' ? (answers.UP || '1') : short ? (answers.D || decideAnswer(prompt, kind === 'judge' ? (answers.J || answers.A) : answers.A, kind === 'judge')) : { read: answers.A, read2: answers.B, judge: answers.J || answers.A, check: answers.A, printed: answers.P || answers.A, numbers: answers.N || '', fix: answers.F || 'لا شيء', form: answers.FORM || 'لا شيء', format: answers.FMT || answers.A, ask: answers.ASK || answers.A, grade: kind !== 'grade' ? '' : (calls.gradeN = (calls.gradeN || 0) + 1, JSON.stringify({ name: ['أحمد محمد', 'مريم علي', 'يوسف حسن'][(calls.gradeN - 1) % 3], items: [{ q: 'Q1-1', lesson: 'Fractions', student: '3/4', correct: '3/4', mark: 1, max: 1 }, { q: 'Q1-2', lesson: 'Fractions', student: '1/2', correct: '2/3', mark: 0, max: 1 }, { q: 'Q2-1', lesson: 'Multiplication', student: '24', correct: '24', mark: 1, max: 1 }], total: 2, max: 3, note: 'شاطر في الضرب، يحتاج يراجع الكسور.' })), spec: '[Q] Specification table\n[TABLE] Lesson | Knowledge | Understanding | Application | Problem solving | Total marks | % || Fractions | 2 | 1 | 1 | 0 | 4 | 50 || Total | 4 | 2 | 1 | 1 | 8 | 100', key: answers.KEY || '[Q] Answer key and marks (total 30 marks)\n**Question (1) — 30 marks**\n1) 5   (1 mark)', easy: answers.EASY || 'KIND: exam\nTITLE: Easy test\n[Q] Question (1) Complete\n[I] **1)** 2 + 2 = ____', kind: answers.K || (answers.A.split('\n')[0].replace(/^\[H\]\s*/, '')) }[kind];
     calls.claude[calls.claude.length - 1].short = short; calls.claude[calls.claude.length - 1].cache = body.messages[0].content.some(c => c.cache_control);
     if (answers.DELAY) await new Promise(r => setTimeout(r, answers.DELAY));
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ model: body.model, stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 500, cache_read_input_tokens: 0, speed: fast ? 'fast' : 'standard' }, content: [{ type: 'text', text: ((kind === 'read' || kind === 'read2') && answers.ROT && !calls.rotDone ? 'ROT: ' + answers.ROT + '\n' : '') + text }] }) });
@@ -1489,6 +1489,68 @@ async function runMode(browser, base, file, answers, check, key, drive) {
     await page.click('.editbar [data-more]'); assert.ok(!(await page.locator('#versionsBtn').isVisible()));
     await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])'); await page.click('#settingsBtn');
     await page.uncheck('#setSimple'); assert.ok(!(await page.evaluate(() => document.body.classList.contains('simple'))));
+  }));
+
+  await step('v57 Hanan class work (simple Arabic look): «✅ تصحيح ورق الطلاب» marks each pupil photo against the chosen exam → results with names, marks and per-question detail → saved into a new class in «📒 كشف الدرجات» (Excel + parents\' WhatsApp messages) → «📊 نقاط الضعف» → «📝 ورقة علاج» on the weakest lesson; «📘 تحضير درس» from the ministry book; «📋 جدول المواصفات»; the what\'s-new card shows once', () => runMode(browser, base, 'hanan.html', { A: EXAM.A, B: EXAM.A }, null, 'sk-ant-test', async (page, calls) => {
+    await page.evaluate(() => { localStorage.setItem('kateb.simple', '1'); window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+    assert.ok(await page.locator('#newBox').isVisible(), 'what is new is shown once');
+    await page.click('#newOk'); assert.ok(!(await page.locator('#newBox').isVisible()));
+    for (const id of ['#tGradeBtn', '#tMarksBtn', '#tPlanBtn']) assert.ok(await page.locator(id).isVisible(), id);
+    /* an exam to mark against */
+    await convert(page);
+    await page.click('#toolsBtn'); await page.click('#tlSpec'); await page.waitForFunction(() => /Specification table/.test(document.getElementById('pagesBox').textContent));
+    assert.ok(calls.claude.some(c => c.kind === 'spec'));
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    /* grading */
+    await page.click('#tGradeBtn'); await page.waitForSelector('#grading:not([hidden])');
+    await page.waitForSelector('#gExams [data-gx][aria-pressed="true"]');
+    const photo = await pagePhoto(browser);
+    await page.setInputFiles('#gFileIn', [{ name: 's1.png', mimeType: 'image/png', buffer: photo }, { name: 's2.png', mimeType: 'image/png', buffer: photo }]);
+    await page.waitForFunction(() => document.querySelectorAll('#gThumbs .gk').length === 2);
+    assert.match(await page.textContent('#gCount'), /٢/);
+    await page.fill('#gMax', '3');
+    await page.click('#gGo'); await page.waitForFunction(() => /خلص التصحيح/.test(document.getElementById('gProgress').textContent), null, { timeout: 30000 });
+    const g = calls.claude.filter(c => c.kind === 'grade');
+    assert.strictEqual(g.length, 2, 'one marking call per pupil'); assert.match(g[0].system, /MARKING PUPILS' ANSWERED PAPERS/); assert.match(g[0].p, /worth exactly 3 marks/);
+    assert.strictEqual(await page.locator('#gList details.grow').count(), 2);
+    assert.deepStrictEqual([await page.inputValue('[data-gname="0"]'), await page.inputValue('[data-gname="1"]')].sort(), ['أحمد محمد', 'مريم علي'].sort(), 'each pupil\'s name read from the paper');
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'grading.png'), fullPage: true });
+    /* parents' messages */
+    await page.click('#gMsgs'); await page.click('#msgList [data-wa="0"]');
+    const wa = decodeURIComponent((await page.evaluate(() => window.__opened[0] || '')).split('text=')[1] || '');
+    assert.match(wa, /نتيجة (أحمد محمد|مريم علي)/); assert.match(wa, /2 من 3/); assert.match(wa, /يحتاج يراجع الكسور/);
+    await page.click('#msgClose');
+    /* weak lessons */
+    await page.click('#gWeak'); await page.waitForSelector('#weakDlg:not([hidden])');
+    assert.match(await page.textContent('#weakList'), /Fractions/);
+    await page.click('#weakClose');
+    /* save into a new class */
+    await page.evaluate(() => { window.prompt = () => 'رابعة ١'; });
+    await page.click('#gSave'); await page.waitForSelector('#marks:not([hidden])');
+    assert.strictEqual(await page.locator('#mTable tbody tr:not(.avg)').count(), 2, 'two pupils in the class');
+    assert.match(await page.textContent('#mTitle'), /رابعة ١/);
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'marks.png'), fullPage: true });
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#mExcel')]);
+    const xz = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
+    const sh = await xz.file('xl/worksheets/sheet1.xml').async('string');
+    assert.ok(/rightToLeft="1"/.test(sh) && sh.includes('أحمد محمد') && sh.includes('مريم علي') && sh.includes('<v>2</v>'), 'Excel with names and marks');
+    /* the class remembers the test's weak lessons → remedial sheet */
+    await page.click('#mTable [data-mweak]'); await page.waitForSelector('#weakDlg:not([hidden])');
+    await page.click('#weakList [data-remedy="0"]'); await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+    const ask = calls.claude.filter(c => c.kind === 'ask').pop(); assert.match(ask.p, /ورقة علاج/); assert.match(ask.p, /Fractions/);
+    /* lesson preparation */
+    await page.click('#backBtn'); await page.waitForSelector('#start:not([hidden])');
+    await page.click('#tPlanBtn'); await page.waitForSelector('#planDlg:not([hidden])');
+    await page.waitForSelector('#plLessons [data-pll]');
+    await page.click('#plLessons [data-pll] >> nth=0'); await page.click('#plKinds [data-plk="quiz"]');
+    assert.ok(!(await page.isDisabled('#plGo')));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'plan.png') });
+    await page.click('#plGo'); await page.waitForSelector('#done:not([hidden])', { timeout: 20000 });
+    const ask2 = calls.claude.filter(c => c.kind === 'ask').pop(); assert.match(ask2.p, /اختبار قصير ١٠ دقائق/); assert.match(ask2.p, /منهج الوزارة/);
+    await page.reload(); await page.waitForSelector('#start:not([hidden])');
+    assert.ok(!(await page.locator('#newBox').isVisible()), 'what is new stays closed');
   }));
 
   await browser.close(); server.close();
